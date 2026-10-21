@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Music Sandbox</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="css/style.css" />
+    <script type="module" src="js/main.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <h1 class="app-title" data-i18n="app.title"></h1>
+      <p class="topbar-hint" data-i18n="topbar.hint"></p>
+      <label class="language-picker">
+        <span data-i18n="topbar.language"></span>
+        <select id="language-select"></select>
+      </label>
+    </header>
+
+    <main id="stage" class="stage empty">
+      <canvas id="lanes"></canvas>
+      <div id="lane-overlays" class="lane-overlays"></div>
+      <p class="stage-empty-hint" data-i18n="stage.noControllers"></p>
+    </main>
+
+    <div id="start-screen" class="start-screen">
+      <div class="start-card">
+        <h1 class="start-title" data-i18n="app.title"></h1>
+        <div data-step="click">
+          <p class="start-main" data-i18n="start.click"></p>
+          <p class="start-sub" data-i18n="start.clickHint"></p>
+        </div>
+        <div data-step="press" hidden>
+          <p class="start-main pulse" data-i18n="start.pressButton"></p>
+          <p class="start-sub" data-i18n="start.pressHint"></p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

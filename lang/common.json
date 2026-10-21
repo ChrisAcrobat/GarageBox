@@ -1,0 +1,15 @@
+{
+  "app.title": "Music Sandbox",
+  "lang.en": "English",
+  "lang.sv": "Svenska",
+  "debug.vidPid": "VID:PID",
+  "debug.xinput": "XInput",
+  "control.faceA": "A",
+  "control.faceB": "B",
+  "control.faceX": "X",
+  "control.faceY": "Y",
+  "control.shoulderL": "LB",
+  "control.shoulderR": "RB",
+  "control.triggerL": "LT",
+  "control.triggerR": "RT"
+}

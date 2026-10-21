@@ -1,0 +1,479 @@
+/* Music Sandbox – dark theme. */
+
+:root {
+  --bg: #0e0f12;
+  --panel: #1b1e24;
+  --panel-2: #23272f;
+  --border: rgba(255, 255, 255, 0.12);
+  --text: #e8eaed;
+  --muted: #9aa0a6;
+  --accent: #3e8ef7;
+  --topbar-height: 44px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+button,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Top bar ---------------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: var(--topbar-height);
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: #121419;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.topbar-hint {
+  flex: 1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.language-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+select {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+/* Stage with canvas and lane overlays ------------------------------------ */
+
+.stage {
+  position: relative;
+  height: calc(100% - var(--topbar-height));
+}
+
+#lanes {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.lane-overlays {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.stage-empty-hint {
+  display: none;
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  place-content: center;
+  text-align: center;
+  color: var(--muted);
+  font-size: 18px;
+}
+
+.stage.empty .stage-empty-hint {
+  display: grid;
+}
+
+/* One overlay per lane, positioned exactly over the lane by main.js. */
+.lane-ui {
+  position: absolute;
+  pointer-events: none;
+}
+
+.lane-ui > * {
+  pointer-events: auto;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.icon-button:focus-visible,
+.button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.lane-settings-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: #fff;
+}
+
+.lane-ui.debug-open .lane-settings-button {
+  display: none;
+}
+
+.button {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.button:hover {
+  background: #2c313a;
+}
+
+/* Settings panel ----------------------------------------------------------- */
+
+.panel {
+  position: absolute;
+  top: 64px;
+  left: 10px;
+  right: 10px;
+  max-height: calc(100% - 74px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--lane-color, var(--accent));
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.detected-line {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.field-label {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Debug view: covers the whole lane (design 9.1) ---------------------------- */
+
+.debug-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--lane-color, var(--accent));
+  border-radius: 10px;
+  background: rgba(14, 15, 18, 0.97);
+  overflow: hidden;
+}
+
+.debug-view > .panel-header {
+  margin: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.debug-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.debug-toolbar .button {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.debug-status {
+  color: #3dd68c;
+  font-size: 13px;
+}
+
+.debug-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.debug-manual {
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.debug-manual-text {
+  margin: 0;
+  color: #f5a524;
+  font-size: 12px;
+}
+
+.debug-manual-area {
+  width: 100%;
+  height: 160px;
+  resize: vertical;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0b0c0f;
+  color: var(--text);
+  font: 11px/1.35 ui-monospace, 'DejaVu Sans Mono', monospace;
+  white-space: pre;
+}
+
+.debug-manual-close {
+  justify-self: start;
+}
+
+.debug-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 12px 16px;
+  font-size: 12px;
+  user-select: text;
+}
+
+.debug-section h3 {
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.debug-info {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 12px;
+  margin: 0;
+}
+
+.debug-info dt {
+  color: var(--muted);
+}
+
+.debug-info dd {
+  margin: 0;
+  font-family: ui-monospace, 'DejaVu Sans Mono', monospace;
+  word-break: break-all;
+}
+
+.debug-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+.debug-table th {
+  color: var(--muted);
+  font-family: system-ui, sans-serif;
+  font-weight: 600;
+  text-align: left;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.debug-table td {
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.debug-table td.num {
+  text-align: right;
+  width: 1%;
+}
+
+.debug-table td.flag {
+  text-align: center;
+  width: 1%;
+}
+
+.debug-table td.ctl {
+  color: var(--muted);
+}
+
+.debug-table td.bar {
+  width: 40%;
+  min-width: 60px;
+}
+
+.debug-table tr.active td {
+  background: color-mix(in srgb, var(--lane-color, var(--accent)) 35%, transparent);
+  color: #fff;
+}
+
+.axis-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.axis-bar::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.axis-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: var(--lane-color, var(--accent));
+}
+
+.debug-log {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  font-family: ui-monospace, 'DejaVu Sans Mono', monospace;
+}
+
+.debug-log .muted {
+  color: var(--muted);
+  font-family: system-ui, sans-serif;
+}
+
+/* Start screen (design 7.1) ------------------------------------------------- */
+
+.start-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 9, 11, 0.86);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.start-screen[data-step='press'] {
+  /* Keep the top bar (language picker) usable while waiting for a controller. */
+  top: var(--topbar-height);
+  cursor: default;
+}
+
+.start-card {
+  max-width: 560px;
+  padding: 36px 44px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.start-title {
+  margin: 0 0 18px;
+  font-size: 30px;
+}
+
+.start-main {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.start-sub {
+  margin: 0;
+  color: var(--muted);
+}
+
+.pulse {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
+}

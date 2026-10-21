@@ -6,7 +6,9 @@ The app is published as a static website on GitHub Pages.
 
 ## Status
 
-Planning phase. Requirements and design are written in [`docs/`](docs/) before implementation starts.
+Requirements and design are written in [`docs/`](docs/).
+
+Current state: milestone 1 (input and debug: start screen, controller detection, lanes, per-controller settings with debug view, settings store and i18n) is implemented. No sound yet.
 
 ## Overview
 
