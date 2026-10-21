@@ -31,8 +31,8 @@ const GUITAR_STANDARD = {
     fret5: { button: 4 },   // orange = LB
     strumUp: { button: 12 },
     strumDown: { button: 13 },
-    whammy: { axis: 2, from: -1, to: 1 },  // assumed to rest at -1
-    tilt: { axis: 3, from: -1, to: 1 },    // may be on/off only (R4.5)
+    whammy: { axis: 2, from: -1, to: 1 },  // rests at -1 (Xplorer on Chrome/Linux)
+    tilt: { axis: 3, from: 1, to: -1 },    // inverted: on the Xplorer the axis falls when tilted up (R4.5)
     start: { button: 9 },
     back: { button: 8 },
   },

@@ -65,7 +65,10 @@ function drawPills(ctx, items, x, y, w, color) {
     }
     ctx.beginPath();
     ctx.roundRect(cx, cy, pw, h, 6);
-    ctx.fillStyle = item.pressed ? color : 'rgba(255, 255, 255, 0.06)';
+    // Analog controls show their level only through the fill bar, so the pill
+    // does not jump to fully lit when the value passes the press threshold.
+    const lit = item.pressed && !item.analog;
+    ctx.fillStyle = lit ? color : 'rgba(255, 255, 255, 0.06)';
     ctx.fill();
     if (item.analog) {
       // Fill level for analog controls.
@@ -78,7 +81,7 @@ function drawPills(ctx, items, x, y, w, color) {
     ctx.lineWidth = 1;
     ctx.strokeStyle = item.pressed ? color : 'rgba(255, 255, 255, 0.14)';
     ctx.stroke();
-    ctx.fillStyle = item.pressed ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
+    ctx.fillStyle = lit ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
     ctx.fillText(label, cx + padX, cy + h / 2 + 1);
     if (item.showValue) {
       // Whammy prints its value 0.00-1.00 next to the fill bar.
