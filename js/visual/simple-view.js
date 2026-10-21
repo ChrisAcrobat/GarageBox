@@ -80,6 +80,12 @@ function drawPills(ctx, items, x, y, w, color) {
     ctx.stroke();
     ctx.fillStyle = item.pressed ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
     ctx.fillText(label, cx + padX, cy + h / 2 + 1);
+    if (item.analog) {
+      // Analog value as 0-100 (whammy, tilt, triggers).
+      ctx.textAlign = 'right';
+      ctx.fillText(String(Math.round(item.value * 100)), cx + pw - padX, cy + h / 2 + 1);
+      ctx.textAlign = 'left';
+    }
     cx += pw + 6;
   }
   return cy + h + 14;
