@@ -2,8 +2,9 @@
 //
 // Milestone 1 draws a placeholder: the logical controls of the device's
 // mapping (fret buttons as colored circles on a guitar), followed by every
-// raw button and axis, so something visibly reacts to input. Note names are
-// added together with the instruments in milestone 2.
+// raw button, so something visibly reacts to input. Raw axes are shown only
+// in the debug view. Note names are added together with the instruments in
+// milestone 2.
 
 import { ANALOG_CONTROLS } from '../input/mappings.js';
 import { withAlpha, fitText } from './lanes.js';
@@ -115,29 +116,6 @@ function drawRawButtons(ctx, device, x, y, w, color) {
   return y + rows * (size + gap) + 10;
 }
 
-function drawRawAxes(ctx, device, x, y, w, h, color) {
-  const rowH = 16;
-  ctx.font = '600 10px ui-monospace, monospace';
-  ctx.textBaseline = 'middle';
-  device.raw.axes.forEach((v, i) => {
-    const ry = y + i * (rowH + 4);
-    if (ry + rowH > y + h) return;
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.fillText(`A${i}`, x + 22, ry + rowH / 2);
-    const bx = x + 28;
-    const bw = w - 28;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.fillRect(bx, ry, bw, rowH);
-    const mid = bx + bw / 2;
-    ctx.fillStyle = color;
-    const len = (Math.max(-1, Math.min(1, v)) * bw) / 2;
-    ctx.fillRect(Math.min(mid, mid + len), ry + 3, Math.abs(len), rowH - 6);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fillRect(mid, ry, 1, rowH);
-  });
-}
-
 /**
  * Draws the placeholder simple view into `area`.
  * @param {CanvasRenderingContext2D} ctx
@@ -168,9 +146,5 @@ export function drawSimpleView(ctx, device, area, color, t) {
 
   if (y + 40 > bottom) return;
   y = sectionTitle(ctx, t('lane.rawButtons'), x, y, w);
-  y = drawRawButtons(ctx, device, x, y, w, color);
-
-  if (y + 30 > bottom || !device.raw.axes.length) return;
-  y = sectionTitle(ctx, t('lane.rawAxes'), x, y, w);
-  drawRawAxes(ctx, device, x, y, w, bottom - y, color);
+  drawRawButtons(ctx, device, x, y, w, color);
 }

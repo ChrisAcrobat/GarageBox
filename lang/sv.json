@@ -11,7 +11,6 @@
   "lane.settingsButton": "Inställningar för kontroll {number}",
   "lane.controls": "Kontroller",
   "lane.rawButtons": "Råa knappar",
-  "lane.rawAxes": "Råa axlar",
   "settings.title": "Kontroll {number}",
   "settings.detected": "Identifierad som: {type}",
   "settings.instrument": "Instrument",
