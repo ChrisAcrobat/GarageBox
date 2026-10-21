@@ -20,3 +20,4 @@ Planning phase. Requirements and design are written in [`docs/`](docs/) before i
 ## Documentation
 
 - [Requirements](docs/requirements.md) – core requirements and open questions.
+- [Design](docs/design.md) – architecture, file structure and module design.
