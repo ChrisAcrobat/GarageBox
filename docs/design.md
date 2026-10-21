@@ -193,9 +193,9 @@ Instrument logic is pure (logical edges in, note events out), so `guitar.js`, `d
 
 ## 12. Milestones
 
-1. **Input and debug.** Start screen (7.1), gamepad connect/disconnect and polling (3.1), controller type detection (R2.5), lanes side by side with controller numbers (R5.3, R5.3.1), a minimal settings panel per device with the debug view (9.1), settings store and i18n skeleton (8). Goal: connect the Xplorer and read its real id, buttons and axes on Chrome/Linux.
+1. **Input and debug.** Start screen (7.1), gamepad connect/disconnect and polling (3.1), controller type detection (R2.5), lanes side by side with controller numbers (R5.3, R5.3.1), a minimal settings panel per device with the debug view (9.1), settings store and i18n skeleton (8), GitHub Pages workflow (10). Goal: connect the Xplorer and read its real id, buttons and axes on Chrome/Linux.
 2. **Guitar sound.** Final guitar mapping from the milestone 1 findings, guitar logic (4.2), audio engine with the pluck source (5), simple view (6).
 3. **More instruments.** Drums and MIDI source (4.3, 5), gamepad guitar/bass modes (R2.10), keyboard instrument and on-screen keyboard (3.2, 4.4).
 4. **Highway and settings.** Highway view with sustain trails (R5.2, R5.4), full advanced settings (7.2), whammy/tilt assignment (R4.5).
-5. **Deployment.** GitHub Pages workflow (10), logic test pages (9.2).
+5. **Tests.** Logic test pages (9.2).
 
