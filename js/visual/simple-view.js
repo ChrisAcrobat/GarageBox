@@ -58,7 +58,7 @@ function drawPills(ctx, items, x, y, w, color) {
   let cy = y;
   for (const item of items) {
     const label = fitText(ctx, item.label, w - 2 * padX);
-    const pw = Math.min(w, ctx.measureText(label).width + 2 * padX + (item.analog ? 40 : 0));
+    const pw = Math.min(w, ctx.measureText(label).width + 2 * padX + (item.analog ? 44 : 0));
     if (cx + pw > x + w && cx > x) {
       cx = x;
       cy += h + 6;
@@ -81,9 +81,9 @@ function drawPills(ctx, items, x, y, w, color) {
     ctx.fillStyle = item.pressed ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
     ctx.fillText(label, cx + padX, cy + h / 2 + 1);
     if (item.analog) {
-      // Analog value as 0-100 (whammy, tilt, triggers).
+      // Analog value 0.00-1.00 (whammy, tilt, triggers).
       ctx.textAlign = 'right';
-      ctx.fillText(String(Math.round(item.value * 100)), cx + pw - padX, cy + h / 2 + 1);
+      ctx.fillText(item.value.toFixed(2), cx + pw - padX, cy + h / 2 + 1);
       ctx.textAlign = 'left';
     }
     cx += pw + 6;

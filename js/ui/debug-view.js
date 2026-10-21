@@ -12,7 +12,7 @@
 
 import { t } from '../i18n/i18n.js';
 import { formatVidPid } from '../input/detect.js';
-import { ANALOG_CONTROLS, controlsForAxis, controlsForButton, describeSource } from '../input/mappings.js';
+import { controlsForAxis, controlsForButton, describeSource } from '../input/mappings.js';
 
 const LOG_LENGTH = 12;
 
@@ -116,8 +116,6 @@ function formatLocalTime(date) {
 
 const fmtButton = (v) => v.toFixed(2);
 const fmtAxis = (v) => (v < 0 ? '' : '+') + v.toFixed(3);
-/** Logical control value: analog controls (whammy, tilt, triggers) as 0-100, others as 0.00-1.00. */
-export const fmtControl = (name, v) => (ANALOG_CONTROLS.has(name) ? String(Math.round(v * 100)) : v.toFixed(2));
 
 /**
  * Builds the plain-text debug report for one device.
@@ -156,10 +154,10 @@ export function buildReport(device, recorder, now = new Date()) {
     lines.push(`  ${`A${i}`.padEnd(4)} ${fmtAxis(v).padStart(7)}  ${mapsTo(controlsForAxis(device.mapping, i))}`);
   });
 
-  lines.push('', 'Logical controls (current, analog values 0-100):');
+  lines.push('', 'Logical controls (current, 0.00-1.00):');
   for (const [name, source] of Object.entries(device.mapping.controls)) {
     const c = device.controls[name] || { value: 0, pressed: false };
-    lines.push(`  ${name.padEnd(10)} ${describeSource(source).padEnd(4)} ${fmtControl(name, c.value).padStart(4)} ${c.pressed ? 'on' : 'off'}`);
+    lines.push(`  ${name.padEnd(10)} ${describeSource(source).padEnd(4)} ${c.value.toFixed(2)} ${c.pressed ? 'on' : 'off'}`);
   }
 
   lines.push('');
@@ -393,7 +391,7 @@ export class DebugView {
     });
     for (const r of this.controlRows) {
       const c = device.controls[r.name];
-      setText(r.value, fmtControl(r.name, c.value));
+      setText(r.value, c.value.toFixed(2));
       setText(r.pressed, c.pressed ? '●' : '·');
       r.row.classList.toggle('active', c.pressed);
     }
