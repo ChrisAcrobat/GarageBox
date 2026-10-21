@@ -58,7 +58,7 @@ function drawPills(ctx, items, x, y, w, color) {
   let cy = y;
   for (const item of items) {
     const label = fitText(ctx, item.label, w - 2 * padX);
-    const pw = Math.min(w, ctx.measureText(label).width + 2 * padX + (item.analog ? 44 : 0));
+    const pw = Math.min(w, ctx.measureText(label).width + 2 * padX + (item.showValue ? 44 : 0));
     if (cx + pw > x + w && cx > x) {
       cx = x;
       cy += h + 6;
@@ -80,8 +80,8 @@ function drawPills(ctx, items, x, y, w, color) {
     ctx.stroke();
     ctx.fillStyle = item.pressed ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
     ctx.fillText(label, cx + padX, cy + h / 2 + 1);
-    if (item.analog) {
-      // Analog value 0.00-1.00 (whammy, tilt, triggers).
+    if (item.showValue) {
+      // Whammy prints its value 0.00-1.00 next to the fill bar.
       ctx.textAlign = 'right';
       ctx.fillText(item.value.toFixed(2), cx + pw - padX, cy + h / 2 + 1);
       ctx.textAlign = 'left';
@@ -159,6 +159,7 @@ export function drawSimpleView(ctx, device, area, color, t) {
       pressed: device.controls[n].pressed,
       value: device.controls[n].value,
       analog: ANALOG_CONTROLS.has(n),
+      showValue: n === 'whammy',
     }));
   y = drawPills(ctx, items, x, y, w, color);
 
