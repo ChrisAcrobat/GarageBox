@@ -26,9 +26,9 @@ Status: draft, under discussion.
   - Guitar: same notes and behavior as the Xplorer (section 4). Four face buttons plus one shoulder button act as the five fret buttons, and the D-pad up/down acts as the strum bar.
   - Bass: same behavior as guitar, one octave lower, with a bass sound.
 - R2.11 Further General MIDI instruments can be chosen in the advanced settings (R2.9).
-- R2.12 The menus (start screen, a controller's advanced settings and its device information view) can be operated with that controller while the menu is open: D-pad (on a guitar also the strum bar) up/down moves between the controls with a clearly visible highlight, left/right changes the value (right presses a button), Back closes the menu and Start opens/closes the settings as in R4.10. Each controller only operates its own menu; during normal play the controls behave as before. The computer keyboard and the mouse keep working in the menus.
+- R2.12 The menus (start screen, a controller's advanced settings and its device information view) can be operated with that controller while the menu is open: D-pad (on a guitar also the strum bar) up/down moves between the controls with a clearly visible highlight, left/right changes the value of the highlighted control, Start activates the highlighted control (presses a button, toggles a checkbox) and Back closes the menu (from the device information view, Back goes back to the settings). Each action has exactly one button: Start does not close a menu, and left/right do not press buttons. Each controller only operates its own menu; during normal play the controls behave as before. The computer keyboard and the mouse keep working in the menus.
 - R2.13 While a guitar's (or a gamepad's in guitar/bass mode) advanced settings are open as a controller menu (R2.14), pressing a fret plays its note at once without strumming, and releasing it stops the note, so sounds can be tried while changing them. Drums keep playing in the menu, except pads that share a button with the menu navigation.
-- R2.14 R2.12 and R2.13 apply only when the settings were opened with Start on the controller. Settings opened with the mouse (or the keyboard) do not change how the controller plays: it keeps strumming, muting and playing all pads as usual, and setting changes still take effect immediately. Closing them and opening them again with Start makes them a controller menu.
+- R2.14 R2.12 and R2.13 apply only when the settings were opened with Start on the controller. Settings opened with the mouse (or the keyboard) do not change how the controller plays: it keeps strumming, muting and playing all pads as usual, and setting changes still take effect immediately. Pressing Start on the controller while such settings are open turns them into a controller menu.
 
 ## 3. Sound
 
@@ -54,7 +54,7 @@ Status: draft, under discussion.
 - R4.7 Ringing notes decay naturally and get quieter over time, like a plucked string.
 - R4.8 If several fret buttons are held when the strum bar is hit, all of their notes play together as a chord.
 - R4.9 By default the five fret buttons play the E minor pentatonic scale (green to orange: E, G, A, B, D). Key and scale (e.g. major/minor pentatonic, other keys) can be changed in the controller's advanced settings (R2.9).
-- R4.10 Start opens the advanced settings (R2.9) for that controller.
+- R4.10 Start opens the advanced settings (R2.9) for that controller. While they are open as a controller menu, Start activates the highlighted control and Back closes them (R2.12).
 - R4.11 Back mutes all ringing notes on that controller (using the soft fade-out from R4.3.1).
 - R4.12 The Xbox (guide) button has no function, since browsers usually do not expose it.
 - R4.13 The pitch range (octave) of the fret buttons can be changed in the controller's advanced settings (R2.9): Low (one octave down), Middle (default) and High (one octave up). This applies to the guitar and the bass, also in the gamepad guitar/bass mode (R2.10); Middle keeps the default ranges (guitar from E3, bass from E2).
