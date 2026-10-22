@@ -16,6 +16,7 @@
 // there is no audio at all.
 
 import { PluckSource } from './pluck-source.js';
+import { MidiSource } from './midi-source.js';
 
 let context = null;
 let engine = null;
@@ -178,7 +179,8 @@ export class AudioEngine {
 
   /**
    * Creates a channel for one instrument (or one part of an instrument).
-   * @param {{source:'pluck', decay:number, brightness:number, fadeModel?:string}} config
+   * @param {{source:'pluck'|'midi', model:'pluck'|'sustained'|'oneShot', decay?:number,
+   *   brightness?:number, drums?:boolean, program?:number, bendRange?:number}} config
    */
   createChannel(config) {
     const ch = new Channel(this, config);
@@ -266,18 +268,21 @@ export class Channel {
   }
 }
 
+/** Sources are rebuilt only when this key changes; other changes go to source.configure(). */
 function sourceKey(config) {
-  return config.source;
+  return `${config.source}:${config.drums ? 'drums' : 'melodic'}`;
 }
 
 function trackerConfig(config) {
-  return { model: 'pluck', decay: config.decay || 4 };
+  return { model: config.model || 'pluck', decay: config.decay || 4 };
 }
 
 function createSource(ctx, destination, config) {
   switch (config.source) {
     case 'pluck':
       return new PluckSource(ctx, destination, config);
+    case 'midi':
+      return new MidiSource(ctx, destination, config);
     default:
       console.warn(`Unknown sound source "${config.source}"`);
       return null;

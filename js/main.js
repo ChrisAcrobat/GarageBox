@@ -1,11 +1,13 @@
 // App start-up, main loop and wiring (design section 1).
 //
-// Every frame: poll the gamepads, feed each device's logical control edges to
-// its instrument, send the resulting note events to the instrument's audio
-// channel, and draw all lanes (design 1).
+// Every frame: poll the gamepads (and the computer keyboard, when it is on),
+// feed each device's logical control edges to its instrument, send the
+// resulting note events to the instrument's audio channels, and draw all
+// lanes (design 1).
 
 import { GamepadManager } from './input/gamepad-manager.js';
 import { defaultInstrumentFor } from './input/detect.js';
+import { KeyboardDevice } from './input/keyboard-input.js';
 import { computeLanes, drawLaneFrame } from './visual/lanes.js';
 import { drawSimpleView } from './visual/simple-view.js';
 import { StartScreen } from './ui/start-screen.js';
@@ -14,18 +16,21 @@ import { DebugView } from './ui/debug-view.js';
 import { getGlobalSettings, setGlobalSetting, getDeviceSettings, onSettingsChange } from './settings/store.js';
 import { SUPPORTED_LANGUAGES, applyTranslations, onLanguageChange, setLanguage, t } from './i18n/i18n.js';
 import { getEngine, keepAudioAlive, unlockAudio } from './audio/audio-engine.js';
-import { createInstrument, isGuitarLike } from './instruments/setup.js';
+import { createInstrument, instrumentKind } from './instruments/setup.js';
 
 const stage = document.getElementById('stage');
 const canvas = document.getElementById('lanes');
 const ctx = canvas.getContext('2d');
 const overlayLayer = document.getElementById('lane-overlays');
 const languageSelect = document.getElementById('language-select');
+const keyboardToggle = document.getElementById('keyboard-toggle');
+const startKeyboardButton = document.getElementById('start-keyboard');
 
 /**
- * Per-device state, keyed by gamepad.index:
+ * Per-device state, keyed by device index (gamepad.index, or KEYBOARD_INDEX):
  * { device, el, gear, instrument (name), kind, logic (Instrument|null),
- *   channels: { main: Channel }, panel: SettingsPanel|null, debug: DebugView|null }
+ *   channels: { main: Channel, guitar?: Channel }, panel: SettingsPanel|null,
+ *   debug: DebugView|null }
  */
 const laneUis = new Map();
 let lanes = [];
@@ -45,10 +50,24 @@ const manager = new GamepadManager({
   },
 });
 
+const keyboard = new KeyboardDevice();
+
+/** All devices in lane order: gamepads by index, then the keyboard (design 3.2). */
+function allDevices() {
+  const list = manager.list();
+  if (keyboard.enabled) list.push(keyboard);
+  return list;
+}
+
 /** Instrument used by a device: the stored manual choice, else the detected default (R2.6, R2.7). */
 function effectiveInstrument(device) {
+  if (device.isKeyboard) return 'keys';
   const stored = getDeviceSettings(device.id).instrument;
   return stored === 'auto' ? defaultInstrumentFor(device.detection) : stored;
+}
+
+function laneNumber(device) {
+  return device.isKeyboard ? t('lane.keyboard') : String(device.index + 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,64 +89,8 @@ function createLaneUi(device) {
   setupInstrument(ui);
 }
 
-// ---------------------------------------------------------------------------
-// Instruments and sound
-
-function nowSeconds() {
-  return performance.now() / 1000;
-}
-
-function releaseInstrument(ui) {
-  const now = nowSeconds();
-  for (const channel of Object.values(ui.channels)) {
-    channel.allOff(now);
-    channel.dispose();
-  }
-  ui.channels = {};
-  ui.logic = null;
-}
-
-/**
- * Creates (or updates) the instrument of a lane from its settings. Changing
- * only musical settings keeps ringing notes; changing the instrument type
- * replaces the instrument and its sound.
- */
-function setupInstrument(ui) {
-  const name = effectiveInstrument(ui.device);
-  const settings = getDeviceSettings(ui.device.id);
-  const created = createInstrument(ui.device, name, settings);
-  const kind = isGuitarLike(name) ? 'guitar' : name;
-  if (ui.logic && ui.instrument === name && created) {
-    ui.logic.configure(created.instrument.options);
-    ui.channels.main.configure(created.sound);
-    return;
-  }
-  releaseInstrument(ui);
-  ui.instrument = name;
-  ui.kind = kind;
-  if (!created) return;
-  ui.logic = created.instrument;
-  ui.channels = { main: getEngine().createChannel(created.sound) };
-}
-
-/** Feeds one frame of input to every instrument and routes its events. */
-function playInstruments() {
-  const now = nowSeconds();
-  for (const ui of laneUis.values()) {
-    if (!ui.logic) continue;
-    const events = ui.logic.handle(ui.device.controlEdges, ui.device.controls, now);
-    for (const event of events) {
-      if (event.type === 'action') {
-        if (event.action === 'openSettings') toggleSettings(ui.device.index);
-      } else {
-        ui.channels.main.handle(event, now);
-      }
-    }
-  }
-}
-
 function translateLaneUi(ui) {
-  const label = t('lane.settingsButton', { number: ui.device.index + 1 });
+  const label = ui.device.isKeyboard ? t('lane.keyboardSettings') : t('lane.settingsButton', { number: ui.device.index + 1 });
   ui.gear.title = label;
   ui.gear.setAttribute('aria-label', label);
 }
@@ -169,7 +132,7 @@ function closeSettings(index) {
 
 function openDebug(index) {
   const ui = laneUis.get(index);
-  if (!ui) return;
+  if (!ui || ui.device.isKeyboard) return;
   closeSettings(index);
   if (ui.debug) return;
   ui.debug = new DebugView({ container: ui.el, device: ui.device, onClose: () => closeDebug(index) });
@@ -182,6 +145,78 @@ function closeDebug(index) {
   ui.debug.destroy();
   ui.debug = null;
   ui.el.classList.remove('debug-open');
+}
+
+// ---------------------------------------------------------------------------
+// Instruments and sound
+
+function nowSeconds() {
+  return performance.now() / 1000;
+}
+
+function releaseInstrument(ui) {
+  const now = nowSeconds();
+  for (const channel of Object.values(ui.channels)) {
+    channel.allOff(now);
+    channel.dispose();
+  }
+  ui.channels = {};
+  ui.logic = null;
+}
+
+/**
+ * Creates (or updates) the instrument of a lane from its settings. Changing
+ * only musical settings keeps ringing notes; changing the instrument type
+ * replaces the instrument and its sound.
+ */
+function setupInstrument(ui) {
+  const name = effectiveInstrument(ui.device);
+  const settings = getDeviceSettings(ui.device.id);
+  const created = createInstrument(ui.device, name, settings);
+  if (ui.logic && ui.instrument === name && created) {
+    ui.logic.configure(created.instrument.options);
+    for (const [part, sound] of Object.entries(created.sounds)) ui.channels[part]?.configure(sound);
+    return;
+  }
+  releaseInstrument(ui);
+  ui.instrument = name;
+  ui.kind = instrumentKind(name);
+  if (!created) return;
+  ui.logic = created.instrument;
+  ui.channels = {};
+  for (const [part, sound] of Object.entries(created.sounds)) ui.channels[part] = getEngine().createChannel(sound);
+}
+
+/** Feeds one frame of input to every instrument and routes its events. */
+function playInstruments() {
+  const now = nowSeconds();
+  for (const ui of laneUis.values()) {
+    if (!ui.logic) continue;
+    const events = ui.logic.handle(ui.device.controlEdges, ui.device.controls, now);
+    for (const event of events) {
+      if (event.type === 'action') {
+        if (event.action === 'openSettings') toggleSettings(ui.device.index);
+        continue;
+      }
+      (ui.channels[event.part || 'main'] || ui.channels.main).handle(event, now);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard instrument (R4c)
+
+function applyKeyboardSetting() {
+  const on = getGlobalSettings().keyboard;
+  keyboardToggle.checked = on;
+  if (on && !keyboard.enabled) {
+    keyboard.enable();
+    createLaneUi(keyboard);
+  } else if (!on && keyboard.enabled) {
+    keyboard.disable();
+    destroyLaneUi(keyboard.index);
+  }
+  layoutDirty = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +236,7 @@ function resize() {
 }
 
 function layout() {
-  lanes = computeLanes(manager.list(), size.width, size.height);
+  lanes = computeLanes(allDevices(), size.width, size.height);
   for (const lane of lanes) {
     const ui = laneUis.get(lane.device.index);
     if (!ui) continue;
@@ -224,7 +259,7 @@ function draw() {
     const ui = laneUis.get(lane.device.index);
     if (!ui) continue;
     const area = drawLaneFrame(ctx, lane, {
-      number: String(lane.device.index + 1),
+      number: laneNumber(lane.device),
       title: t(`instrument.${ui.instrument}`),
     });
     // The debug view covers the whole lane; no need to draw its content.
@@ -238,11 +273,12 @@ let startScreen = null;
 
 function frame() {
   manager.poll();
+  keyboard.poll();
   playInstruments();
   if (layoutDirty) layout();
   draw();
   for (const ui of laneUis.values()) ui.debug?.update();
-  startScreen?.update(manager.devices.size > 0);
+  startScreen?.update(manager.devices.size > 0 || keyboard.enabled);
   requestAnimationFrame(frame);
 }
 
@@ -280,10 +316,21 @@ async function main() {
   onLanguageChange(onLanguageChanged);
   await setLanguage(getGlobalSettings().language);
 
-  languageSelect.addEventListener('change', () => setGlobalSetting('language', languageSelect.value));
+  // Top bar controls give the focus back afterwards, so the computer keyboard
+  // plays again right away (it ignores keys typed into form fields).
+  languageSelect.addEventListener('change', () => {
+    setGlobalSetting('language', languageSelect.value);
+    languageSelect.blur();
+  });
+  keyboardToggle.addEventListener('change', () => {
+    setGlobalSetting('keyboard', keyboardToggle.checked);
+    keyboardToggle.blur();
+  });
+  startKeyboardButton.addEventListener('click', () => setGlobalSetting('keyboard', true));
   onSettingsChange((change) => {
-    if (change.scope === 'global' && change.key === 'language') {
-      setLanguage(change.value);
+    if (change.scope === 'global') {
+      if (change.key === 'language') setLanguage(change.value);
+      else if (change.key === 'keyboard') applyKeyboardSetting();
     } else if (change.scope === 'device') {
       for (const ui of laneUis.values()) {
         if (ui.device.id === change.id) {
@@ -302,11 +349,12 @@ async function main() {
   });
 
   // Read-only handles for poking around in the browser console.
-  window.musicSandbox = { manager, lanes: laneUis, engine: getEngine() };
+  window.musicSandbox = { manager, keyboard, lanes: laneUis, engine: getEngine() };
 
   new ResizeObserver(resize).observe(stage);
   resize();
   manager.start();
+  applyKeyboardSetting();
   requestAnimationFrame(frame);
 }
 

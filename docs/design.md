@@ -90,7 +90,8 @@ All code is ES modules loaded with `<script type="module">` (R7.1). For local te
 - `keyboard-input.js` listens to `keydown`/`keyup` on `KeyboardEvent.code` (R4c.7) and ignores auto-repeat (`event.repeat`).
 - It is only active when the keyboard instrument is enabled (R4c.2). While active it calls `preventDefault()` for `Space`, `Backspace`, `Alt` and all keys used for playing (R4c.8, R4c.10).
 - It exposes the same kind of logical controls: `fret1`…`fret5`, `strum` (Backspace), `note:<code>`, `sustain` (Space), `octaveUp` (Shift), `octaveDown` (Alt).
-- It is treated as one extra device in the lane list, shown last.
+- It is treated as one extra device in the lane list, shown last (`KeyboardDevice`, id `computer-keyboard`, with the same `controls`/`controlEdges` interface as a gamepad device). It has no debug view, since it has no raw buttons or axes.
+- Keys typed into form fields (the settings panel's selects) and keys pressed together with Ctrl or Meta are left to the browser. When the window loses focus, all keys count as released, so no note hangs. The top bar controls give the focus back after a change so playing continues right away.
 
 ## 4. Instruments
 
@@ -125,15 +126,27 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
 
 ### 4.3 Drums (`drums.js`)
 
-- Each logical button maps to a General MIDI drum note (channel 10), e.g. kick 36, snare 38, closed hi-hat 42, tom 45, crash 49, ride 51 (R4b.1).
-- Digital buttons use a fixed velocity. Triggers fire when they pass a threshold, with velocity from how far they were pressed at that moment (R4b.1).
+- Each logical button maps to a General MIDI drum note (channel 10) (R4b.1). Default mapping (`DEFAULT_DRUM_MAP` in `drums.js`):
+
+  | Control | Sound | GM note |
+  |---|---|---|
+  | A / B / X / Y | kick, snare, closed hi-hat, low tom | 36, 38, 42, 45 |
+  | LB / RB | crash, ride | 49, 51 |
+  | LT / RT (velocity) | open hi-hat, high tom | 46, 50 |
+  | D-pad up / down / left / right | hi-mid tom, low floor tom, hand clap, cowbell | 48, 41, 39, 56 |
+  | Guitar controller set to drums: frets 1-5, strum up / down | kick, snare, closed hi-hat, low tom, crash; ride, open hi-hat | 36, 38, 42, 45, 49; 51, 46 |
+
+  Each control's sound can be changed (or set to none) in the settings (R4b.2); the list offers 27 GM drum sounds.
+- Digital buttons use a fixed velocity (100). Triggers fire when they pass 0.2, with velocity 30-127 from how far they were pressed at that moment, and re-arm below 0.1 (R4b.1).
+- Start opens the settings panel, as on the guitar.
 - Drum notes are one-shot: `noteOn` only; the sound ends by itself.
 
 ### 4.4 Keys (`keys.js`)
 
-- Maps `KeyboardEvent.code` to MIDI notes with the musical typing layout (R4c.4), plus the octave offset from Shift/Alt at the moment the key is pressed (R4c.8).
+- Maps `KeyboardEvent.code` to MIDI notes with the musical typing layout (R4c.4): home row `A`…`L` = C4…D5, `W E T Y U O P` = C#4, D#4, F#4, G#4, A#4, C#5, D#5, bottom row `Z`…`M` = C3…B3; plus the octave offset from Shift/Alt at the moment the key is pressed (R4c.8). Shift and Alt together cancel out.
 - Key up sends `noteOff` with a short release, unless the sustain pedal is down; then the note is marked as sustained and stopped when the pedal is released (R4c.9, R4c.10).
-- The `1`–`5` and Backspace keys are passed to an internal guitar instance (R4c.3).
+- A key pressed again while its note is still sustained restarts the note.
+- The `1`–`5` and Backspace keys are passed to an internal guitar instance (R4c.3). Its events carry `part: 'guitar'` and go to a second audio channel with the plucked string sound; it uses the keyboard's key and scale settings.
 
 ## 5. Audio engine
 
@@ -141,8 +154,8 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
 - Each instrument gets its own gain node (for `volume` events) feeding a master gain and a light limiter (`DynamicsCompressorNode`) to avoid clipping when many notes ring.
 - Two source types, chosen per instrument (R3.5):
   - **Pluck source** (`pluck-worklet.js`): an AudioWorklet that runs one Karplus-Strong string per voice (up to 24 per instrument; the oldest is dropped beyond that). A noteOn writes one period of low-passed noise into a delay line; each sample the line is fed back through a two-tap low-pass and a loop gain chosen so the note falls 60 dB in the *ring time* (decay). The delay line is read with linear interpolation, so pitch bend changes the delay length smoothly (smoothed over about 10 ms); `noteOff` applies a linear gain ramp of `fade` seconds. Ring time (1-10 s, default 4 s) and tone (dark/warm/normal/bright) are settings. The bass uses the same string with 1.5× the ring time and a darker tone. The worklet output passes a DC blocker and a soft clip (`tanh`).
-  - **MIDI source** (`midi-source.js`): wraps webaudio-tinysynth, one MIDI channel per instrument, connected into the instrument's gain node. `bend` becomes a pitch-bend message and `noteOff` becomes a note-off.
-- Default sources: guitar and bass use the pluck source; drums and keyboard use the MIDI source (drum kit and Acoustic Grand Piano) (R3.5, R4c.11).
+  - **MIDI source** (`midi-source.js`): wraps webaudio-tinysynth, connected into the instrument's gain node. `bend` becomes a pitch-bend message (the bend range is set to the instrument's bend range, so semitones map 1:1) and `noteOff` becomes a note-off; the fade time is not used, the program's own release applies. Each instrument gets its own synth instance (on MIDI channel 1, or 10 for drums), because one shared instance has only one output and could not feed separate gain nodes; instances are pooled and reused. The library is a classic script (it sets `window.WebAudioTinySynth`), so it is loaded on first use with a `<script>` element from `vendor/`; a small subclass switches off its own AudioContext (`internalcontext`) and hands it the shared one with `setAudioContext(context, destination)`. The vendored file is unmodified.
+- Default sources: guitar and bass use the pluck source; drums and keyboard use the MIDI source (drum kit and Acoustic Grand Piano) (R3.5, R4c.11). With the MIDI source the default programs are Electric Guitar (clean) for guitar and Electric Bass (finger) for bass. Drums only have the MIDI drum kit; the keyboard can also use the plucked string.
 
 ## 6. Visual layer
 
@@ -151,7 +164,8 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
 - **Highway view** (`highway-view.js`): a lane is drawn in perspective with five columns. A `noteOn` creates a note mark at the near end; it moves away into the distance at a constant speed. While the voice rings, a trail connects the note mark to the near end, with opacity following the voice's current level, and ends when the voice stops (R5.2, R5.4). Notes older than the visible length are dropped.
 - **Simple view** (`simple-view.js`): the lane shows the device's buttons, lit while pressed, and the names of ringing notes (R5.1, R5.2). Guitar and bass: the five fret buttons with each fret's note name below it, glowing while their note rings; the names of all ringing notes; pills for the other controls (strum, whammy with its value 0.00-1.00, tilt, Start, Back). Analog controls fill smoothly and are never shown fully lit by the press threshold. Raw buttons and axes are only shown in the debug view (9.1).
 - The visual style is a global setting; per-lane override can come later if needed.
-- `keyboard-view.js` draws the on-screen keyboard when the keyboard instrument is enabled, with note names on the playing keys and lit keys while pressed (R4c.5, R4c.6).
+- `keyboard-view.js` draws the on-screen keyboard when the keyboard instrument is enabled, with note names on the playing keys and lit keys while pressed (R4c.5, R4c.6). It is drawn at the bottom of the keyboard lane in both visual styles, as five rows: `1`-`5` in the fret colors with their fret notes and Backspace (Strum); the black-key row; the home row; Shift (Octave +) and the bottom row; Alt (Octave −) and Space (Sustain). The note names follow Shift/Alt while they are held. Key letters are the US names of the physical keys.
+- Drums in the simple view: one pad per mapped control with the drum's name and the control's name, flashing on each hit with a brightness from the velocity.
 - To show fading trails, the audio engine keeps a simple per-voice level estimate (envelope model, `VoiceTracker` in `audio-engine.js`) on the main thread instead of reading audio data back: pluck voices decay exponentially with the ring time, MIDI melodic voices decay slowly while held and release in 0.3 s, drum hits fade within 0.6 s, a `noteOff` adds a linear fade, and the instrument's current volume is applied. Voices below 2 % are dropped.
 
 ## 7. User interface
@@ -159,7 +173,7 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
 ### 7.1 Start screen
 
 1. "Click or press a key to start" (unlocks audio).
-2. "Press any button on a controller" until at least one gamepad is seen (R2.8). The keyboard instrument can be turned on here too.
+2. "Press any button on a controller" until at least one gamepad is seen (R2.8). The keyboard instrument can be turned on here too, with a "Play with the computer keyboard instead" button; it is also a checkbox in the top bar.
 3. New controllers can be connected at any time; a lane is added when they appear and removed when they disconnect.
 
 ### 7.2 Settings panel

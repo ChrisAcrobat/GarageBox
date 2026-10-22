@@ -7,13 +7,19 @@
 // (strum, whammy with its value 0.00-1.00, tilt, Start, Back). Analog
 // controls fill smoothly and are never lit by the press threshold. Raw
 // buttons and axes are only shown in the debug view (9.1).
+//
+// Drums: one pad per mapped control with the drum's name, flashing on every
+// hit with a brightness from the hit's velocity.
+//
+// Keyboard: the guitar frets of keys 1-5, the ringing notes and the
+// on-screen keyboard (keyboard-view.js).
 
 import { ANALOG_CONTROLS } from '../input/mappings.js';
 import { noteName } from '../audio/theory.js';
-import { withAlpha, fitText } from './lanes.js';
+import { FRET_COLORS, withAlpha, fitText } from './lanes.js';
+import { drawKeyboard, keyboardHeight } from './keyboard-view.js';
 
-/** Fret colors from green to orange (R4.1). */
-export const FRET_COLORS = Object.freeze(['#2fbf4a', '#e5484d', '#f5d90a', '#3e8ef7', '#f76b15']);
+export { FRET_COLORS };
 
 export const FRETS = Object.freeze(['fret1', 'fret2', 'fret3', 'fret4', 'fret5']);
 
@@ -187,7 +193,68 @@ export function drawSimpleView(ctx, lane, area, t, now) {
     return;
   }
 
-  // Instruments without their own view yet: the logical controls.
+  if (lane.kind === 'drums' && instrument) {
+    y = sectionTitle(ctx, t('lane.pads'), x, y, w);
+    y = drawDrumPads(ctx, instrument, x, y, w, area.y + area.h - y, color, t, now);
+    return;
+  }
+
+  if (lane.kind === 'keys' && instrument) {
+    const kbH = keyboardHeight(w);
+    const guitarTracker = lane.channels.guitar.tracker;
+    y = sectionTitle(ctx, t('lane.frets'), x, y, w);
+    y = drawFretRow(ctx, guitarFretStates(instrument.guitar, guitarTracker, now), x, y, Math.min(w, 340), 20);
+    y = sectionTitle(ctx, t('lane.ringing'), x, y, w);
+    const voices = [
+      ...lane.channels.main.tracker.active(now).map((v) => ({ ...v, color })),
+      ...guitarTracker.active(now).map((v) => ({ ...v, color: FRET_COLORS[v.column] })),
+    ];
+    drawRingingNotes(ctx, voices, x, y, w, (v) => (v.color === color ? '#ffffff' : v.color));
+    drawKeyboard(ctx, device, instrument, x, Math.max(y + 40, area.y + area.h - kbH), w, color, t);
+    return;
+  }
+
+  // Fallback: the logical controls.
   y = sectionTitle(ctx, t('lane.controls'), x, y, w);
   drawPills(ctx, controlPills(device, t), x, y, w, color);
+}
+
+/** Drum pads in a grid; each flashes on a hit. Returns the next y. */
+export function drawDrumPads(ctx, drums, x, y, w, maxH, color, t, now) {
+  const n = drums.pads.length;
+  if (!n) return y;
+  const cols = Math.max(1, Math.min(4, Math.floor(w / 110)));
+  const rows = Math.ceil(n / cols);
+  const gap = 8;
+  const pw = (w - gap * (cols - 1)) / cols;
+  const ph = Math.max(44, Math.min(90, (maxH - gap * (rows - 1)) / rows));
+  drums.pads.forEach((pad, i) => {
+    const px = x + (i % cols) * (pw + gap);
+    const py = y + Math.floor(i / cols) * (ph + gap);
+    const flash = Math.exp(-(now - pad.lastHit) / 0.18) * (0.35 + 0.65 * (pad.velocity / 127));
+    ctx.beginPath();
+    ctx.roundRect(px, py, pw, ph, 8);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.fill();
+    if (flash > 0.01) {
+      ctx.save();
+      ctx.fillStyle = withAlpha(color, Math.min(1, flash));
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 20 * flash;
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = withAlpha(color, 0.5);
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 14px system-ui, sans-serif';
+    ctx.fillText(fitText(ctx, t(`drum.${pad.note}`), pw - 10), px + pw / 2, py + ph / 2 - 8);
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fillText(fitText(ctx, t(`control.${pad.control}`), pw - 10), px + pw / 2, py + ph / 2 + 12);
+  });
+  return y + rows * (ph + gap) + 6;
 }

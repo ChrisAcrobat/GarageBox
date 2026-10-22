@@ -494,3 +494,23 @@ select:focus-visible {
   color: var(--muted);
   font-size: 11px;
 }
+
+/* Top bar toggles and start screen keyboard button (R4c.2, 7.1) ------------ */
+
+.topbar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.topbar-toggle input {
+  accent-color: var(--accent);
+}
+
+.start-keyboard {
+  margin-top: 22px;
+}

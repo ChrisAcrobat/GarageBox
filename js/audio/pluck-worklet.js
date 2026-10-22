@@ -20,7 +20,7 @@ const BUFFER_SIZE = 8192; // power of two; enough for ~6 Hz at 48 kHz
 const MASK = BUFFER_SIZE - 1;
 const MAX_VOICES = 24;
 const SILENCE = 1e-4;
-const OUTPUT_GAIN = 0.5;
+const OUTPUT_GAIN = 1.2; // about as loud as the MIDI guitar at the same velocity
 
 class StringVoice {
   constructor(id, frequency, velocity, decay, brightness, bendRatio, sampleRate) {

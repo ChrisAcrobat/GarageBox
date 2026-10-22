@@ -16,6 +16,12 @@ export const LANE_COLORS = Object.freeze([
   '#f76b15', // orange
 ]);
 
+/** Fret colors from green to orange (R4.1). */
+export const FRET_COLORS = Object.freeze(['#2fbf4a', '#e5484d', '#f5d90a', '#3e8ef7', '#f76b15']);
+
+/** Color of the computer keyboard's lane. */
+export const KEYBOARD_COLOR = '#8b95a7';
+
 export const HEADER_HEIGHT = 56;
 const GAP = 6;
 
@@ -37,7 +43,7 @@ export function computeLanes(devices, width, height) {
     y: GAP,
     w: Math.floor(w),
     h: height - GAP * 2,
-    color: laneColor(device.index),
+    color: device.isKeyboard ? KEYBOARD_COLOR : laneColor(device.index),
   }));
 }
 
@@ -85,7 +91,8 @@ export function drawLaneFrame(ctx, lane, labels) {
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
-  ctx.font = '700 30px system-ui, sans-serif';
+  // Controller numbers are big; a word such as "Keyboard" is drawn smaller.
+  ctx.font = labels.number.length > 3 ? '700 20px system-ui, sans-serif' : '700 30px system-ui, sans-serif';
   ctx.fillText(labels.number, x + 14, y + HEADER_HEIGHT / 2 + 1);
   const numberWidth = ctx.measureText(labels.number).width;
 

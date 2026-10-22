@@ -12,6 +12,10 @@
     <header class="topbar">
       <h1 class="app-title" data-i18n="app.title"></h1>
       <p class="topbar-hint" data-i18n="topbar.hint"></p>
+      <label class="topbar-toggle">
+        <input type="checkbox" id="keyboard-toggle" />
+        <span data-i18n="topbar.keyboard"></span>
+      </label>
       <label class="language-picker">
         <span data-i18n="topbar.language"></span>
         <select id="language-select"></select>
@@ -34,6 +38,7 @@
         <div data-step="press" hidden>
           <p class="start-main pulse" data-i18n="start.pressButton"></p>
           <p class="start-sub" data-i18n="start.pressHint"></p>
+          <button type="button" id="start-keyboard" class="button start-keyboard" data-i18n="start.useKeyboard"></button>
         </div>
       </div>
     </div>

@@ -13,6 +13,8 @@ export const DEFAULTS = Object.freeze({
   global: Object.freeze({
     // 'auto' = use navigator.language, otherwise a language code ('en', 'sv').
     language: 'auto',
+    // The computer keyboard as an extra instrument is hidden by default (R4c.2).
+    keyboard: false,
   }),
   device: Object.freeze({
     // 'auto' = use the instrument implied by controller type detection (R2.2, R2.3).
@@ -26,6 +28,17 @@ export const DEFAULTS = Object.freeze({
     // Plucked string: seconds until a note has died away (R4.7), and tone color.
     decay: 4,
     brightness: 'normal',
+    // Sound source: 'auto' = the instrument's default (R3.5), or 'pluck' / 'midi'.
+    source: 'auto',
+    // General MIDI program 0-127 for the MIDI source, -1 = the instrument's default.
+    program: -1,
+    // Whammy and tilt assignment (R4.5): 'bend' | 'volume' | 'off'. Provisional defaults.
+    whammy: 'bend',
+    tilt: 'volume',
+    // Pitch bend at full deflection, in semitones (negative = down).
+    bendRange: -2,
+    // Drums: control name -> General MIDI drum note (0 = none). Missing entries use the defaults.
+    drumMap: Object.freeze({}),
   }),
 });
 
@@ -37,13 +50,24 @@ export const CHOICES = Object.freeze({
   fadeMs: Object.freeze([20, 40, 80, 150, 300, 600]),
   decay: Object.freeze([1, 2, 4, 6, 10]),
   brightness: Object.freeze(['dark', 'warm', 'normal', 'bright']),
+  source: Object.freeze(['auto', 'pluck', 'midi']),
+  whammy: Object.freeze(['bend', 'volume', 'off']),
+  tilt: Object.freeze(['bend', 'volume', 'off']),
+  bendRange: Object.freeze([-12, -7, -5, -2, -1, 1, 2, 5, 7, 12]),
 });
 
 /** Brightness names -> 0..1 for the plucked string. */
 export const BRIGHTNESS_VALUES = Object.freeze({ dark: 0.15, warm: 0.35, normal: 0.55, bright: 0.85 });
 
 /** Validators for settings that are neither enumerations nor plain values. */
-const VALIDATORS = {};
+const VALIDATORS = {
+  program: (v) => Number.isInteger(v) && v >= -1 && v <= 127,
+  drumMap: (v) =>
+    !!v &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    Object.values(v).every((n) => Number.isInteger(n) && (n === 0 || (n >= 35 && n <= 81))),
+};
 
 function isValid(key, value, defaultValue) {
   if (VALIDATORS[key]) return VALIDATORS[key](value);
