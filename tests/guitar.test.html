@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>Guitar logic tests – Music Sandbox</title>
+    <style>
+      body { background: #0e0f12; color: #e8eaed; font: 14px/1.5 ui-monospace, monospace; padding: 16px; }
+      .pass { color: #3dd68c; }
+      .fail { color: #ff6369; }
+    </style>
+  </head>
+  <body>
+    <h1>Guitar logic tests</h1>
+    <p>Open via a local server (e.g. <code>python3 -m http.server</code>) at <code>/tests/guitar.test.html</code>.</p>
+    <p id="summary"></p>
+    <ul id="results"></ul>
+    <script type="module">
+      import { createSuite, edge, summarize } from './test-runner.js';
+      import { Guitar, GAMEPAD_GUITAR_CONTROLS, deflection, TILT_REST } from '../js/instruments/guitar.js';
+      import { guitarOptions } from '../js/instruments/setup.js';
+      import { guitarRootMidi, scaleNotes, noteName } from '../js/audio/theory.js';
+      import { DEFAULTS } from '../js/settings/store.js';
+
+      const s = createSuite('guitar tests');
+      const { check } = s;
+
+      // Plays one frame; only note events are returned (bend/volume filtered unless asked).
+      function play(g, edges, controls = {}, { all = false } = {}) {
+        const ev = summarize(g.handle(edges, controls, 0));
+        return all ? ev : ev.filter((e) => !e.startsWith('bend') && !e.startsWith('volume'));
+      }
+      const press = (n) => edge(n, 'pressed');
+      const release = (n) => edge(n, 'released');
+      const strum = press('strumDown');
+
+      s.group('basics (R4.1, R4.9)');
+      let g = new Guitar();
+      check('strum with no fret held plays nothing', play(g, [strum]), []);
+      check('fret press alone plays nothing', play(g, [press('fret1')]), []);
+      check('hold green + strum plays E3 (52)', play(g, [strum]), ['on:52@0']);
+      check('strum up also plays', play(new Guitar(), [press('fret2'), press('strumUp')]), ['on:55@1']);
+      check('default notes are E minor pentatonic E3 G3 A3 B3 D4', g.options.notes.map(noteName), ['E3', 'G3', 'A3', 'B3', 'D4']);
+
+      s.group('restrum (R4.4)');
+      g = new Guitar();
+      play(g, [press('fret1')]);
+      const twice = [...play(g, [strum]), ...play(g, [release('strumDown')]), ...play(g, [strum])];
+      check('strum twice without release gives two noteOn and one noteOff', twice, ['on:52@0', 'off', 'on:52@0']);
+      check('the noteOff stops the first voice', (() => {
+        const h = new Guitar();
+        h.handle([press('fret1')], {}, 0);
+        const first = h.handle([strum], {}, 0).find((e) => e.type === 'noteOn');
+        const second = h.handle([strum], {}, 0);
+        return second.find((e) => e.type === 'noteOff').voiceId === first.voiceId && second.find((e) => e.type === 'noteOn').voiceId !== first.voiceId;
+      })(), true);
+
+      s.group('release keeps ringing (R4.2, R4.7)');
+      g = new Guitar();
+      play(g, [press('fret1')]);
+      play(g, [strum]);
+      check('releasing the fret sends nothing', play(g, [release('fret1')]), []);
+      check('the voice is still tracked as ringing', g.ringingVoices()[0] !== null, true);
+
+      s.group('mute on press-down (R4.3, R4.3.1)');
+      const events = g.handle([press('fret1')], {}, 0).filter((e) => e.type === 'noteOff');
+      check('pressing the fret of a ringing note sends one noteOff', events.length, 1);
+      check('the noteOff uses the short fade (80 ms default)', events[0].fade, 0.08);
+      check('pressing again does not start a new note', play(g, [release('fret1'), press('fret1')]), []);
+      check('fade time follows the setting', new Guitar({ fade: 0.3 }).options.fade, 0.3);
+
+      s.group('independent frets (R4.6)');
+      g = new Guitar();
+      play(g, [press('fret1')]);
+      play(g, [strum]);
+      play(g, [release('fret1'), press('fret2')]);
+      check('strum only retriggers held frets; green keeps ringing', play(g, [strum]), ['on:55@1']);
+      check('both frets have a ringing voice', g.ringingVoices().slice(0, 2).every((v) => v !== null), true);
+
+      s.group('chords (R4.8)');
+      g = new Guitar();
+      check('three held frets play together', play(g, [press('fret1'), press('fret3'), press('fret5'), strum]), ['on:52@0', 'on:57@2', 'on:62@4']);
+
+      s.group('same frame');
+      g = new Guitar();
+      check('strum up and down in one frame = one strum', play(g, [press('fret1'), press('strumUp'), press('strumDown')]), ['on:52@0']);
+      check('fret press + strum in one frame: mute old, play new', play(g, [release('fret1'), release('strumUp'), release('strumDown')]).concat(play(g, [press('fret1'), strum])), ['off', 'on:52@0']);
+
+      s.group('Back and Start (R4.10, R4.11)');
+      g = new Guitar();
+      play(g, [press('fret1'), press('fret2'), strum]);
+      const back = g.handle([press('back')], {}, 0).filter((e) => e.type === 'noteOff');
+      check('Back mutes all ringing notes', back.length, 2);
+      check('Back uses the soft fade', back.every((e) => e.fade === 0.08), true);
+      check('Back again has nothing to mute', play(g, [release('back'), press('back')]), []);
+      check('Start asks to open the settings', play(g, [press('start')]), ['action:openSettings']);
+
+      s.group('key and scale (R4.9)');
+      check('E root = E3 (52)', guitarRootMidi(4), 52);
+      check('A root = A3 (57)', guitarRootMidi(9), 57);
+      check('B root = B2 (47), within half an octave of E3', guitarRootMidi(11), 47);
+      check('A# root = A#3 (58), the highest root', guitarRootMidi(10), 58);
+      check('G root = G3 (55)', guitarRootMidi(7), 55);
+      check('A minor pentatonic', scaleNotes(57, 'minorPentatonic').map(noteName), ['A3', 'C4', 'D4', 'E4', 'G4']);
+      check('E major pentatonic', scaleNotes(52, 'majorPentatonic').map(noteName), ['E3', 'F#3', 'G#3', 'B3', 'C#4']);
+      check('C major plays its first five notes', scaleNotes(48, 'major').map(noteName), ['C3', 'D3', 'E3', 'F3', 'G3']);
+      check('blues plays its first five notes', scaleNotes(52, 'blues').map(noteName), ['E3', 'G3', 'A3', 'A#3', 'B3']);
+      const settings = { ...DEFAULTS.device };
+      check('options from default settings', guitarOptions(settings, 'guitar').notes, [52, 55, 57, 59, 62]);
+      check('bass is one octave lower (R2.10)', guitarOptions(settings, 'bass').notes, [40, 43, 45, 47, 50]);
+      g = new Guitar();
+      play(g, [press('fret1'), strum]);
+      g.configure({ notes: scaleNotes(57, 'minorPentatonic') });
+      check('changing the key keeps ringing notes and plays the new notes', play(g, [strum]), ['off', 'on:57@0']);
+
+      s.group('gamepad guitar mode (R2.10)');
+      g = new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS });
+      check('A + D-pad down plays green', play(g, [press('faceA'), press('dpadDown')]), ['on:52@0']);
+      check('B, Y, X, LB are red, yellow, blue, orange', play(g, [release('dpadDown'), press('faceB'), press('faceY'), press('faceX'), press('shoulderL'), press('dpadUp')]).filter((e) => e.startsWith('on')), ['on:52@0', 'on:55@1', 'on:57@2', 'on:59@3', 'on:62@4']);
+      check('the raw guitar names do nothing on a gamepad', play(new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS }), [press('fret1'), press('strumDown')]), []);
+      check('no whammy/tilt control: no bend, full volume', summarize(new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS }).handle([], {}, 0)), ['bend:0.00', 'volume:1.00']);
+
+      s.group('whammy and tilt (R4.5)');
+      const ctl = (whammy, tilt) => ({ whammy: { value: whammy, pressed: whammy > 0.5 }, tilt: { value: tilt, pressed: tilt > 0.5 } });
+      g = new Guitar();
+      check('at rest (whammy 0, tilt flat 0.44): no bend, half volume', play(g, [], ctl(0, 0.44), { all: true }), ['bend:0.00', 'volume:0.50']);
+      check('unchanged values send nothing', play(g, [], ctl(0, 0.44), { all: true }), []);
+      check('full whammy bends down 2 semitones (default)', play(g, [], ctl(1, 0.44), { all: true }), ['bend:-2.00']);
+      check('half whammy bends 1 semitone', play(g, [], ctl(0.5, 0.44), { all: true }), ['bend:-1.00']);
+      check('neck straight up = full volume', play(g, [], ctl(0.5, 1), { all: true }), ['volume:1.00']);
+      check('tilt deflection: flat 0.44 -> 0', deflection('tilt', 0.44), 0);
+      check(`tilt deflection: halfway between rest ${TILT_REST} and 1 -> 0.5`, deflection('tilt', 0.75), 0.5);
+      g = new Guitar({ whammy: 'volume', tilt: 'bend', bendRange: 12 });
+      check('swapped: whammy volume, tilt bend +12', play(g, [], ctl(1, 1), { all: true }), ['bend:12.00', 'volume:1.00']);
+      g = new Guitar({ whammy: 'off', tilt: 'off' });
+      check('both off: no bend, full volume', play(g, [], ctl(1, 1), { all: true }), ['bend:0.00', 'volume:1.00']);
+      g = new Guitar({ whammy: 'bend', tilt: 'bend', bendRange: -2 });
+      check('both on bend: bends add up', play(g, [], ctl(1, 1), { all: true }), ['bend:-4.00', 'volume:1.00']);
+      g = new Guitar();
+      play(g, [], ctl(1, 1));
+      g.configure({ whammy: 'off' });
+      check('changing the assignment re-sends bend and volume', play(g, [], ctl(1, 1), { all: true }), ['bend:0.00', 'volume:1.00']);
+
+      s.finish();
+    </script>
+  </body>
+</html>

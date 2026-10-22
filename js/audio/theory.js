@@ -39,7 +39,7 @@ export function midiToFrequency(midi) {
 /**
  * MIDI note of the lowest fret for a root pitch class (0 = C ... 11 = B).
  * The guitar's default root E sits at E3 (52); other roots are placed at most
- * half an octave away from E3 (A#2..A3), so changing the key never makes the
+ * half an octave away from E3 (B2..A#3), so changing the key never makes the
  * guitar jump by almost an octave.
  */
 export function guitarRootMidi(rootPitchClass) {
