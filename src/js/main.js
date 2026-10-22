@@ -477,4 +477,4 @@ async function main() {
   requestAnimationFrame(frame);
 }
 
-main().catch((err) => console.error('Music Sandbox failed to start', err));
+main().catch((err) => console.error('GarageBox - Music Sandbox failed to start', err));

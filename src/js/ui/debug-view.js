@@ -135,7 +135,7 @@ export function buildReport(device, recorder, now = new Date()) {
   const kv = (key, value) => lines.push(`${(key + ':').padEnd(17)}${value}`);
   const mapsTo = (names) => (names.length ? names.join(', ') : '-');
 
-  lines.push('Music Sandbox - controller debug report');
+  lines.push('GarageBox - Music Sandbox - controller debug report');
   kv('Time', formatLocalTime(now));
   kv('User agent', navigator.userAgent);
   kv('gamepad.id', device.id);
