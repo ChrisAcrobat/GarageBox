@@ -13,14 +13,14 @@ Requirements and design are written in [`docs/`](docs/).
 Current state: milestones 1-5 are implemented.
 
 - Input and debug: start screen, controller detection, one lane per controller, per-controller settings with a debug view, settings saved in the browser, English and Swedish.
-- Guitar: five frets with strum, restrum, mute and chords, key and scale per controller, a synthesized plucked string (no recordings) or a General MIDI sound. Whammy bends the pitch and tilt swells the volume; both can be switched per controller.
+- Guitar: five frets with strum, restrum, mute and chords, key and scale per controller, a synthesized plucked string (no recordings) or a General MIDI sound. The whammy bar bends the pitch down. Back turns tilt on: while it is on, tilting the neck moves the frets up or down through the scale, and Back again locks the new range (saved per controller).
 - Drums (regular gamepad by default) and a gamepad guitar/bass mode.
 - Computer keyboard as a piano, hidden by default (keyboard toggle in the top bar).
 - Two views: a highway where played notes travel away from you with sustain trails, and a simple view with note names per fret.
 - Menus work with the controller: Start opens a controller's settings, the D-pad (or the guitar's strum bar) moves up/down, left/right changes a value or presses a button, Back closes. While a guitar's settings are open this way, the frets play directly without strumming, so you can try sounds while changing them. Settings opened with the mouse (⚙ button) leave the controller playing normally.
 - The app is in [`src/`](src/index.html), which is the only folder published to GitHub Pages. Test pages are under [`tests/`](tests/index.html); serve the repository root with a local server to open both.
 
-Some defaults (whammy/tilt behavior, sounds) are marked *provisional* in the [design](docs/design.md) and need testing on the real guitar.
+Some defaults (e.g. sounds) are marked *provisional* in the [design](docs/design.md) and need testing on the real guitar.
 
 ## Overview
 
