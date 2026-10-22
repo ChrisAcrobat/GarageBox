@@ -123,7 +123,7 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
   - Volume: `gain = 0.5 + 0.5 × deflection`, i.e. half volume at rest, full volume at full deflection (a volume swell). If both controls are set to the same target, bends add up and gains multiply.
   - *Provisional default (owner to review):* whammy = pitch bend (−2), tilt = volume swell. Tilting the neck up makes the guitar louder.
 - Start opens (or closes again) the settings panel for this device (R4.10). Back stops all voices with the soft fade (R4.11).
-- **Tap-to-play** (R2.13, 7.4): while this device's settings panel is open, `setTapToPlay(true)` is on. A fret press then mutes that fret's ringing note (as R4.3) and plays its note at once, without a strum; releasing the fret stops that tapped note with the same mute fade. The strum bar does not reach the instrument while the menu is open (it navigates). When the panel closes, tapped notes still held ring on like strummed notes and normal strum playing applies again. A note that was strummed before the panel opened keeps ringing until its fret is pressed. Gamepads in guitar or bass mode tap with their fret buttons (A, B, Y, X, LB).
+- **Tap-to-play** (R2.13, 7.4): while this device's settings panel is open as a gamepad menu (opened with Start, not with the mouse), `setTapToPlay(true)` is on. A fret press then mutes that fret's ringing note (as R4.3) and plays its note at once, without a strum; releasing the fret stops that tapped note with the same mute fade. The strum bar does not reach the instrument while the menu is open (it navigates). When the panel closes, tapped notes still held ring on like strummed notes and normal strum playing applies again. A note that was strummed before the panel opened keeps ringing until its fret is pressed. Gamepads in guitar or bass mode tap with their fret buttons (A, B, Y, X, LB).
 - On a regular gamepad in guitar mode, four face buttons plus one shoulder button are the frets and D-pad up/down is the strum bar (R2.10). The Xbox face button colors match the fret colors: A = green, B = red, Y = yellow, X = blue, LB = orange.
 
 ### 4.3 Drums (`drums.js`)
@@ -141,7 +141,7 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
   Each control's sound can be changed (or set to none) in the settings (R4b.2); the list offers 27 GM drum sounds.
 - Digital buttons use a fixed velocity (100). Triggers fire when they pass 0.2, with velocity 30-127 from how far they were pressed at that moment, and re-arm below 0.1 (R4b.1).
 - Start opens the settings panel, as on the guitar.
-- While the settings panel is open, pads keep playing, except pads on the D-pad (or a guitar's strum bar and D-pad left/right) and Back, which navigate the menu instead (7.4).
+- While the settings panel is open as a gamepad menu, pads keep playing, except pads on the D-pad (or a guitar's strum bar and D-pad left/right) and Back, which navigate the menu instead (7.4). In a panel opened with the mouse all pads play.
 - Drum notes are one-shot: `noteOn` only; the sound ends by itself.
 
 ### 4.4 Keys (`keys.js`)
@@ -191,13 +191,18 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
   - Whammy and tilt each choose *Pitch bend*, *Volume* or *Off*, with a short plain-language hint below that explains what the current choice does. Bend range choices: −12, −7, −5, −2, −1, +1, +2, +5, +7, +12 semitones.
   - "Reset to defaults" removes all stored settings of the device. The keyboard's panel has no instrument choice (always Keys) and no debug view.
 - Every setting has a default; the panel is never needed to start playing.
-- A gamepad lane's panel shows a short hint at the bottom about the controller keys (7.4).
+- A gamepad lane's panel shows a short hint at the bottom: the controller keys in a gamepad menu, or, when opened with the mouse, a tip that opening it with Start lets the controller operate it (7.4).
 
 ### 7.4 Gamepad menu navigation
 
 Menus can be driven with the controller (R2.12). Navigation is only active while a menu is open; during normal play nothing changes.
 
-- **Which menus:** the start screen (step 1, driven by any controller, since it is not tied to a lane), a lane's settings panel and a lane's device information (debug) view. A lane's panel or view is only driven by that lane's controller; several players can each have their own panel open at once. The computer keyboard lane has no gamepad navigation.
+- **Gamepad menu or plain panel:** how a lane's settings panel was opened decides what the controller does (R2.14).
+  - Opened with **Start** on the controller, the panel is a *gamepad menu* (`gamepadMenu: true`): the controller navigates it as described below and frets tap-to-play.
+  - Opened with the **mouse** (the ⚙ button, by click or keyboard), it is a plain panel: no gamepad cursor, no navigation, no tap-to-play. The instrument gets every edge exactly as without a panel (strum strums, Back mutes, all drum pads play), so a mouse user can change settings while playing. Settings changes apply immediately in both cases (as before, through the settings store). Start on the controller still closes it (R4.10); pressing Start again opens it as a gamepad menu.
+  - The device information view opened from the panel inherits the panel's mode.
+  - The start screen is always driven by the controllers.
+- **Which menus:** the start screen (step 1, driven by any controller, since it is not tied to a lane), a lane's settings panel and a lane's device information (debug) view, when they are gamepad menus. A lane's panel or view is only driven by that lane's controller; several players can each have their own panel open at once. The computer keyboard lane has no gamepad navigation.
 - **Intents** (`MenuInput` in `menu-nav.js`, pure): logical controls become `up` (`dpadUp`, `strumUp`), `down` (`dpadDown`, `strumDown`), `left` (`dpadLeft`), `right` (`dpadRight`), `back` and `start`. They are edge-triggered; directions held down repeat after 400 ms, then every 120 ms. Two names on the same raw button in one frame give one intent. The state is reset whenever no menu is open, so a direction held before the menu opened does not repeat.
 - **Controls taken from the instrument:** while a lane's menu is open, its directions (D-pad, strum bar) and Back only navigate and are filtered out before the instrument sees the edges, so a guitar does not strum, Back does not mute, and drums do not play the D-pad pads. Start still goes to the instrument, which toggles the settings panel as before (R4.10); with the device information view open, Start opens the settings panel (as before). While the start screen is up, directions, Back and Start of every controller go to the start screen only.
 - **Gamepad cursor** (`MenuNavigator`, DOM): a highlight in the lane color (CSS class `gamepad-focus`, a thick outline; the field label is colored too), separate from the browser focus. The browser focus is not moved, so several lanes can each have their own cursor, the computer keyboard keeps playing (it ignores keys typed into form fields) and mouse use is unchanged. The cursor follows a control by its `data-key` (or class) when the panel re-renders after a setting change.
@@ -205,7 +210,7 @@ Menus can be driven with the controller (R2.12). Navigation is only active while
   - Left/right change the value: a select cycles its options backwards/forwards (wrapping) and fires `change`, a number or range input steps, a checkbox toggles. On a button, right presses it (e.g. *Device information*, *Reset to defaults*, close, *Copy report*); left does nothing.
   - Back closes the open menu.
 - **Focus when opened by gamepad:** a panel opened with Start does not move the browser focus to its first field, and closing it only gives the focus back to the lane's settings button if the focus was inside the panel. The same applies to the device information view opened from the panel with the gamepad. Mouse and keyboard opening work as before.
-- **Tap-to-play:** while a guitar or bass lane's settings panel is open, frets play without strumming (4.2), so sounds and keys can be tried while changing them. Drums keep playing on press (4.3).
+- **Tap-to-play:** while a guitar or bass lane's settings panel is open as a gamepad menu, frets play without strumming (4.2), so sounds and keys can be tried while changing them. Drums keep playing on press (4.3).
 
 ## 8. Settings, storage and language
 
@@ -232,7 +237,7 @@ Pages (open `tests/index.html` through a local server; each page's title starts 
 
 - `detect.test.html`: controller detection and mappings (milestone 1).
 - `guitar.test.html`: frets, strum, restrum, mute, chords, Back/Start, key and scale, bass octave, gamepad guitar mode, whammy/tilt assignment, tap-to-play.
-- `menu-nav.test.html`: menu intents and key repeat, the gamepad cursor (move, wrap, change values, press buttons, re-render) and the settings panel's gamepad navigation (7.4).
+- `menu-nav.test.html`: menu intents and key repeat, the gamepad cursor (move, wrap, change values, press buttons, re-render) and the settings panel's gamepad navigation, including that a mouse-opened panel has none (7.4).
 - `drums.test.html`: default mapping, one-shot notes, trigger threshold and velocity, custom mapping, guitar controller as drums.
 - `keys.test.html`: musical typing layout, piano behavior, octave shift, sustain pedal, guitar keys, and `KeyboardDevice` (auto-repeat, Ctrl, form fields, release all).
 - `pluck.test.html` (extra): renders the Karplus-Strong worklet in an `OfflineAudioContext` and checks level, pitch, natural decay, mute fade, bend and clipping.

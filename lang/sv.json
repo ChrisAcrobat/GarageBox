@@ -156,5 +156,6 @@
   "start.needsGesture": "Webbläsaren behöver ett klick eller en tangenttryckning innan den tillåter ljud.",
   "settings.gamepadHint": "Kontroll: styrkors upp/ned flyttar, vänster/höger ändrar, Back stänger.",
   "settings.gamepadHintGuitar": "Kontroll: slag eller styrkors upp/ned flyttar, vänster/höger ändrar, Back stänger. Greppknapparna spelar direkt medan menyn är öppen.",
-  "debug.gamepadHint": "Kontroll: styrkors upp/ned flyttar, höger trycker på en knapp, Back stänger."
+  "debug.gamepadHint": "Kontroll: styrkors upp/ned flyttar, höger trycker på en knapp, Back stänger.",
+  "settings.gamepadHintMouse": "Tips: öppna menyn med Start på kontrollen för att styra den med kontrollen."
 }

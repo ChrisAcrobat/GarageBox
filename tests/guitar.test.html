@@ -168,6 +168,12 @@
       check('gamepad bass mode: A taps E2', play(g, [press('faceA')]), ['on:40@0']);
       check('gamepad bass mode: releasing A stops it', play(g, [release('faceA')]), ['off']);
       check('tap mode is off by default', new Guitar().tapToPlay, false);
+      g = new Guitar();
+      g.setTapToPlay(false); // panel opened with the mouse: tap mode stays off
+      check('tap mode off (mouse-opened panel): fret press alone plays nothing', play(g, [press('fret1')]), []);
+      check('tap mode off: strum plays as usual', play(g, [strum]), ['on:52@0']);
+      check('tap mode off: release keeps ringing (R4.2)', play(g, [release('fret1')]), []);
+      check('tap mode off: Back mutes (R4.11)', play(g, [press('back')]), ['off']);
 
       s.finish();
     </script>

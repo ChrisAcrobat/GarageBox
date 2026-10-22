@@ -3,8 +3,10 @@
 // (R4.10). Every field writes straight to the settings store; every setting
 // has a default, so the panel is never needed to start playing.
 //
-// On a gamepad lane the panel can also be driven by that controller (design
-// 7.4): main.js passes the controller's menu intents to navigate().
+// Opened with Start on the controller, the panel is a *gamepad menu* (design
+// 7.4): main.js passes the controller's menu intents to navigate() and the
+// panel shows the gamepad cursor. Opened with the mouse it is a plain panel
+// (no cursor; the controller keeps playing).
 
 import { t } from '../i18n/i18n.js';
 import { CHOICES, getDeviceSettings, setDeviceSetting, resetDeviceSettings } from '../settings/store.js';
@@ -132,8 +134,9 @@ export class SettingsPanel {
    * @param {() => void} options.onOpenDebug
    * @param {() => void} options.onClose
    * @param {boolean} [options.focus] move the browser focus to the first field (default true; false when opened with the gamepad)
+   * @param {boolean} [options.gamepadMenu] opened with the controller: gamepad cursor and navigate() are active
    */
-  constructor({ container, device, getInstrument, onOpenDebug, onClose, focus = true }) {
+  constructor({ container, device, getInstrument, onOpenDebug, onClose, focus = true, gamepadMenu = false }) {
     this.device = device;
     this.getInstrument = getInstrument;
     this.el = document.createElement('section');
@@ -159,6 +162,7 @@ export class SettingsPanel {
     this.resetButton = this.el.querySelector('.reset-button');
     this.hintEl = this.el.querySelector('.gamepad-hint');
     this.onClose = onClose;
+    this.gamepadMenu = !!gamepadMenu && !device.isKeyboard;
 
     this.closeButton.addEventListener('click', onClose);
     this.debugButton.addEventListener('click', onOpenDebug);
@@ -170,8 +174,8 @@ export class SettingsPanel {
     this.nav = null;
     this.refresh();
     container.appendChild(this.el);
-    // Gamepad cursor (design 7.4); the computer keyboard's own lane has none.
-    if (!device.isKeyboard) this.nav = new MenuNavigator(this.el, { initial: '.fields select' });
+    // Gamepad cursor only in a gamepad menu (design 7.4).
+    if (this.gamepadMenu) this.nav = new MenuNavigator(this.el, { initial: '.fields select' });
     if (focus) this.fieldsEl.querySelector('select')?.focus({ preventScroll: true });
   }
 
@@ -181,6 +185,7 @@ export class SettingsPanel {
    * Back closes the panel. Start is handled by main.js (toggle, R4.10).
    */
   navigate(intent) {
+    if (!this.gamepadMenu) return;
     if (intent === 'back') {
       this.onClose();
       return;
@@ -215,8 +220,12 @@ export class SettingsPanel {
     }
     this.fieldsEl.replaceChildren(...children);
     if (focusedKey) this.fieldsEl.querySelector(`[data-key="${focusedKey}"]`)?.focus({ preventScroll: true });
-    this.hintEl.hidden = !!device.isKeyboard;
-    this.hintEl.textContent = device.isKeyboard ? '' : t(kind === 'guitar' ? 'settings.gamepadHintGuitar' : 'settings.gamepadHint');
+    // Gamepad menu: how to use it. Mouse-opened gamepad panel: how to get one.
+    let hintKey = null;
+    if (this.gamepadMenu) hintKey = kind === 'guitar' ? 'settings.gamepadHintGuitar' : 'settings.gamepadHint';
+    else if (!device.isKeyboard) hintKey = 'settings.gamepadHintMouse';
+    this.hintEl.hidden = !hintKey;
+    this.hintEl.textContent = hintKey ? t(hintKey) : '';
     this.nav?.sync();
   }
 

@@ -10,8 +10,9 @@
 // always written in English, independent of the UI language, so whoever reads
 // it sees the same format; the buttons and messages around it are translated.
 //
-// The view's buttons can be driven by the lane's controller (design 7.4):
-// D-pad up/down moves the gamepad cursor, right presses, Back closes.
+// When opened from a gamepad menu, the view's buttons can be driven by the
+// lane's controller (design 7.4): D-pad up/down moves the gamepad cursor,
+// right presses, Back closes.
 
 import { t } from '../i18n/i18n.js';
 import { formatVidPid } from '../input/detect.js';
@@ -221,12 +222,14 @@ export class DebugView {
    * @param {import('../input/gamepad-manager.js').Device} options.device
    * @param {() => void} options.onClose
    * @param {boolean} [options.focus] move the browser focus to the close button (default true)
+   * @param {boolean} [options.gamepadMenu] opened from a gamepad menu: gamepad cursor and navigate() are active
    */
-  constructor({ container, device, onClose, focus = true }) {
+  constructor({ container, device, onClose, focus = true, gamepadMenu = false }) {
     this.device = device;
     this.log = [];
     this.recorder = new InputRecorder(device);
     this.onClose = onClose;
+    this.gamepadMenu = !!gamepadMenu;
     this.el = el('section', 'debug-view');
     this.el.setAttribute('role', 'dialog');
     this.el.addEventListener('keydown', (e) => {
@@ -275,12 +278,13 @@ export class DebugView {
     this.nav = null;
     this.refresh();
     container.appendChild(this.el);
-    this.nav = new MenuNavigator(this.el, { initial: '.close-button' });
+    if (this.gamepadMenu) this.nav = new MenuNavigator(this.el, { initial: '.close-button' });
     if (focus) this.closeButton.focus({ preventScroll: true });
   }
 
   /** Handles one menu intent of this lane's controller (design 7.4); Back closes. */
   navigate(intent) {
+    if (!this.gamepadMenu) return;
     if (intent === 'back') {
       this.onClose();
       return;
@@ -300,6 +304,7 @@ export class DebugView {
     this.manualText.textContent = t('debug.copyManual');
     this.manualClose.textContent = t('common.close');
     this.hintEl.textContent = t('debug.gamepadHint');
+    this.hintEl.hidden = !this.gamepadMenu;
     this.lastCount = -1;
 
     const info = el('dl', 'debug-info');

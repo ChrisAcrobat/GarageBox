@@ -121,9 +121,12 @@ function destroyLaneUi(index) {
 }
 
 /**
- * Opens or closes the settings panel. `byGamepad` (Start on the controller)
- * leaves the browser focus alone, so no second focus ring appears next to the
- * gamepad cursor and the computer keyboard keeps playing (design 7.4).
+ * Opens or closes the settings panel. Opened with Start on the controller
+ * (`byGamepad`) it is a *gamepad menu*: the controller navigates it, frets
+ * tap-to-play, and the browser focus is left alone, so no second focus ring
+ * appears next to the gamepad cursor and the computer keyboard keeps playing.
+ * Opened with the mouse (or keyboard) it is a plain panel and the instrument
+ * plays exactly as without a panel (design 7.4).
  */
 function toggleSettings(index, { byGamepad = false } = {}) {
   const ui = laneUis.get(index);
@@ -140,6 +143,7 @@ function toggleSettings(index, { byGamepad = false } = {}) {
     onClose: () => closeSettings(index),
     onOpenDebug: () => openDebug(index),
     focus: !byGamepad,
+    gamepadMenu: byGamepad && !ui.device.isKeyboard,
   });
 }
 
@@ -160,9 +164,11 @@ function openDebug(index) {
   // Opened with the mouse or keyboard the focus is in the panel; with the
   // gamepad (D-pad right on the button) it is not, and stays where it is.
   const focus = !!ui.panel?.el.contains(document.activeElement);
+  // The view is a gamepad menu only if the panel it was opened from was one.
+  const gamepadMenu = !!ui.panel?.gamepadMenu;
   closeSettings(index);
   if (ui.debug) return;
-  ui.debug = new DebugView({ container: ui.el, device: ui.device, onClose: () => closeDebug(index), focus });
+  ui.debug = new DebugView({ container: ui.el, device: ui.device, onClose: () => closeDebug(index), focus, gamepadMenu });
   ui.el.classList.add('debug-open');
 }
 
@@ -218,7 +224,9 @@ function setupInstrument(ui) {
 /**
  * Gamepad menu navigation (design 7.4). Only while a menu is open: the start
  * screen (any controller), or this lane's settings panel or device
- * information view (only this lane's controller). Returns the control edges
+ * information view (only this lane's controller) when it was opened with the
+ * controller (a gamepad menu; a panel opened with the mouse leaves the
+ * controller playing as usual). Returns the control edges
  * that are left for the instrument: while a menu is open the D-pad (and on a
  * guitar the strum bar, which is the same raw buttons) and Back only
  * navigate. Start is left to the instrument, which toggles the panel as
@@ -228,7 +236,7 @@ function menuInput(ui, nowMs) {
   const edges = ui.device.controlEdges;
   if (ui.device.isKeyboard) return edges;
   const startActive = !!startScreen?.active;
-  const menu = ui.panel || ui.debug;
+  const menu = [ui.panel, ui.debug].find((m) => m?.gamepadMenu);
   if (!startActive && !menu) {
     ui.menuInput.reset();
     return edges;
@@ -241,7 +249,7 @@ function menuInput(ui, nowMs) {
   for (const intent of intents) {
     if (intent === 'start') continue;
     // A previous intent may have closed or replaced the menu (Back, a button).
-    (ui.panel || ui.debug)?.navigate(intent);
+    [ui.panel, ui.debug].find((m) => m?.gamepadMenu)?.navigate(intent);
   }
   return edges.filter((e) => !MENU_CONTROLS.has(e.name));
 }
@@ -252,8 +260,8 @@ function playInstruments() {
   for (const ui of laneUis.values()) {
     const edges = menuInput(ui, now * 1000);
     if (!ui.logic) continue;
-    // Tap-to-play while this gamepad's settings panel is open (design 7.4).
-    ui.logic.setTapToPlay?.(!!ui.panel && !ui.device.isKeyboard);
+    // Tap-to-play only while the settings panel is open as a gamepad menu (design 7.4).
+    ui.logic.setTapToPlay?.(!!ui.panel?.gamepadMenu);
     const events = ui.logic.handle(edges, ui.device.controls, now);
     for (const event of events) {
       if (event.type === 'action') {

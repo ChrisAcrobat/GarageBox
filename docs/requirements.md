@@ -27,7 +27,8 @@ Status: draft, under discussion.
   - Bass: same behavior as guitar, one octave lower, with a bass sound.
 - R2.11 Further General MIDI instruments can be chosen in the advanced settings (R2.9).
 - R2.12 The menus (start screen, a controller's advanced settings and its device information view) can be operated with that controller while the menu is open: D-pad (on a guitar also the strum bar) up/down moves between the controls with a clearly visible highlight, left/right changes the value (right presses a button), Back closes the menu and Start opens/closes the settings as in R4.10. Each controller only operates its own menu; during normal play the controls behave as before. The computer keyboard and the mouse keep working in the menus.
-- R2.13 While a guitar's (or a gamepad's in guitar/bass mode) advanced settings are open, pressing a fret plays its note at once without strumming, and releasing it stops the note, so sounds can be tried while changing them. Drums keep playing in the menu, except pads that share a button with the menu navigation.
+- R2.13 While a guitar's (or a gamepad's in guitar/bass mode) advanced settings are open as a controller menu (R2.14), pressing a fret plays its note at once without strumming, and releasing it stops the note, so sounds can be tried while changing them. Drums keep playing in the menu, except pads that share a button with the menu navigation.
+- R2.14 R2.12 and R2.13 apply only when the settings were opened with Start on the controller. Settings opened with the mouse (or the keyboard) do not change how the controller plays: it keeps strumming, muting and playing all pads as usual, and setting changes still take effect immediately. Closing them and opening them again with Start makes them a controller menu.
 
 ## 3. Sound
 
@@ -122,6 +123,7 @@ Status: draft, under discussion.
   - F6.1 Singing: a microphone used for vocals, e.g. as a vocal lane or for singing along.
   - F6.2 Instrument recording: a microphone used to pick up one or more real instruments.
   - F6.3 If the browser and hardware allow it, support several microphones at once (e.g. one per player or instrument).
+- F7 Pop-out settings page: a controller's advanced settings (R2.9) can be opened in a separate browser window (e.g. with `window.open` of a settings page that talks to the main page via `BroadcastChannel` or `postMessage`), so a mouse user can adjust settings on another screen while playing. Changes apply live in the main window.
 
 ## Open questions
 

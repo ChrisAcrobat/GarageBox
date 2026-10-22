@@ -156,5 +156,6 @@
   "start.needsGesture": "The browser needs one click or key press before it allows sound.",
   "settings.gamepadHint": "Controller: D-pad up/down move, left/right change, Back closes.",
   "settings.gamepadHintGuitar": "Controller: strum or D-pad up/down move, left/right change, Back closes. Frets play directly while this menu is open.",
-  "debug.gamepadHint": "Controller: D-pad up/down move, right presses a button, Back closes."
+  "debug.gamepadHint": "Controller: D-pad up/down move, right presses a button, Back closes.",
+  "settings.gamepadHintMouse": "Tip: open this menu with Start on the controller to use it with the controller."
 }

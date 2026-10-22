@@ -125,6 +125,8 @@
         getInstrument: () => ({ kind: 'drums', instrument: 'drums' }),
         onClose: () => closed++,
         onOpenDebug: () => {},
+        gamepadMenu: true,
+        focus: false,
       });
       const panelCursor = () => panel.el.querySelector(`.${CURSOR_CLASS}`);
       check('cursor starts on the first field (instrument)', panelCursor()?.dataset.key, 'instrument');
@@ -139,12 +141,35 @@
       check('Back closes the panel', closed, 1);
       panel.destroy();
       resetDeviceSettings(device.id);
+      s.group('settings panel opened with the mouse');
+      let mouseClosed = 0;
+      const mouse = new SettingsPanel({
+        container: box,
+        device,
+        getInstrument: () => ({ kind: 'guitar', instrument: 'guitar' }),
+        onClose: () => mouseClosed++,
+        onOpenDebug: () => {},
+      });
+      check('not a gamepad menu by default', mouse.gamepadMenu, false);
+      check('no gamepad cursor', mouse.el.querySelectorAll(`.${CURSOR_CLASS}`).length, 0);
+      check('shows the "open with Start" tip instead', [mouse.el.querySelector('.gamepad-hint').hidden, mouse.el.querySelector('.gamepad-hint').textContent], [false, 'settings.gamepadHintMouse']);
+      const before = getDeviceSettings(device.id).instrument;
+      mouse.navigate('right');
+      mouse.navigate('down');
+      mouse.navigate('back');
+      check('navigate() does nothing (no change, no close, no cursor)', [getDeviceSettings(device.id).instrument === before, mouseClosed, mouse.el.querySelectorAll(`.${CURSOR_CLASS}`).length], [true, 0, 0]);
+      check('the browser focus is on the first field as before', document.activeElement?.dataset.key, 'instrument');
+      mouse.destroy();
+      resetDeviceSettings(device.id);
+
+      s.group('keyboard panel');
       const kb = new SettingsPanel({
         container: box,
         device: { ...device, isKeyboard: true, id: 'menu-nav-test-kb' },
         getInstrument: () => ({ kind: 'keys', instrument: 'keys' }),
         onClose: () => {},
         onOpenDebug: () => {},
+        gamepadMenu: true,
       });
       check('the keyboard panel has no gamepad cursor or hint', [kb.el.querySelectorAll(`.${CURSOR_CLASS}`).length, kb.el.querySelector('.gamepad-hint').hidden], [0, true]);
       kb.destroy();
