@@ -116,6 +116,10 @@ Status: draft, under discussion.
   - F4.3 An instrument can have several charts in the same song, e.g. "Guitar Lead" and "Guitar Rhythm".
   - F4.4 Song names support several languages. Name lookup order: the user's current UI language, then English, then the first name in the list.
 - F5 If feasible, the user can provide a link to an audio file or a video (e.g. YouTube); the app analyses the audio and generates a note chart for F4 that the player then tries to follow.
+- F6 Microphone input as an instrument source. The two parts below are separate features and do not need to be built at the same time.
+  - F6.1 Singing: a microphone used for vocals, e.g. as a vocal lane or for singing along.
+  - F6.2 Instrument recording: a microphone used to pick up one or more real instruments.
+  - F6.3 If the browser and hardware allow it, support several microphones at once (e.g. one per player or instrument).
 
 ## Open questions
 
