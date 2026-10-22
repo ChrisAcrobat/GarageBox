@@ -36,6 +36,16 @@ Some defaults (whammy/tilt behavior, sounds) are marked *provisional* in the [de
 - [Requirements](docs/requirements.md) – core requirements and open questions.
 - [Design](docs/design.md) – architecture, file structure and module design.
 
+## Decision review
+
+Decisions made during design or implementation are logged in the local folder `decisions-review/`, which is git-ignored and never committed. Each decision has its own file, written in English, with the decision, why it was made, the alternatives and where it applies.
+
+- File name: `<importance>-<number>-<slug>.md`. Importance 0 means most critical to review (how the app sounds, behaves or plays), 9 means tiny details. The number is the decision's original number.
+- The owner reviews the decisions one at a time, most important first.
+- A reviewed decision is written into [`docs/requirements.md`](docs/requirements.md) and [`docs/design.md`](docs/design.md) (and the tests), then its file is deleted. The doc change is committed as its own commit, with the decision number and importance in the message, e.g. `Decision 86 (importance 1): own bass sound`.
+- Decisions kept for a later experiment stay in the folder, marked as such.
+- Open developer questions are answered only by updating the docs.
+
 ## Inspiration
 
 GarageBox is inspired by Apple's GarageBand app. It is an independent hobby project and is not affiliated with, endorsed by or connected to Apple Inc. GarageBand is a trademark of Apple Inc.
