@@ -54,6 +54,7 @@ src/                       The app; only this folder is published
       theory.js              Note names, scales, MIDI note numbers
     visual/
       lanes.js               Layout of lanes side by side (R5.3)
+      star-power.js          Star power trigger and confetti/light effect (R5.5)
       highway-view.js        Highway with notes travelling away (R5.2, R5.4)
       simple-view.js         Panel with lit buttons and note names (R5.2)
       keyboard-view.js       On-screen computer keyboard (R4c.5, R4c.6)
@@ -187,6 +188,14 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
   - The near end shows what the player presses: the fret buttons with their note names (guitar, bass), small labels of the drum pads that light up on a hit (drums), or the on-screen keyboard (keyboard lane).
   - Cross lines move away with the notes every half second, so the motion is visible even without notes.
 - **Simple view** (`simple-view.js`): the lane shows the device's buttons, lit while pressed, and the names of ringing notes (R5.1, R5.2). Guitar and bass: the five fret buttons with each fret's note name below it, glowing while their note rings; the names of all ringing notes; pills for the other controls (strum, whammy with its value 0.00-1.00, tilt, Start, Back). Analog controls fill smoothly and are never shown fully lit by the press threshold. Raw buttons and axes are only shown in the debug view (9.1).
+- **Star power** (`star-power.js`, R5.5): per guitar lane (a device with both a whammy axis and a tilt axis, whatever instrument it plays).
+  - Trigger: each frame, using the *smoothed* tilt deflection (4.2) and the whammy deflection, star power starts when it is not active, tilt deflection ≥ 0.9 and whammy deflection ≥ 0.95 in the same frame. Assignments (pitch, volume, off) do not matter.
+  - Staying on: while active, "neck up" means smoothed tilt deflection ≥ 0.8 (a little below the start threshold so small wobbles do not count as lowering). While the neck is up, star power stays on and no countdown runs; the whammy is not needed. When the neck goes below 0.8, an 8 s countdown starts; if the neck comes back up (≥ 0.8) before it runs out, the countdown is cancelled and starts again from 8 s the next time the neck goes down. When the countdown reaches 0, star power ends. The countdown is internal only and never drawn.
+  - Restart: after it has ended, it starts again only through the start trigger above.
+  - Events: the guitar instrument emits `starPower` events (`{ type: 'starPower', on: true|false, time }`) to the visual layer only; the audio engine ignores them.
+  - Confetti: a particle layer drawn on the same canvas, over the lane only: about 150 pieces spawned in the first 1.5 s at the top of the lane, small rectangles in the five fret colors plus white, falling with gravity, a little sideways drift and spin, new pieces keep spawning at a lower rate while star power lasts, and stop when it ends. Pieces outside the lane are dropped. With `prefers-reduced-motion: reduce`, only about 30 pieces fall, slowly.
+  - Light: the lane's color is replaced by a bright blue-white glow (GH-style star power) that fades in over 0.3 s and back to the lane color over 1 s after star power ends; in the highway view the road edges, cross lines and note trails take the glow color; in the simple view the lane background and the fret frames do.
+  - Setting `starPower` (checkbox, default on) in the per-device panel, shown only on lanes that can trigger it.
 - The visual style is a global setting (top bar "View": Highway, the default, or Simple); per-lane override can come later if needed.
 - `keyboard-view.js` draws the on-screen keyboard when the keyboard instrument is enabled, with note names on the playing keys and lit keys while pressed (R4c.5, R4c.6). It is drawn at the bottom of the keyboard lane in both visual styles, as five rows: `1`-`5` in the fret colors with their fret notes and Backspace (Strum); the black-key row; the home row; Shift (Octave +) and the bottom row; Alt (Octave −) and Space (Sustain). The note names follow Shift/Alt while they are held. Key letters are the US names of the physical keys.
 - Drums in the simple view: one pad per mapped control with the drum's name and the control's name, flashing on each hit with a brightness from the velocity.
@@ -266,6 +275,7 @@ Pages (open `tests/index.html` through a local server; each page's title starts 
 - `drums.test.html`: default mapping, one-shot notes, trigger threshold and velocity, custom mapping, guitar controller as drums.
 - `effects.test.html`: effect presets build the expected chain (drive, cabinet, echo only for Epic, reverb), Clean adds nothing, the setting is offered for every instrument except drums, and switching preset keeps ringing notes (R3.6).
 - `keys.test.html`: musical typing layout, piano behavior, octave shift, sustain pedal, guitar keys, and `KeyboardDevice` (auto-repeat, Ctrl, form fields, release all).
+- `star-power.test.html`: start thresholds (smoothed tilt ≥ 0.9 and whammy ≥ 0.95 in the same frame), only on devices with whammy and tilt, independent of assignments; stays on while tilt ≥ 0.8 even with whammy released; ends 8 s after the neck goes below 0.8; raising the neck before the end cancels the countdown and lowering again restarts it from 8 s; restart after end needs the start trigger again; no countdown is drawn; the setting turns it off; no audio event.
 - `bass.test.html` (extra): renders the bass source in an `OfflineAudioContext` and checks level, pitch (fundamental), the thump (more high content at the start than after 0.3 s), natural decay with the ring time, mute fade, bend, the voice limit, and that the bass defaults to this source.
 - `pluck.test.html` (extra): renders the Karplus-Strong worklet in an `OfflineAudioContext` and checks level, pitch, natural decay, mute fade, bend and clipping.
 
