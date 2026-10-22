@@ -10,9 +10,9 @@
 //
 // The guitar-standard indexes were confirmed with the real Xplorer on Chrome
 // 155/Linux (design 9.1): frets B0, B1, B3, B2, B4; strum B12/B13; Start B9;
-// Back B8; whammy axis 2 (rests at -1); tilt axis 3 (gradual, rests at about
-// +0.12, inverted here). The guitar-xpad variant (no "standard" mapping) is
-// still unconfirmed.
+// Back B8; D-pad left/right B14/B15; whammy axis 2 (rests at -1); tilt axis 3
+// (gradual, rests at about +0.12, inverted here). The guitar-xpad variant (no
+// "standard" mapping) is still unconfirmed.
 
 import { ControllerType } from './detect.js';
 
@@ -33,6 +33,10 @@ const GUITAR_STANDARD = {
     fret5: { button: 4 },   // orange = LB
     strumUp: { button: 12 },
     strumDown: { button: 13 },
+    // D-pad left/right (standard layout B14/B15), confirmed on the real
+    // Xplorer (Chrome/Linux). Used to change values in the menus.
+    dpadLeft: { button: 14 },
+    dpadRight: { button: 15 },
     whammy: { axis: 2, from: -1, to: 1 },  // rests at -1 (Xplorer on Chrome/Linux)
     tilt: { axis: 3, from: 1, to: -1 },    // inverted: on the Xplorer the axis falls when tilted up (R4.5)
     start: { button: 9 },
@@ -54,6 +58,10 @@ const GUITAR_XPAD = {
     fret5: { button: 4 },   // orange = BTN_TL
     strumUp: { axis: 7, dir: -1 },
     strumDown: { axis: 7, dir: 1 },
+    // D-pad left/right as the horizontal hat axis: NOT yet confirmed on the
+    // real Xplorer without the standard mapping (best guess from evdev order).
+    dpadLeft: { axis: 6, dir: -1 },
+    dpadRight: { axis: 6, dir: 1 },
     whammy: { axis: 3, from: -1, to: 1 },  // ABS_RX, assumed to rest at -1
     tilt: { axis: 4, from: -1, to: 1 },    // ABS_RY, may be on/off only (R4.5)
     start: { button: 7 },

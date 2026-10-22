@@ -14,9 +14,10 @@ import { HighwayState, drawHighway, placeNote } from './visual/highway-view.js';
 import { StartScreen } from './ui/start-screen.js';
 import { SettingsPanel } from './ui/settings-panel.js';
 import { DebugView } from './ui/debug-view.js';
+import { MenuInput, MENU_CONTROLS } from './ui/menu-nav.js';
 import { CHOICES, getGlobalSettings, setGlobalSetting, getDeviceSettings, onSettingsChange } from './settings/store.js';
 import { SUPPORTED_LANGUAGES, applyTranslations, onLanguageChange, setLanguage, t } from './i18n/i18n.js';
-import { getEngine, keepAudioAlive, unlockAudio } from './audio/audio-engine.js';
+import { getAudioContext, getEngine, keepAudioAlive, unlockAudio } from './audio/audio-engine.js';
 import { createInstrument, instrumentKind } from './instruments/setup.js';
 
 const stage = document.getElementById('stage');
@@ -32,7 +33,7 @@ const startKeyboardButton = document.getElementById('start-keyboard');
  * Per-device state, keyed by device index (gamepad.index, or KEYBOARD_INDEX):
  * { device, el, gear, instrument (name), kind, logic (Instrument|null),
  *   channels: { main: Channel, guitar?: Channel }, highway: HighwayState,
- *   panel: SettingsPanel|null, debug: DebugView|null }
+ *   panel: SettingsPanel|null, debug: DebugView|null, menuInput: MenuInput }
  */
 const laneUis = new Map();
 let lanes = [];
@@ -96,6 +97,7 @@ function createLaneUi(device) {
     highway: new HighwayState(),
     panel: null,
     debug: null,
+    menuInput: new MenuInput(),
   };
   laneUis.set(device.index, ui);
   translateLaneUi(ui);
@@ -118,7 +120,12 @@ function destroyLaneUi(index) {
   laneUis.delete(index);
 }
 
-function toggleSettings(index) {
+/**
+ * Opens or closes the settings panel. `byGamepad` (Start on the controller)
+ * leaves the browser focus alone, so no second focus ring appears next to the
+ * gamepad cursor and the computer keyboard keeps playing (design 7.4).
+ */
+function toggleSettings(index, { byGamepad = false } = {}) {
   const ui = laneUis.get(index);
   if (!ui) return;
   if (ui.panel) {
@@ -132,23 +139,30 @@ function toggleSettings(index) {
     getInstrument: () => ({ kind: ui.kind, instrument: ui.instrument }),
     onClose: () => closeSettings(index),
     onOpenDebug: () => openDebug(index),
+    focus: !byGamepad,
   });
 }
 
 function closeSettings(index) {
   const ui = laneUis.get(index);
   if (!ui?.panel) return;
+  // Give the focus back to the lane's button only if it was in the panel
+  // (mouse or keyboard use); a gamepad close does not move the focus.
+  const hadFocus = ui.panel.el.contains(document.activeElement);
   ui.panel.destroy();
   ui.panel = null;
-  ui.gear.focus({ preventScroll: true });
+  if (hadFocus) ui.gear.focus({ preventScroll: true });
 }
 
 function openDebug(index) {
   const ui = laneUis.get(index);
   if (!ui || ui.device.isKeyboard) return;
+  // Opened with the mouse or keyboard the focus is in the panel; with the
+  // gamepad (D-pad right on the button) it is not, and stays where it is.
+  const focus = !!ui.panel?.el.contains(document.activeElement);
   closeSettings(index);
   if (ui.debug) return;
-  ui.debug = new DebugView({ container: ui.el, device: ui.device, onClose: () => closeDebug(index) });
+  ui.debug = new DebugView({ container: ui.el, device: ui.device, onClose: () => closeDebug(index), focus });
   ui.el.classList.add('debug-open');
 }
 
@@ -201,15 +215,49 @@ function setupInstrument(ui) {
   for (const [part, sound] of Object.entries(created.sounds)) ui.channels[part] = getEngine().createChannel(sound);
 }
 
+/**
+ * Gamepad menu navigation (design 7.4). Only while a menu is open: the start
+ * screen (any controller), or this lane's settings panel or device
+ * information view (only this lane's controller). Returns the control edges
+ * that are left for the instrument: while a menu is open the D-pad (and on a
+ * guitar the strum bar, which is the same raw buttons) and Back only
+ * navigate. Start is left to the instrument, which toggles the panel as
+ * before (R4.10).
+ */
+function menuInput(ui, nowMs) {
+  const edges = ui.device.controlEdges;
+  if (ui.device.isKeyboard) return edges;
+  const startActive = !!startScreen?.active;
+  const menu = ui.panel || ui.debug;
+  if (!startActive && !menu) {
+    ui.menuInput.reset();
+    return edges;
+  }
+  const intents = ui.menuInput.update(edges, ui.device.controls, nowMs);
+  if (startActive) {
+    for (const intent of intents) startScreen.navigate(intent);
+    return edges.filter((e) => !MENU_CONTROLS.has(e.name) && e.name !== 'start');
+  }
+  for (const intent of intents) {
+    if (intent === 'start') continue;
+    // A previous intent may have closed or replaced the menu (Back, a button).
+    (ui.panel || ui.debug)?.navigate(intent);
+  }
+  return edges.filter((e) => !MENU_CONTROLS.has(e.name));
+}
+
 /** Feeds one frame of input to every instrument and routes its events. */
 function playInstruments() {
   const now = nowSeconds();
   for (const ui of laneUis.values()) {
+    const edges = menuInput(ui, now * 1000);
     if (!ui.logic) continue;
-    const events = ui.logic.handle(ui.device.controlEdges, ui.device.controls, now);
+    // Tap-to-play while this gamepad's settings panel is open (design 7.4).
+    ui.logic.setTapToPlay?.(!!ui.panel && !ui.device.isKeyboard);
+    const events = ui.logic.handle(edges, ui.device.controls, now);
     for (const event of events) {
       if (event.type === 'action') {
-        if (event.action === 'openSettings') toggleSettings(ui.device.index);
+        if (event.action === 'openSettings') toggleSettings(ui.device.index, { byGamepad: !ui.device.isKeyboard });
         continue;
       }
       const channel = ui.channels[event.part || 'main'] || ui.channels.main;
@@ -314,7 +362,7 @@ function frame() {
   if (layoutDirty) layout();
   draw();
   for (const ui of laneUis.values()) ui.debug?.update();
-  startScreen?.update(manager.devices.size > 0 || keyboard.enabled);
+  startScreen?.update(manager.devices.size > 0 || keyboard.enabled, manager.devices.size > 0);
   requestAnimationFrame(frame);
 }
 
@@ -402,6 +450,12 @@ async function main() {
     onStart: () => {
       unlockAudio();
       keepAudioAlive();
+    },
+    // A gamepad button is no user gesture, so sound may stay blocked (7.1, 7.4).
+    onGamepadStart: async () => {
+      const ctx = await Promise.race([unlockAudio(), new Promise((resolve) => setTimeout(resolve, 500))]);
+      const context = ctx || getAudioContext();
+      return !context || context.state === 'running';
     },
   });
 

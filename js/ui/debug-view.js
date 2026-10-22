@@ -9,10 +9,14 @@
 // be pasted into a chat or an issue. The report is a technical artifact and is
 // always written in English, independent of the UI language, so whoever reads
 // it sees the same format; the buttons and messages around it are translated.
+//
+// The view's buttons can be driven by the lane's controller (design 7.4):
+// D-pad up/down moves the gamepad cursor, right presses, Back closes.
 
 import { t } from '../i18n/i18n.js';
 import { formatVidPid } from '../input/detect.js';
 import { controlsForAxis, controlsForButton, describeSource } from '../input/mappings.js';
+import { MenuNavigator } from './menu-nav.js';
 
 const LOG_LENGTH = 12;
 
@@ -216,11 +220,13 @@ export class DebugView {
    * @param {HTMLElement} options.container lane overlay element
    * @param {import('../input/gamepad-manager.js').Device} options.device
    * @param {() => void} options.onClose
+   * @param {boolean} [options.focus] move the browser focus to the close button (default true)
    */
-  constructor({ container, device, onClose }) {
+  constructor({ container, device, onClose, focus = true }) {
     this.device = device;
     this.log = [];
     this.recorder = new InputRecorder(device);
+    this.onClose = onClose;
     this.el = el('section', 'debug-view');
     this.el.setAttribute('role', 'dialog');
     this.el.addEventListener('keydown', (e) => {
@@ -258,14 +264,28 @@ export class DebugView {
     this.manualClose.type = 'button';
     this.manualClose.addEventListener('click', () => {
       this.manualEl.hidden = true;
+      this.nav?.sync();
     });
     this.manualEl.append(this.manualText, this.manualArea, this.manualClose);
 
+    this.hintEl = el('p', 'gamepad-hint');
+
     this.body = el('div', 'debug-body');
-    this.el.append(header, toolbar, this.manualEl, this.body);
+    this.el.append(header, toolbar, this.hintEl, this.manualEl, this.body);
+    this.nav = null;
     this.refresh();
     container.appendChild(this.el);
-    this.closeButton.focus({ preventScroll: true });
+    this.nav = new MenuNavigator(this.el, { initial: '.close-button' });
+    if (focus) this.closeButton.focus({ preventScroll: true });
+  }
+
+  /** Handles one menu intent of this lane's controller (design 7.4); Back closes. */
+  navigate(intent) {
+    if (intent === 'back') {
+      this.onClose();
+      return;
+    }
+    this.nav?.navigate(intent);
   }
 
   /** Rebuilds the whole view (after a language change or a change in input counts). */
@@ -279,6 +299,7 @@ export class DebugView {
     this.clearButton.textContent = t('debug.clearLog');
     this.manualText.textContent = t('debug.copyManual');
     this.manualClose.textContent = t('common.close');
+    this.hintEl.textContent = t('debug.gamepadHint');
     this.lastCount = -1;
 
     const info = el('dl', 'debug-info');
@@ -467,6 +488,7 @@ export class DebugView {
     }
     this.manualArea.value = text;
     this.manualEl.hidden = false;
+    this.nav?.sync();
     this.manualArea.focus({ preventScroll: true });
     this.manualArea.select();
     this._showStatus(t('debug.copyFailed'));

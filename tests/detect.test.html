@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
     <title>Detection tests – Music Sandbox</title>
     <style>
       body { background: #0e0f12; color: #e8eaed; font: 14px/1.5 ui-monospace, monospace; padding: 16px; }
@@ -79,6 +80,8 @@
       check('xpad strum down not pressed', logical.strumDown.pressed, false);
       check('xpad whammy full at +1', logical.whammy.value, 1);
       check('xpad tilt rest at -1', logical.tilt.value, 0);
+      check('xpad D-pad left from hat axis 6 (unconfirmed)', readLogical(selectMapping('guitar', ''), { buttons: [], axes: [0, 0, 0, 0, 0, 0, -1, 0] }).dpadLeft.pressed, true);
+      check('standard guitar D-pad left/right = B14/B15 (confirmed)', [selectMapping('guitar', 'standard').controls.dpadLeft.button, selectMapping('guitar', 'standard').controls.dpadRight.button], [14, 15]);
 
       const failed = results.filter((r) => !r.ok);
       const list = document.getElementById('results');

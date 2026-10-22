@@ -141,6 +141,34 @@
       g.configure({ whammy: 'off' });
       check('changing the assignment re-sends bend and volume', play(g, [], ctl(1, 1), { all: true }), ['bend:0.00', 'volume:1.00']);
 
+      s.group('tap-to-play in the settings menu (design 7.4)');
+      g = new Guitar();
+      g.setTapToPlay(true);
+      check('fret press plays at once without strum', play(g, [press('fret1')]), ['on:52@0']);
+      check('second fret adds its note (chord by tapping)', play(g, [press('fret3')]), ['on:57@2']);
+      check('releasing a tapped fret stops its note', play(g, [release('fret1')]), ['off']);
+      check('the release uses the mute fade', g.handle([release('fret3')], {}, 0).find((e) => e.type === 'noteOff').fade, 0.08);
+      check('no voices left after releasing', g.ringingVoices().every((v) => v === null), true);
+      play(g, [press('fret2')]);
+      check('pressing the same fret again restarts it: off, then on', play(g, [release('fret2'), press('fret2')]), ['off', 'on:55@1']);
+      play(g, [release('fret2')]);
+      g = new Guitar();
+      play(g, [press('fret1')]);
+      play(g, [strum]);
+      play(g, [release('fret1')]);
+      g.setTapToPlay(true);
+      check('a strummed note keeps ringing when tap mode starts', g.ringingVoices()[0] !== null, true);
+      check('pressing its fret in tap mode mutes it and plays the tapped note', play(g, [press('fret1')]), ['off', 'on:52@0']);
+      g.setTapToPlay(false);
+      check('after leaving tap mode, releasing the fret keeps the note ringing (R4.2)', play(g, [release('fret1')]), []);
+      check('after leaving tap mode a fret press only mutes (R4.3)', play(g, [press('fret1')]), ['off']);
+      check('and strum plays again', play(g, [strum]), ['on:52@0']);
+      g = new Guitar(guitarOptions(DEFAULTS.device, 'bass', { gamepad: true }));
+      g.setTapToPlay(true);
+      check('gamepad bass mode: A taps E2', play(g, [press('faceA')]), ['on:40@0']);
+      check('gamepad bass mode: releasing A stops it', play(g, [release('faceA')]), ['off']);
+      check('tap mode is off by default', new Guitar().tapToPlay, false);
+
       s.finish();
     </script>
   </body>

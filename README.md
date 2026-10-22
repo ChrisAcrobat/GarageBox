@@ -15,6 +15,7 @@ Current state: milestones 1-5 are implemented.
 - Drums (regular gamepad by default) and a gamepad guitar/bass mode.
 - Computer keyboard as a piano, hidden by default (keyboard toggle in the top bar).
 - Two views: a highway where notes travel toward you with sustain trails, and a simple view with note names per fret.
+- Menus work with the controller: Start opens a controller's settings, the D-pad (or the guitar's strum bar) moves up/down, left/right changes a value or presses a button, Back closes. While a guitar's settings are open, the frets play directly without strumming, so you can try sounds while changing them.
 - Test pages under [`tests/`](tests/index.html) (open through a local server).
 
 Some defaults (whammy/tilt behavior, sounds) are marked *provisional* in the [design](docs/design.md) and need testing on the real guitar.

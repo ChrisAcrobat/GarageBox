@@ -150,5 +150,11 @@
   "settings.whammyHint.bend": "När spaken trycks ned böjs tonhöjden med böjningsomfånget nedan. Ett negativt omfång sänker tonen, som en riktig whammy-spak.",
   "settings.whammyHint.volume": "När spaken trycks ned blir gitarren starkare: halv volym i viloläge, full volym när den är helt nedtryckt.",
   "settings.tiltHint.bend": "När halsen pekar uppåt böjs tonhöjden med böjningsomfånget nedan. Hålls gitarren plant händer ingenting.",
-  "settings.tiltHint.volume": "Håll gitarren plant för halv volym; peka halsen uppåt för att höja volymen."
+  "settings.tiltHint.volume": "Håll gitarren plant för halv volym; peka halsen uppåt för att höja volymen.",
+  "start.button": "Starta",
+  "start.gamepadHint": "Kontroll: tryck på Start.",
+  "start.needsGesture": "Webbläsaren behöver ett klick eller en tangenttryckning innan den tillåter ljud.",
+  "settings.gamepadHint": "Kontroll: styrkors upp/ned flyttar, vänster/höger ändrar, Back stänger.",
+  "settings.gamepadHintGuitar": "Kontroll: slag eller styrkors upp/ned flyttar, vänster/höger ändrar, Back stänger. Greppknapparna spelar direkt medan menyn är öppen.",
+  "debug.gamepadHint": "Kontroll: styrkors upp/ned flyttar, höger trycker på en knapp, Back stänger."
 }

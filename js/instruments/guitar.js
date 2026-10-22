@@ -14,6 +14,12 @@
 // Within one frame, fret edges are handled before strum edges, so pressing a
 // fret and strumming in the same frame mutes the old note and plays a new one.
 //
+// Tap-to-play (design 7.4): while the device's settings panel is open, the UI
+// turns on setTapToPlay(true). Then a fret press mutes that fret's ringing
+// note (as above) and plays its note at once, without a strum, and releasing
+// the fret stops that tapped note with the same short fade. Turning tap mode
+// off leaves tapped notes ringing like strummed ones.
+//
 // The same class is used for the Xplorer, for a regular gamepad in guitar or
 // bass mode (R2.10, through `controlNames`) and for keys 1-5 + Backspace on the
 // computer keyboard (R4c.3).
@@ -72,7 +78,8 @@ export function deflection(name, value) {
 export class Guitar extends Instrument {
   constructor(options = {}) {
     super();
-    this.frets = FRETS.map(() => ({ held: false, voiceId: null, midi: null }));
+    this.frets = FRETS.map(() => ({ held: false, voiceId: null, midi: null, tapped: false }));
+    this.tapToPlay = false;
     this.lastBend = null;
     this.lastGain = null;
     this.configure(options);
@@ -90,6 +97,15 @@ export class Guitar extends Instrument {
     // Force bend/volume to be re-sent with the new assignment.
     this.lastBend = null;
     this.lastGain = null;
+  }
+
+  /** Turns tap-to-play on or off (on while the settings panel is open). */
+  setTapToPlay(on) {
+    on = !!on;
+    if (on === this.tapToPlay) return;
+    this.tapToPlay = on;
+    // Notes tapped in the menu ring on like strummed notes after it closes.
+    if (!on) for (const fret of this.frets) fret.tapped = false;
   }
 
   /** MIDI note of fret i (0-based). */
@@ -110,8 +126,13 @@ export class Guitar extends Instrument {
       if (e.type === 'pressed') {
         fret.held = true;
         this._mute(fret, time); // R4.3
+        if (this.tapToPlay) {
+          this._play(fret, i, time);
+          fret.tapped = true;
+        }
       } else if (e.type === 'released') {
         fret.held = false; // R4.2: keeps ringing
+        if (fret.tapped) this._mute(fret, time); // tap-to-play: release stops the tapped note
       }
     }
 
@@ -133,15 +154,20 @@ export class Guitar extends Instrument {
     this.frets.forEach((fret, i) => {
       if (!fret.held) return; // R4.6
       this._mute(fret, time); // R4.4: a ringing note from an earlier strum restarts
-      const voiceId = newVoiceId();
-      const midi = this.noteFor(i);
-      fret.voiceId = voiceId;
-      fret.midi = midi;
-      this.emit({ type: 'noteOn', voiceId, midi, velocity: this.options.velocity, time, column: i });
+      this._play(fret, i, time);
     });
   }
 
+  _play(fret, i, time) {
+    const voiceId = newVoiceId();
+    const midi = this.noteFor(i);
+    fret.voiceId = voiceId;
+    fret.midi = midi;
+    this.emit({ type: 'noteOn', voiceId, midi, velocity: this.options.velocity, time, column: i });
+  }
+
   _mute(fret, time) {
+    fret.tapped = false;
     if (fret.voiceId === null) return;
     this.emit({ type: 'noteOff', voiceId: fret.voiceId, fade: this.options.fade, time });
     fret.voiceId = null;

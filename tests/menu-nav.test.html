@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>Menu navigation tests – Music Sandbox</title>
+    <style>
+      body { background: #0e0f12; color: #e8eaed; font: 14px/1.5 ui-monospace, monospace; padding: 16px; }
+      .pass { color: #3dd68c; }
+      .fail { color: #ff6369; }
+      #sandbox { position: absolute; left: -9999px; }
+    </style>
+  </head>
+  <body>
+    <h1>Menu navigation tests</h1>
+    <p>Open via a local server (e.g. <code>python3 -m http.server</code>) at <code>/tests/menu-nav.test.html</code>.</p>
+    <p id="summary"></p>
+    <ul id="results"></ul>
+    <div id="sandbox"></div>
+    <script type="module">
+      import { createSuite, edge } from './test-runner.js';
+      import { MenuInput, MenuNavigator, MENU_CONTROLS, CURSOR_CLASS, REPEAT_DELAY_MS, REPEAT_INTERVAL_MS, intentFor, wrapIndex } from '../js/ui/menu-nav.js';
+      import { SettingsPanel } from '../js/ui/settings-panel.js';
+      import { detectController } from '../js/input/detect.js';
+      import { MAPPINGS } from '../js/input/mappings.js';
+      import { resetDeviceSettings, getDeviceSettings } from '../js/settings/store.js';
+
+      const s = createSuite('menu navigation tests');
+      const { check } = s;
+      const held = (...names) => Object.fromEntries(names.map((n) => [n, { pressed: true, value: 1 }]));
+
+      s.group('intents');
+      check('D-pad and strum map to up/down', ['dpadUp', 'strumUp', 'dpadDown', 'strumDown'].map(intentFor), ['up', 'up', 'down', 'down']);
+      check('left/right/back/start', ['dpadLeft', 'dpadRight', 'back', 'start'].map(intentFor), ['left', 'right', 'back', 'start']);
+      check('frets and face buttons are not menu controls', ['fret1', 'faceA', 'shoulderL', 'whammy'].map(intentFor), [undefined, undefined, undefined, undefined]);
+      check('menu takes D-pad, strum and Back from the instrument, not Start', ['dpadUp', 'strumDown', 'dpadRight', 'back', 'start', 'fret1'].map((n) => MENU_CONTROLS.has(n)), [true, true, true, true, false, false]);
+
+      s.group('edges and key repeat');
+      let m = new MenuInput();
+      check('press gives one intent', m.update([edge('strumDown')], held('strumDown'), 0), ['down']);
+      check('nothing while held before the delay', m.update([], held('strumDown'), REPEAT_DELAY_MS - 1), []);
+      check('repeat after the delay', m.update([], held('strumDown'), REPEAT_DELAY_MS), ['down']);
+      check('no repeat before the interval', m.update([], held('strumDown'), REPEAT_DELAY_MS + REPEAT_INTERVAL_MS - 1), []);
+      check('repeat every interval', m.update([], held('strumDown'), REPEAT_DELAY_MS + REPEAT_INTERVAL_MS), ['down']);
+      check('release stops the repeat', m.update([edge('strumDown', 'released')], {}, 5000), []);
+      check('still nothing later', m.update([], {}, 6000), []);
+      m = new MenuInput();
+      check('Back and Start do not repeat', [m.update([edge('back'), edge('start')], held('back', 'start'), 0), m.update([], held('back', 'start'), 2000)], [['back', 'start'], []]);
+      m = new MenuInput();
+      check('two names on one raw button give one intent', m.update([edge('strumUp'), edge('dpadUp')], held('strumUp', 'dpadUp'), 0), ['up']);
+      check('released edges give no intent', m.update([edge('strumUp', 'released')], {}, 10), []);
+      m = new MenuInput();
+      m.update([edge('dpadRight')], held('dpadRight'), 0);
+      m.reset();
+      check('reset() forgets held directions', m.update([], held('dpadRight'), 1000), []);
+      check('wrapIndex wraps both ways', [wrapIndex(0, 3, -1), wrapIndex(2, 3, 1), wrapIndex(1, 3, 1), wrapIndex(0, 0, 1)], [2, 0, 2, -1]);
+
+      s.group('MenuNavigator');
+      const box = document.getElementById('sandbox');
+      box.innerHTML = `
+        <section id="menu">
+          <button type="button" class="close-button">x</button>
+          <select data-key="a"><option>1</option><option>2</option><option>3</option></select>
+          <button type="button" class="hidden-button" hidden>hidden</button>
+          <div hidden><select data-key="inhidden"><option>x</option></select></div>
+          <input type="checkbox" data-key="c" />
+          <input type="number" data-key="n" min="0" max="10" step="2" value="4" />
+          <button type="button" class="go-button">go</button>
+        </section>`;
+      const root = box.querySelector('#menu');
+      const log = [];
+      root.querySelector('select').addEventListener('change', (e) => log.push(`change:${e.target.selectedIndex}`));
+      root.querySelector('.go-button').addEventListener('click', () => log.push('go'));
+      const nav = new MenuNavigator(root, { initial: 'select' });
+      const cur = () => nav.current();
+      const tag = (el) => el.dataset.key || el.className.replace(CURSOR_CLASS, '').trim();
+      check('starts on the initial control', tag(cur()), 'a');
+      check('the cursor class is on exactly that control', [...root.querySelectorAll(`.${CURSOR_CLASS}`)].map(tag), ['a']);
+      check('hidden controls are skipped', nav.controls().map(tag), ['close-button', 'a', 'c', 'n', 'go-button']);
+      nav.navigate('right');
+      check('right selects the next option and fires change', [root.querySelector('select').selectedIndex, log.at(-1)], [1, 'change:1']);
+      nav.navigate('left');
+      nav.navigate('left');
+      check('left cycles backwards and wraps', root.querySelector('select').selectedIndex, 2);
+      nav.navigate('down');
+      check('down moves to the checkbox', tag(cur()), 'c');
+      nav.navigate('right');
+      const afterRight = root.querySelector('[data-key="c"]').checked;
+      nav.navigate('left');
+      check('left/right toggle a checkbox', [afterRight, root.querySelector('[data-key="c"]').checked], [true, false]);
+      nav.navigate('down');
+      nav.navigate('right');
+      const up = root.querySelector('[data-key="n"]').value;
+      nav.navigate('left');
+      nav.navigate('left');
+      check('number input steps up and down', [up, root.querySelector('[data-key="n"]').value], ['6', '2']);
+      nav.navigate('down');
+      nav.navigate('left');
+      check('left on a button does nothing', log.includes('go'), false);
+      nav.navigate('right');
+      check('right presses a button', log.at(-1), 'go');
+      nav.navigate('down');
+      check('down from the last control wraps to the first', tag(cur()), 'close-button');
+      nav.navigate('up');
+      check('up from the first wraps to the last', tag(cur()), 'go-button');
+      check('only one control has the cursor', root.querySelectorAll(`.${CURSOR_CLASS}`).length, 1);
+      // Re-render: the cursor follows the control by its key, not by element.
+      nav.navigate('up');
+      nav.navigate('up');
+      const old = root.querySelector('[data-key="c"]');
+      const copy = old.cloneNode(true);
+      copy.classList.remove(CURSOR_CLASS);
+      old.replaceWith(copy);
+      nav.sync();
+      check('after a re-render the cursor is on the new element of the same field', [tag(cur()), copy.classList.contains(CURSOR_CLASS)], ['c', true]);
+      check('the browser focus is not moved', root.contains(document.activeElement), false);
+
+      s.group('settings panel');
+      const device = { index: 0, id: 'menu-nav-test-pad', detection: detectController('Pad'), mapping: MAPPINGS['gamepad-standard'] };
+      resetDeviceSettings(device.id);
+      let closed = 0;
+      const panel = new SettingsPanel({
+        container: box,
+        device,
+        getInstrument: () => ({ kind: 'drums', instrument: 'drums' }),
+        onClose: () => closed++,
+        onOpenDebug: () => {},
+      });
+      const panelCursor = () => panel.el.querySelector(`.${CURSOR_CLASS}`);
+      check('cursor starts on the first field (instrument)', panelCursor()?.dataset.key, 'instrument');
+      check('gamepad hint is shown', panel.el.querySelector('.gamepad-hint').hidden, false);
+      panel.navigate('right');
+      check('right changes the stored instrument', getDeviceSettings(device.id).instrument !== 'auto', true);
+      panel.navigate('down');
+      const key = panelCursor()?.dataset.key;
+      panel.refresh();
+      check('cursor survives refresh()', panelCursor()?.dataset.key, key);
+      panel.navigate('back');
+      check('Back closes the panel', closed, 1);
+      panel.destroy();
+      resetDeviceSettings(device.id);
+      const kb = new SettingsPanel({
+        container: box,
+        device: { ...device, isKeyboard: true, id: 'menu-nav-test-kb' },
+        getInstrument: () => ({ kind: 'keys', instrument: 'keys' }),
+        onClose: () => {},
+        onOpenDebug: () => {},
+      });
+      check('the keyboard panel has no gamepad cursor or hint', [kb.el.querySelectorAll(`.${CURSOR_CLASS}`).length, kb.el.querySelector('.gamepad-hint').hidden], [0, true]);
+      kb.destroy();
+      resetDeviceSettings('menu-nav-test-kb');
+
+      s.finish();
+    </script>
+  </body>
+</html>

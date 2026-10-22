@@ -2,6 +2,9 @@
 // lane, opened from the lane's settings button or with Start on the guitar
 // (R4.10). Every field writes straight to the settings store; every setting
 // has a default, so the panel is never needed to start playing.
+//
+// On a gamepad lane the panel can also be driven by that controller (design
+// 7.4): main.js passes the controller's menu intents to navigate().
 
 import { t } from '../i18n/i18n.js';
 import { CHOICES, getDeviceSettings, setDeviceSetting, resetDeviceSettings } from '../settings/store.js';
@@ -9,6 +12,7 @@ import { defaultInstrumentFor } from '../input/detect.js';
 import { NOTE_NAMES } from '../audio/theory.js';
 import { DEFAULT_PROGRAMS, DEFAULT_SOURCES, SOURCES_FOR, resolveSource } from '../instruments/setup.js';
 import { DEFAULT_DRUM_MAP, DRUM_NOTES } from '../instruments/drums.js';
+import { MenuNavigator } from './menu-nav.js';
 
 /**
  * Field definitions. `when(c)` decides whether a field applies, from the
@@ -127,8 +131,9 @@ export class SettingsPanel {
    * @param {() => {kind: string, instrument: string}} options.getInstrument the lane's current instrument
    * @param {() => void} options.onOpenDebug
    * @param {() => void} options.onClose
+   * @param {boolean} [options.focus] move the browser focus to the first field (default true; false when opened with the gamepad)
    */
-  constructor({ container, device, getInstrument, onOpenDebug, onClose }) {
+  constructor({ container, device, getInstrument, onOpenDebug, onClose, focus = true }) {
     this.device = device;
     this.getInstrument = getInstrument;
     this.el = document.createElement('section');
@@ -144,13 +149,16 @@ export class SettingsPanel {
       <div class="panel-actions">
         <button type="button" class="button debug-button"></button>
         <button type="button" class="button reset-button"></button>
-      </div>`;
+      </div>
+      <p class="gamepad-hint"></p>`;
     this.titleEl = this.el.querySelector('.panel-title');
     this.closeButton = this.el.querySelector('.close-button');
     this.detectedEl = this.el.querySelector('.detected-line');
     this.fieldsEl = this.el.querySelector('.fields');
     this.debugButton = this.el.querySelector('.debug-button');
     this.resetButton = this.el.querySelector('.reset-button');
+    this.hintEl = this.el.querySelector('.gamepad-hint');
+    this.onClose = onClose;
 
     this.closeButton.addEventListener('click', onClose);
     this.debugButton.addEventListener('click', onOpenDebug);
@@ -159,9 +167,25 @@ export class SettingsPanel {
       if (e.key === 'Escape') onClose();
     });
 
+    this.nav = null;
     this.refresh();
     container.appendChild(this.el);
-    this.fieldsEl.querySelector('select')?.focus({ preventScroll: true });
+    // Gamepad cursor (design 7.4); the computer keyboard's own lane has none.
+    if (!device.isKeyboard) this.nav = new MenuNavigator(this.el, { initial: '.fields select' });
+    if (focus) this.fieldsEl.querySelector('select')?.focus({ preventScroll: true });
+  }
+
+  /**
+   * Handles one menu intent of this lane's controller: up/down move the
+   * gamepad cursor, left/right change the value (right presses a button),
+   * Back closes the panel. Start is handled by main.js (toggle, R4.10).
+   */
+  navigate(intent) {
+    if (intent === 'back') {
+      this.onClose();
+      return;
+    }
+    this.nav?.navigate(intent);
   }
 
   /** Re-renders all texts and current values (after a language or setting change). */
@@ -191,6 +215,9 @@ export class SettingsPanel {
     }
     this.fieldsEl.replaceChildren(...children);
     if (focusedKey) this.fieldsEl.querySelector(`[data-key="${focusedKey}"]`)?.focus({ preventScroll: true });
+    this.hintEl.hidden = !!device.isKeyboard;
+    this.hintEl.textContent = device.isKeyboard ? '' : t(kind === 'guitar' ? 'settings.gamepadHintGuitar' : 'settings.gamepadHint');
+    this.nav?.sync();
   }
 
   _field(def, settings, c) {

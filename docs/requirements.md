@@ -26,6 +26,8 @@ Status: draft, under discussion.
   - Guitar: same notes and behavior as the Xplorer (section 4). Four face buttons plus one shoulder button act as the five fret buttons, and the D-pad up/down acts as the strum bar.
   - Bass: same behavior as guitar, one octave lower, with a bass sound.
 - R2.11 Further General MIDI instruments can be chosen in the advanced settings (R2.9).
+- R2.12 The menus (start screen, a controller's advanced settings and its device information view) can be operated with that controller while the menu is open: D-pad (on a guitar also the strum bar) up/down moves between the controls with a clearly visible highlight, left/right changes the value (right presses a button), Back closes the menu and Start opens/closes the settings as in R4.10. Each controller only operates its own menu; during normal play the controls behave as before. The computer keyboard and the mouse keep working in the menus.
+- R2.13 While a guitar's (or a gamepad's in guitar/bass mode) advanced settings are open, pressing a fret plays its note at once without strumming, and releasing it stops the note, so sounds can be tried while changing them. Drums keep playing in the menu, except pads that share a button with the menu navigation.
 
 ## 3. Sound
 
