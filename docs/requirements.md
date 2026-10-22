@@ -138,3 +138,5 @@ Status: draft, under discussion.
 ## Open questions
 
 Tracked in the discussion; answered questions are moved into the requirements above.
+
+- Q1 Twist/rotation: can the guitar's rotation (other than the tilt in R4.5) be read on any controller, and should it be smoothed like the tilt (R4.5.1)? To be tried out with the hardware later.
