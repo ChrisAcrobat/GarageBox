@@ -141,6 +141,7 @@ Status: draft, under discussion.
 - F9 Tilt glides between keys: tilting the guitar up or down moves the fret notes smoothly up or down through the keys (instead of only changing volume or bending the pitch), and the fret buttons could then cover more or fewer than five scale notes.
 - F10 A more advanced plucked-string sound (R3): better tuning of high notes (e.g. allpass interpolation instead of linear interpolation in the delay line) and a choice of where the string is plucked (pick position, which changes the tone from round to twangy).
 - F11 A fuller star power design (R5.5): e.g. how it is earned, longer or stronger effects, effects that follow the music.
+- F12 Named presets: the user can save a controller's settings under a name and open a saved preset later. These named presets are separate from the unnamed settings that are saved automatically on every change (R2.7) and restored on reload. Resetting a controller's settings (e.g. by holding Back, if adopted) restores the most recently opened named preset, or the defaults if none has been opened; it replaces the unnamed saved settings and never changes a named preset.
 
 ## Open questions
 
