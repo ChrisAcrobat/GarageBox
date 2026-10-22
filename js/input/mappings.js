@@ -8,9 +8,11 @@
 // Buttons use the browser's pressed flag; axes count as pressed when their
 // value is above PRESS_THRESHOLD.
 //
-// IMPORTANT: the guitar indexes below are assumptions based on how the Linux
-// xpad driver and Chrome's XInput backend report an Xbox 360 guitar. They must
-// be confirmed with the real Xplorer in the debug view (design 9.1, 11).
+// The guitar-standard indexes were confirmed with the real Xplorer on Chrome
+// 155/Linux (design 9.1): frets B0, B1, B3, B2, B4; strum B12/B13; Start B9;
+// Back B8; whammy axis 2 (rests at -1); tilt axis 3 (gradual, rests at about
+// +0.12, inverted here). The guitar-xpad variant (no "standard" mapping) is
+// still unconfirmed.
 
 import { ControllerType } from './detect.js';
 
@@ -20,7 +22,7 @@ export const PRESS_THRESHOLD = 0.5;
 // Windows (XInput: "GUITAR_ALTERNATE") or Chrome on Linux when the id
 // contains "STANDARD GAMEPAD". XInput reports the frets as A, B, Y, X, LB,
 // the strum bar as D-pad up/down, whammy as right stick X and tilt as right
-// stick Y.
+// stick Y. Confirmed on Chrome/Linux with the Xplorer (design 9.1).
 const GUITAR_STANDARD = {
   name: 'guitar-standard',
   controls: {

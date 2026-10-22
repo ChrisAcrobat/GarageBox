@@ -477,3 +477,20 @@ select:focus-visible {
     animation: none;
   }
 }
+
+/* Settings fields (design 7.2) --------------------------------------------- */
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 0 12px;
+}
+
+.field select {
+  width: 100%;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 11px;
+}

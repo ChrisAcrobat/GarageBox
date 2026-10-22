@@ -18,15 +18,35 @@ export const DEFAULTS = Object.freeze({
     // 'auto' = use the instrument implied by controller type detection (R2.2, R2.3).
     // Any other value is a manual choice and always wins (R2.6, R2.7).
     instrument: 'auto',
+    // Key (root pitch class, 0 = C ... 4 = E ... 11 = B) and scale (R4.9).
+    root: 4,
+    scale: 'minorPentatonic',
+    // Mute fade-out in milliseconds (R4.3.1, R4.11).
+    fadeMs: 80,
+    // Plucked string: seconds until a note has died away (R4.7), and tone color.
+    decay: 4,
+    brightness: 'normal',
   }),
 });
 
 /** Allowed values for settings that are enumerations. */
 export const CHOICES = Object.freeze({
   instrument: Object.freeze(['auto', 'guitar', 'drums', 'bass']),
+  root: Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
+  scale: Object.freeze(['minorPentatonic', 'majorPentatonic', 'blues', 'major', 'minor']),
+  fadeMs: Object.freeze([20, 40, 80, 150, 300, 600]),
+  decay: Object.freeze([1, 2, 4, 6, 10]),
+  brightness: Object.freeze(['dark', 'warm', 'normal', 'bright']),
 });
 
+/** Brightness names -> 0..1 for the plucked string. */
+export const BRIGHTNESS_VALUES = Object.freeze({ dark: 0.15, warm: 0.35, normal: 0.55, bright: 0.85 });
+
+/** Validators for settings that are neither enumerations nor plain values. */
+const VALIDATORS = {};
+
 function isValid(key, value, defaultValue) {
+  if (VALIDATORS[key]) return VALIDATORS[key](value);
   if (CHOICES[key]) return CHOICES[key].includes(value);
   return typeof value === typeof defaultValue;
 }
@@ -95,6 +115,14 @@ export function setGlobalSetting(key, value) {
 export function getDeviceSettings(gamepadId) {
   const all = readJson(DEVICES_KEY) || {};
   return mergeWithDefaults(DEFAULTS.device, all[gamepadId]);
+}
+
+/** Removes all stored settings of one device, so it is back to the defaults. */
+export function resetDeviceSettings(gamepadId) {
+  const all = readJson(DEVICES_KEY) || {};
+  delete all[gamepadId];
+  writeJson(DEVICES_KEY, all);
+  notify({ scope: 'device', id: gamepadId, key: null, value: null });
 }
 
 export function setDeviceSetting(gamepadId, key, value) {

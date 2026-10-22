@@ -1,9 +1,8 @@
 // App start-up, main loop and wiring (design section 1).
 //
-// Milestone 1: start screen, gamepad polling with edge detection, controller
-// type detection, lanes side by side with a placeholder simple view, a
-// per-device settings panel with instrument choice and debug view, settings
-// store and i18n. No sound yet; the AudioContext is only created and resumed.
+// Every frame: poll the gamepads, feed each device's logical control edges to
+// its instrument, send the resulting note events to the instrument's audio
+// channel, and draw all lanes (design 1).
 
 import { GamepadManager } from './input/gamepad-manager.js';
 import { defaultInstrumentFor } from './input/detect.js';
@@ -14,7 +13,8 @@ import { SettingsPanel } from './ui/settings-panel.js';
 import { DebugView } from './ui/debug-view.js';
 import { getGlobalSettings, setGlobalSetting, getDeviceSettings, onSettingsChange } from './settings/store.js';
 import { SUPPORTED_LANGUAGES, applyTranslations, onLanguageChange, setLanguage, t } from './i18n/i18n.js';
-import { keepAudioAlive, unlockAudio } from './audio/audio-engine.js';
+import { getEngine, keepAudioAlive, unlockAudio } from './audio/audio-engine.js';
+import { createInstrument, isGuitarLike } from './instruments/setup.js';
 
 const stage = document.getElementById('stage');
 const canvas = document.getElementById('lanes');
@@ -23,8 +23,9 @@ const overlayLayer = document.getElementById('lane-overlays');
 const languageSelect = document.getElementById('language-select');
 
 /**
- * Per-device UI state, keyed by gamepad.index:
- * { device, el, gear, instrument, panel: SettingsPanel|null, debug: DebugView|null }
+ * Per-device state, keyed by gamepad.index:
+ * { device, el, gear, instrument (name), kind, logic (Instrument|null),
+ *   channels: { main: Channel }, panel: SettingsPanel|null, debug: DebugView|null }
  */
 const laneUis = new Map();
 let lanes = [];
@@ -63,9 +64,66 @@ function createLaneUi(device) {
   gear.addEventListener('click', () => toggleSettings(device.index));
   el.append(gear);
   overlayLayer.append(el);
-  const ui = { device, el, gear, instrument: effectiveInstrument(device), panel: null, debug: null };
+  const ui = { device, el, gear, instrument: null, kind: null, logic: null, channels: {}, panel: null, debug: null };
   laneUis.set(device.index, ui);
   translateLaneUi(ui);
+  setupInstrument(ui);
+}
+
+// ---------------------------------------------------------------------------
+// Instruments and sound
+
+function nowSeconds() {
+  return performance.now() / 1000;
+}
+
+function releaseInstrument(ui) {
+  const now = nowSeconds();
+  for (const channel of Object.values(ui.channels)) {
+    channel.allOff(now);
+    channel.dispose();
+  }
+  ui.channels = {};
+  ui.logic = null;
+}
+
+/**
+ * Creates (or updates) the instrument of a lane from its settings. Changing
+ * only musical settings keeps ringing notes; changing the instrument type
+ * replaces the instrument and its sound.
+ */
+function setupInstrument(ui) {
+  const name = effectiveInstrument(ui.device);
+  const settings = getDeviceSettings(ui.device.id);
+  const created = createInstrument(ui.device, name, settings);
+  const kind = isGuitarLike(name) ? 'guitar' : name;
+  if (ui.logic && ui.instrument === name && created) {
+    ui.logic.configure(created.instrument.options);
+    ui.channels.main.configure(created.sound);
+    return;
+  }
+  releaseInstrument(ui);
+  ui.instrument = name;
+  ui.kind = kind;
+  if (!created) return;
+  ui.logic = created.instrument;
+  ui.channels = { main: getEngine().createChannel(created.sound) };
+}
+
+/** Feeds one frame of input to every instrument and routes its events. */
+function playInstruments() {
+  const now = nowSeconds();
+  for (const ui of laneUis.values()) {
+    if (!ui.logic) continue;
+    const events = ui.logic.handle(ui.device.controlEdges, ui.device.controls, now);
+    for (const event of events) {
+      if (event.type === 'action') {
+        if (event.action === 'openSettings') toggleSettings(ui.device.index);
+      } else {
+        ui.channels.main.handle(event, now);
+      }
+    }
+  }
 }
 
 function translateLaneUi(ui) {
@@ -79,6 +137,7 @@ function destroyLaneUi(index) {
   if (!ui) return;
   ui.panel?.destroy();
   ui.debug?.destroy();
+  releaseInstrument(ui);
   ui.el.remove();
   laneUis.delete(index);
 }
@@ -94,6 +153,7 @@ function toggleSettings(index) {
   ui.panel = new SettingsPanel({
     container: ui.el,
     device: ui.device,
+    getKind: () => ui.kind,
     onClose: () => closeSettings(index),
     onOpenDebug: () => openDebug(index),
   });
@@ -158,16 +218,19 @@ function layout() {
 }
 
 function draw() {
+  const now = nowSeconds();
   ctx.clearRect(0, 0, size.width, size.height);
   for (const lane of lanes) {
     const ui = laneUis.get(lane.device.index);
-    const instrument = ui ? ui.instrument : effectiveInstrument(lane.device);
+    if (!ui) continue;
     const area = drawLaneFrame(ctx, lane, {
       number: String(lane.device.index + 1),
-      title: t(`instrument.${instrument}`),
+      title: t(`instrument.${ui.instrument}`),
     });
     // The debug view covers the whole lane; no need to draw its content.
-    if (!ui?.debug) drawSimpleView(ctx, lane.device, area, lane.color, t);
+    if (ui.debug) continue;
+    const view = { device: ui.device, color: lane.color, kind: ui.kind, instrument: ui.logic, channels: ui.channels };
+    drawSimpleView(ctx, view, area, t, now);
   }
 }
 
@@ -175,6 +238,7 @@ let startScreen = null;
 
 function frame() {
   manager.poll();
+  playInstruments();
   if (layoutDirty) layout();
   draw();
   for (const ui of laneUis.values()) ui.debug?.update();
@@ -223,7 +287,7 @@ async function main() {
     } else if (change.scope === 'device') {
       for (const ui of laneUis.values()) {
         if (ui.device.id === change.id) {
-          ui.instrument = effectiveInstrument(ui.device);
+          setupInstrument(ui);
           ui.panel?.refresh();
         }
       }
@@ -236,6 +300,9 @@ async function main() {
       keepAudioAlive();
     },
   });
+
+  // Read-only handles for poking around in the browser console.
+  window.musicSandbox = { manager, lanes: laneUis, engine: getEngine() };
 
   new ResizeObserver(resize).observe(stage);
   resize();

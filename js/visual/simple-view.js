@@ -1,20 +1,23 @@
-// Simple view (design section 6, R5.2): the device's buttons, lit while pressed.
+// Simple view (design section 6, R5.1, R5.2): the device's buttons, lit while
+// pressed, and the names of the notes that ring.
 //
-// Milestone 1 draws a placeholder: the logical controls of the device's
-// mapping (fret buttons as colored circles on a guitar), followed by every
-// raw button, so something visibly reacts to input. Raw axes are shown only
-// in the debug view. Note names are added together with the instruments in
-// milestone 2.
+// Guitar and bass: five fret buttons with the note name of each fret below
+// it; a fret glows while its note rings, fading with the note's level. Below
+// that, the names of all ringing notes, and pills for the other controls
+// (strum, whammy with its value 0.00-1.00, tilt, Start, Back). Analog
+// controls fill smoothly and are never lit by the press threshold. Raw
+// buttons and axes are only shown in the debug view (9.1).
 
 import { ANALOG_CONTROLS } from '../input/mappings.js';
+import { noteName } from '../audio/theory.js';
 import { withAlpha, fitText } from './lanes.js';
 
 /** Fret colors from green to orange (R4.1). */
 export const FRET_COLORS = Object.freeze(['#2fbf4a', '#e5484d', '#f5d90a', '#3e8ef7', '#f76b15']);
 
-const FRETS = ['fret1', 'fret2', 'fret3', 'fret4', 'fret5'];
+export const FRETS = Object.freeze(['fret1', 'fret2', 'fret3', 'fret4', 'fret5']);
 
-function sectionTitle(ctx, text, x, y, w) {
+export function sectionTitle(ctx, text, x, y, w) {
   ctx.font = '600 11px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
   ctx.textAlign = 'left';
@@ -23,33 +26,52 @@ function sectionTitle(ctx, text, x, y, w) {
   return y + 18;
 }
 
-function drawFrets(ctx, device, x, y, w) {
-  const r = Math.max(8, Math.min(26, (w - 4 * 10) / 10));
-  const spacing = (w - 2 * r) / 4;
-  FRETS.forEach((name, i) => {
-    const c = device.controls[name];
+/**
+ * Draws five fret buttons in a row.
+ * @param {{held:boolean, level:number, label:string}[]} frets
+ * @returns {number} next y
+ */
+export function drawFretRow(ctx, frets, x, y, w, maxRadius = 30) {
+  const r = Math.max(8, Math.min(maxRadius, (w - 4 * 10) / 10));
+  // Keep the buttons together in wide lanes, centered.
+  const rowWidth = Math.min(w, 10 * r + 4 * 1.4 * r);
+  x += (w - rowWidth) / 2;
+  const spacing = (rowWidth - 2 * r) / 4;
+  frets.forEach((fret, i) => {
     const cx = x + r + i * spacing;
     const cy = y + r;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = c && c.pressed ? FRET_COLORS[i] : withAlpha(FRET_COLORS[i], 0.18);
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = FRET_COLORS[i];
-    ctx.stroke();
-    if (c && c.pressed) {
+    const color = FRET_COLORS[i];
+    // Ringing glow, fading with the note's level.
+    if (fret.level > 0.01) {
       ctx.save();
-      ctx.shadowColor = FRET_COLORS[i];
-      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 3 + 6 * fret.level, 0, Math.PI * 2);
+      ctx.fillStyle = withAlpha(color, 0.15 + 0.45 * fret.level);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 24 * fret.level;
       ctx.fill();
       ctx.restore();
     }
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = fret.held ? color : withAlpha(color, 0.18);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    if (fret.label) {
+      ctx.font = `700 ${Math.round(Math.max(10, Math.min(16, r * 0.62)))}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = fret.level > 0.01 || fret.held ? '#ffffff' : 'rgba(255, 255, 255, 0.7)';
+      ctx.fillText(fret.label, cx, cy + r + 6);
+    }
   });
-  return y + 2 * r + 14;
+  return y + 2 * r + (frets.some((f) => f.label) ? 30 : 14);
 }
 
 /** Lays out labelled pills left to right, wrapping lines. Returns the next y. */
-function drawPills(ctx, items, x, y, w, color) {
+export function drawPills(ctx, items, x, y, w, color) {
   const h = 26;
   const padX = 10;
   ctx.font = '600 12px system-ui, sans-serif';
@@ -72,7 +94,6 @@ function drawPills(ctx, items, x, y, w, color) {
     ctx.fillStyle = lit ? color : 'rgba(255, 255, 255, 0.06)';
     ctx.fill();
     if (item.analog) {
-      // Fill level for analog controls.
       ctx.save();
       ctx.clip();
       ctx.fillStyle = withAlpha(color, 0.45);
@@ -95,46 +116,10 @@ function drawPills(ctx, items, x, y, w, color) {
   return cy + h + 14;
 }
 
-function drawRawButtons(ctx, device, x, y, w, color) {
-  const size = 24;
-  const gap = 4;
-  const perRow = Math.max(1, Math.floor((w + gap) / (size + gap)));
-  ctx.font = '600 10px ui-monospace, monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  device.raw.buttons.forEach((b, i) => {
-    const bx = x + (i % perRow) * (size + gap);
-    const by = y + Math.floor(i / perRow) * (size + gap);
-    ctx.beginPath();
-    ctx.roundRect(bx, by, size, size, 4);
-    ctx.fillStyle = b.pressed ? color : withAlpha(color, Math.min(0.12 + b.value * 0.6, 0.72));
-    ctx.fill();
-    ctx.fillStyle = b.pressed ? '#ffffff' : 'rgba(255, 255, 255, 0.6)';
-    ctx.fillText(String(i), bx + size / 2, by + size / 2 + 1);
-  });
-  const rows = Math.ceil(device.raw.buttons.length / perRow);
-  return y + rows * (size + gap) + 10;
-}
-
-/**
- * Draws the placeholder simple view into `area`.
- * @param {CanvasRenderingContext2D} ctx
- * @param {import('../input/gamepad-manager.js').Device} device
- * @param {{x:number,y:number,w:number,h:number}} area content area of the lane
- * @param {string} color lane color
- * @param {(key: string) => string} t translation function
- */
-export function drawSimpleView(ctx, device, area, color, t) {
-  const { x, w } = area;
-  let y = area.y;
-  const bottom = area.y + area.h;
-
-  y = sectionTitle(ctx, t('lane.controls'), x, y, w);
-  const names = Object.keys(device.mapping.controls);
-  const hasFrets = FRETS.every((f) => names.includes(f));
-  if (hasFrets) y = drawFrets(ctx, device, x, y, w);
-  const items = names
-    .filter((n) => !(hasFrets && FRETS.includes(n)))
+/** Pills for the device's logical controls, except the ones in `skip`. */
+export function controlPills(device, t, skip = new Set()) {
+  return Object.keys(device.mapping.controls)
+    .filter((n) => !skip.has(n))
     .map((n) => ({
       label: t(`control.${n}`),
       pressed: device.controls[n].pressed,
@@ -142,9 +127,67 @@ export function drawSimpleView(ctx, device, area, color, t) {
       analog: ANALOG_CONTROLS.has(n),
       showValue: n === 'whammy',
     }));
-  y = drawPills(ctx, items, x, y, w, color);
+}
 
-  if (y + 40 > bottom) return;
-  y = sectionTitle(ctx, t('lane.rawButtons'), x, y, w);
-  drawRawButtons(ctx, device, x, y, w, color);
+/** Big names of ringing notes, brightness following each note's level. Returns next y. */
+export function drawRingingNotes(ctx, voices, x, y, w, colorFor) {
+  const sorted = [...voices].sort((a, b) => a.midi - b.midi);
+  ctx.font = '700 22px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  let cx = x;
+  let cy = y;
+  for (const v of sorted) {
+    const label = noteName(v.midi);
+    const lw = ctx.measureText(label).width + 14;
+    if (cx + lw > x + w && cx > x) {
+      cx = x;
+      cy += 30;
+    }
+    ctx.globalAlpha = Math.max(0.2, Math.min(1, v.level * 1.4));
+    ctx.fillStyle = colorFor(v);
+    ctx.fillText(label, cx, cy);
+    ctx.globalAlpha = 1;
+    cx += lw;
+  }
+  return cy + 34;
+}
+
+/** Fret states for drawing, from the guitar logic and its voice levels. */
+export function guitarFretStates(guitar, tracker, now) {
+  return guitar.frets.map((fret, i) => ({
+    held: fret.held,
+    level: fret.voiceId !== null ? tracker.level(fret.voiceId, now) : 0,
+    label: noteName(guitar.noteFor(i)),
+  }));
+}
+
+/**
+ * Draws the simple view of one lane into `area`.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} lane lane state from main.js: { device, color, kind, instrument, channels }
+ * @param {{x:number,y:number,w:number,h:number}} area content area of the lane
+ * @param {(key: string, params?: object) => string} t translation function
+ * @param {number} now seconds
+ */
+export function drawSimpleView(ctx, lane, area, t, now) {
+  const { device, color, instrument } = lane;
+  const { x, w } = area;
+  let y = area.y;
+
+  if (lane.kind === 'guitar' && instrument) {
+    const tracker = lane.channels.main.tracker;
+    y = sectionTitle(ctx, t('lane.frets'), x, y, w);
+    y = drawFretRow(ctx, guitarFretStates(instrument, tracker, now), x, y, w);
+    y = sectionTitle(ctx, t('lane.ringing'), x, y, w);
+    y = drawRingingNotes(ctx, tracker.active(now), x, y, w, (v) => FRET_COLORS[v.column] || color);
+    const fretControls = new Set(Object.keys(device.mapping.controls).filter((n) => instrument.reverse[n]?.startsWith('fret')));
+    y = sectionTitle(ctx, t('lane.controls'), x, y, w);
+    drawPills(ctx, controlPills(device, t, fretControls), x, y, w, color);
+    return;
+  }
+
+  // Instruments without their own view yet: the logical controls.
+  y = sectionTitle(ctx, t('lane.controls'), x, y, w);
+  drawPills(ctx, controlPills(device, t), x, y, w, color);
 }

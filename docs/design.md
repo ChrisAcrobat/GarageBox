@@ -1,6 +1,6 @@
 # Design – Music Sandbox
 
-Status: draft, under discussion. Requirement IDs (R…) refer to [requirements.md](requirements.md).
+Status: milestones 1-5 implemented; decisions marked *provisional* wait for the owner's review. Requirement IDs (R…) refer to [requirements.md](requirements.md).
 
 ## 1. Overview
 
@@ -39,6 +39,7 @@ js/
     guitar.js              Fret/strum logic (R4), also used for gamepad guitar/bass
     drums.js               Drum mapping and velocity (R4b)
     keys.js                Piano-style keyboard with sustain pedal (R4c)
+    setup.js               Builds an instrument and its sound config from settings
   audio/
     audio-engine.js        AudioContext, master output, routing to sources
     pluck-worklet.js       Karplus-Strong plucked string (AudioWorklet) (R3.4)
@@ -82,7 +83,7 @@ All code is ES modules loaded with `<script type="module">` (R7.1). For local te
 - `mappings.js` translates raw indexes into logical controls, so instruments never see raw indexes:
   - Guitar: `fret1`…`fret5`, `strumUp`, `strumDown`, `whammy` (0..1), `tilt` (0..1), `start`, `back`.
   - Gamepad: `faceA/B/X/Y`, `shoulderL/R`, `triggerL/R` (0..1), `dpadUp/Down/Left/Right`, `start`, `back`.
-  - The guitar mapping has a Linux (xpad) variant and a Windows (XInput) variant, since the indexes differ. The exact indexes for the Xplorer on Chrome/Linux must be confirmed with the real guitar (see 9.1).
+  - The guitar mapping has a variant for browsers that apply the W3C "standard" mapping (`guitar-standard`: Chrome on Windows via XInput, and Chrome on Linux, which reports the Xplorer as `STANDARD GAMEPAD`) and a raw Linux (xpad/evdev) variant (`guitar-xpad`), since the indexes differ. `guitar-standard` is confirmed with the real Xplorer on Chrome/Linux (see 9.1); `guitar-xpad` is still a best guess.
 
 ### 3.2 Keyboard
 
@@ -108,15 +109,19 @@ An instrument receives the logical edges of one device each frame and emits note
 
 ### 4.2 Guitar (`guitar.js`)
 
-Per fret it keeps: `held` (button down), `voiceId` of its ringing note (or none), and `heldSinceStrum` (whether the button has stayed down since it last sounded).
+Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (or none). (An earlier draft also had `heldSinceStrum`; it turned out not to be needed, because R4.4 simply restarts the note on every strum.)
 
+- Within one frame, fret edges are processed before strum edges, so pressing a fret and strumming in the same frame mutes the old note and plays a new one. Strum up and strum down in the same frame count as one strum.
 - Strum (up or down edge): for every fret that is held, if it has a ringing note from a previous strum, stop that voice and start a new one (R4.4); otherwise start a new one. Frets that are not held are untouched and keep ringing (R4.6). Several held frets sound together as a chord (R4.8).
 - Fret press-down: if that fret has a ringing note, send `noteOff` with the short fade (R4.3, R4.3.1).
 - Fret release: nothing; the note keeps ringing and decays on its own (R4.2, R4.7).
-- Notes come from `theory.js`: scale and root from settings, default E minor pentatonic, fret 1 to 5 = E, G, A, B, D (R4.9). Bass is the same logic one octave lower with a bass sound (R2.10).
-- Whammy and tilt are turned into `bend` and `volume` events. Which control drives which is a setting with a default to be decided after testing (R4.5).
-- Start opens the settings panel for this device (R4.10). Back stops all voices with the soft fade (R4.11).
-- On a regular gamepad in guitar mode, the mapping gives four face buttons plus one shoulder button as frets and D-pad up/down as strum (R2.10).
+- Notes come from `theory.js`: scale and root from settings, default E minor pentatonic, fret 1 to 5 = E3, G3, A3, B3, D4 (MIDI 52, 55, 57, 59, 62) (R4.9). Other keys are placed at most half an octave from E3 (A#2-A3), so changing the key never jumps by almost an octave. Scales with more than five notes play their first five notes; the blues scale (six notes) plays its first five. Bass is the same logic one octave lower (E2 = 40) with a bass sound (R2.10).
+- Whammy and tilt are turned into `bend` and `volume` events (R4.5). Each of them has an assignment setting: pitch bend, volume or off. Both are first turned into a *deflection* 0..1: the whammy value as it is (0 = at rest), the tilt from 0 when the guitar is held flat or pointing down (tilt value 0.5 or less; the Xplorer rests at about 0.44) to 1 with the neck pointing straight up.
+  - Pitch bend: `semitones = deflection × bend range`. Default range −2 semitones (a whole tone down at full whammy, like a real whammy bar, which slackens the strings). The range is a setting (−12 … +12).
+  - Volume: `gain = 0.5 + 0.5 × deflection`, i.e. half volume at rest, full volume at full deflection (a volume swell). If both controls are set to the same target, bends add up and gains multiply.
+  - *Provisional default (owner to review):* whammy = pitch bend (−2), tilt = volume swell. Tilting the neck up makes the guitar louder.
+- Start opens (or closes again) the settings panel for this device (R4.10). Back stops all voices with the soft fade (R4.11).
+- On a regular gamepad in guitar mode, four face buttons plus one shoulder button are the frets and D-pad up/down is the strum bar (R2.10). The Xbox face button colors match the fret colors: A = green, B = red, Y = yellow, X = blue, LB = orange.
 
 ### 4.3 Drums (`drums.js`)
 
@@ -135,7 +140,7 @@ Per fret it keeps: `held` (button down), `voiceId` of its ringing note (or none)
 - One `AudioContext` with `latencyHint: 'interactive'`. Browsers only allow audio to start after a click or key press, and a gamepad button does not count. The start screen therefore asks for one click or key press before anything else (see 7.1).
 - Each instrument gets its own gain node (for `volume` events) feeding a master gain and a light limiter (`DynamicsCompressorNode`) to avoid clipping when many notes ring.
 - Two source types, chosen per instrument (R3.5):
-  - **Pluck source** (`pluck-worklet.js`): an AudioWorklet that runs one Karplus-Strong string per voice. Pitch bend changes the delay length smoothly; `noteOff` applies a fast gain ramp of `fade` seconds. Decay length and brightness are parameters in the settings.
+  - **Pluck source** (`pluck-worklet.js`): an AudioWorklet that runs one Karplus-Strong string per voice (up to 24 per instrument; the oldest is dropped beyond that). A noteOn writes one period of low-passed noise into a delay line; each sample the line is fed back through a two-tap low-pass and a loop gain chosen so the note falls 60 dB in the *ring time* (decay). The delay line is read with linear interpolation, so pitch bend changes the delay length smoothly (smoothed over about 10 ms); `noteOff` applies a linear gain ramp of `fade` seconds. Ring time (1-10 s, default 4 s) and tone (dark/warm/normal/bright) are settings. The bass uses the same string with 1.5× the ring time and a darker tone. The worklet output passes a DC blocker and a soft clip (`tanh`).
   - **MIDI source** (`midi-source.js`): wraps webaudio-tinysynth, one MIDI channel per instrument, connected into the instrument's gain node. `bend` becomes a pitch-bend message and `noteOff` becomes a note-off.
 - Default sources: guitar and bass use the pluck source; drums and keyboard use the MIDI source (drum kit and Acoustic Grand Piano) (R3.5, R4c.11).
 
@@ -144,10 +149,10 @@ Per fret it keeps: `held` (button down), `voiceId` of its ringing note (or none)
 - Drawing uses one `<canvas>` with the 2D API for all lanes, redrawn every animation frame. Settings and prompts are normal HTML on top.
 - `lanes.js` splits the width into one lane per device, side by side, each with its own color and the controller number above it (R5.3, R5.3.1). The keyboard lane uses the label "Keyboard".
 - **Highway view** (`highway-view.js`): a lane is drawn in perspective with five columns. A `noteOn` creates a note mark at the near end; it moves away into the distance at a constant speed. While the voice rings, a trail connects the note mark to the near end, with opacity following the voice's current level, and ends when the voice stops (R5.2, R5.4). Notes older than the visible length are dropped.
-- **Simple view** (`simple-view.js`): the lane shows the device's buttons, lit while pressed, and the names of ringing notes (R5.1, R5.2).
+- **Simple view** (`simple-view.js`): the lane shows the device's buttons, lit while pressed, and the names of ringing notes (R5.1, R5.2). Guitar and bass: the five fret buttons with each fret's note name below it, glowing while their note rings; the names of all ringing notes; pills for the other controls (strum, whammy with its value 0.00-1.00, tilt, Start, Back). Analog controls fill smoothly and are never shown fully lit by the press threshold. Raw buttons and axes are only shown in the debug view (9.1).
 - The visual style is a global setting; per-lane override can come later if needed.
 - `keyboard-view.js` draws the on-screen keyboard when the keyboard instrument is enabled, with note names on the playing keys and lit keys while pressed (R4c.5, R4c.6).
-- To show fading trails, the audio engine keeps a simple per-voice level estimate (envelope model) on the main thread instead of reading audio data back.
+- To show fading trails, the audio engine keeps a simple per-voice level estimate (envelope model, `VoiceTracker` in `audio-engine.js`) on the main thread instead of reading audio data back: pluck voices decay exponentially with the ring time, MIDI melodic voices decay slowly while held and release in 0.3 s, drum hits fade within 0.6 s, a `noteOff` adds a linear fade, and the instrument's current volume is applied. Voices below 2 % are dropped.
 
 ## 7. User interface
 
