@@ -15,6 +15,8 @@ export const DEFAULTS = Object.freeze({
     language: 'auto',
     // The computer keyboard as an extra instrument is hidden by default (R4c.2).
     keyboard: false,
+    // Visual style of all lanes (R5.2): 'highway' or 'simple'.
+    view: 'highway',
   }),
   device: Object.freeze({
     // 'auto' = use the instrument implied by controller type detection (R2.2, R2.3).
@@ -44,6 +46,7 @@ export const DEFAULTS = Object.freeze({
 
 /** Allowed values for settings that are enumerations. */
 export const CHOICES = Object.freeze({
+  view: Object.freeze(['highway', 'simple']),
   instrument: Object.freeze(['auto', 'guitar', 'drums', 'bass']),
   root: Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
   scale: Object.freeze(['minorPentatonic', 'majorPentatonic', 'blues', 'major', 'minor']),

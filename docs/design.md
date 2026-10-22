@@ -162,8 +162,12 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
 - Drawing uses one `<canvas>` with the 2D API for all lanes, redrawn every animation frame. Settings and prompts are normal HTML on top.
 - `lanes.js` splits the width into one lane per device, side by side, each with its own color and the controller number above it (R5.3, R5.3.1). The keyboard lane uses the label "Keyboard".
 - **Highway view** (`highway-view.js`): a lane is drawn in perspective with five columns. A `noteOn` creates a note mark at the near end; it moves away into the distance at a constant speed. While the voice rings, a trail connects the note mark to the near end, with opacity following the voice's current level, and ends when the voice stops (R5.2, R5.4). Notes older than the visible length are dropped.
+  - A note travels the whole road in 3 s. The level of each note is sampled about 40 times a second, so every part of the trail keeps the opacity the note had when that part was played (the trail fades along its length as the note decays). When the voice is silent or stopped, the trail's near end detaches and travels away too.
+  - Columns: the five frets (in the fret colors) on guitar and bass, one column per drum pad on drums (one-shot gems without a trail, sized by velocity), and pitch from left (C2) to right (G6) on the keyboard lane (piano notes white, the keys 1-5 guitar in fret colors).
+  - The near end shows what the player presses: the fret buttons with their note names (guitar, bass), small labels of the drum pads that light up on a hit (drums), or the on-screen keyboard (keyboard lane).
+  - Cross lines move away with the notes every half second, so the motion is visible even without notes.
 - **Simple view** (`simple-view.js`): the lane shows the device's buttons, lit while pressed, and the names of ringing notes (R5.1, R5.2). Guitar and bass: the five fret buttons with each fret's note name below it, glowing while their note rings; the names of all ringing notes; pills for the other controls (strum, whammy with its value 0.00-1.00, tilt, Start, Back). Analog controls fill smoothly and are never shown fully lit by the press threshold. Raw buttons and axes are only shown in the debug view (9.1).
-- The visual style is a global setting; per-lane override can come later if needed.
+- The visual style is a global setting (top bar "View": Highway, the default, or Simple); per-lane override can come later if needed.
 - `keyboard-view.js` draws the on-screen keyboard when the keyboard instrument is enabled, with note names on the playing keys and lit keys while pressed (R4c.5, R4c.6). It is drawn at the bottom of the keyboard lane in both visual styles, as five rows: `1`-`5` in the fret colors with their fret notes and Backspace (Strum); the black-key row; the home row; Shift (Octave +) and the bottom row; Alt (Octave −) and Space (Sustain). The note names follow Shift/Alt while they are held. Key letters are the US names of the physical keys.
 - Drums in the simple view: one pad per mapped control with the drum's name and the control's name, flashing on each hit with a brightness from the velocity.
 - To show fading trails, the audio engine keeps a simple per-voice level estimate (envelope model, `VoiceTracker` in `audio-engine.js`) on the main thread instead of reading audio data back: pluck voices decay exponentially with the ring time, MIDI melodic voices decay slowly while held and release in 0.3 s, drum hits fade within 0.6 s, a `noteOff` adds a linear fade, and the instrument's current volume is applied. Voices below 2 % are dropped.
@@ -178,8 +182,11 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
 
 ### 7.2 Settings panel
 
-- A global part: visual style, keyboard instrument on/off, language.
+- A global part: visual style, keyboard instrument on/off, language. These live in the top bar, so there is no separate global panel.
 - A per-device part (R2.9), opened from a small button above each lane or with Start on the guitar: instrument type, sound source, MIDI program, key and scale, whammy/tilt assignment, fade time, decay, button-to-sound mapping for drums, and a button that opens the device's debug view (9.1).
+  - Fields are only shown where they apply: sound source for instruments with more than one source (not drums); MIDI program when the MIDI source is used ("Automatic" = the instrument's default program); key, scale and mute fade-out for guitar, bass and the keyboard's guitar keys; whammy, tilt and bend range only on a controller that has a whammy bar or tilt sensor (bend range only when one of them bends); ring time and tone for the plucked string; one drum sound per control for drums.
+  - Whammy and tilt each choose *Pitch bend*, *Volume* or *Off*, with a short plain-language hint below that explains what the current choice does. Bend range choices: −12, −7, −5, −2, −1, +1, +2, +5, +7, +12 semitones.
+  - "Reset to defaults" removes all stored settings of the device. The keyboard's panel has no instrument choice (always Keys) and no debug view.
 - Every setting has a default; the panel is never needed to start playing.
 
 ## 8. Settings, storage and language
@@ -197,6 +204,8 @@ Before the guitar mapping is final, we need to see the raw input. Each device's 
 - the button indexes of the five frets, strum up/down, Start and Back,
 - the whammy axis range and whether tilt is gradual or on/off (R4.5).
 
+**Result (real Xplorer, Chrome 155 on Linux):** `gamepad.id` is `RedOctane Inc(c)2006  Guitar Hero X-plorer   (STANDARD GAMEPAD Vendor: 1430 Product: 4748)`, browser mapping `standard`, 17 buttons and 4 axes, so the app uses `guitar-standard`. Frets B0, B1, B3, B2, B4 (green, red, yellow, blue, orange) are confirmed; strum B12/B13, Start B9 and Back B8 react (the up/down and Start/Back order is assumed correct). Whammy is axis 2, resting at −1 (mapped to 0..1). Tilt is axis 3 and gradual, resting at about +0.12 when held flat; it is inverted in the mapping (`from: 1, to: -1`), so pointing the neck up raises the value.
+
 ### 9.2 Logic tests
 
 Instrument logic is pure (logical edges in, note events out), so `guitar.js`, `drums.js` and `keys.js` get small browser-run test pages under `tests/` that feed scripted edge sequences and check the events, e.g. "strum twice without release gives two noteOn and one noteOff". `tests/` is excluded from deployment.
@@ -205,10 +214,10 @@ Instrument logic is pure (logical edges in, note events out), so `guitar.js`, `d
 
 `.github/workflows/pages.yml` runs on pushes to the main branch. It copies only `index.html`, `css/`, `js/`, `lang/` and `vendor/` into a `_site` folder with plain shell commands, then publishes it with the official `actions/upload-pages-artifact` and `actions/deploy-pages` actions. No Node.js build step is involved (R7.3).
 
-## 11. Open design questions
+## 11. Design questions (closed)
 
-- Default assignment of whammy and tilt to pitch and volume (R4.5), decided after the hardware check.
-- Exact Xplorer button and axis indexes on Chrome/Linux (9.1).
+- ~~Default assignment of whammy and tilt to pitch and volume (R4.5), decided after the hardware check.~~ **Decided (provisional, owner to review):** the Xplorer's tilt is gradual, so both controls are usable. Whammy = pitch bend, −2 semitones at full press (the note goes down, like a real whammy bar); tilt = volume swell, half volume held flat, full volume with the neck pointing up. Both assignments (pitch bend, volume, off) and the bend range are per-device settings (see 4.2, 7.2).
+- ~~Exact Xplorer button and axis indexes on Chrome/Linux (9.1).~~ **Confirmed** with the real Xplorer on Chrome 155/Linux, see 9.1.
 
 ## 12. Milestones
 

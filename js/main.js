@@ -10,10 +10,11 @@ import { defaultInstrumentFor } from './input/detect.js';
 import { KeyboardDevice } from './input/keyboard-input.js';
 import { computeLanes, drawLaneFrame } from './visual/lanes.js';
 import { drawSimpleView } from './visual/simple-view.js';
+import { HighwayState, drawHighway, placeNote } from './visual/highway-view.js';
 import { StartScreen } from './ui/start-screen.js';
 import { SettingsPanel } from './ui/settings-panel.js';
 import { DebugView } from './ui/debug-view.js';
-import { getGlobalSettings, setGlobalSetting, getDeviceSettings, onSettingsChange } from './settings/store.js';
+import { CHOICES, getGlobalSettings, setGlobalSetting, getDeviceSettings, onSettingsChange } from './settings/store.js';
 import { SUPPORTED_LANGUAGES, applyTranslations, onLanguageChange, setLanguage, t } from './i18n/i18n.js';
 import { getEngine, keepAudioAlive, unlockAudio } from './audio/audio-engine.js';
 import { createInstrument, instrumentKind } from './instruments/setup.js';
@@ -24,13 +25,14 @@ const ctx = canvas.getContext('2d');
 const overlayLayer = document.getElementById('lane-overlays');
 const languageSelect = document.getElementById('language-select');
 const keyboardToggle = document.getElementById('keyboard-toggle');
+const viewSelect = document.getElementById('view-select');
 const startKeyboardButton = document.getElementById('start-keyboard');
 
 /**
  * Per-device state, keyed by device index (gamepad.index, or KEYBOARD_INDEX):
  * { device, el, gear, instrument (name), kind, logic (Instrument|null),
- *   channels: { main: Channel, guitar?: Channel }, panel: SettingsPanel|null,
- *   debug: DebugView|null }
+ *   channels: { main: Channel, guitar?: Channel }, highway: HighwayState,
+ *   panel: SettingsPanel|null, debug: DebugView|null }
  */
 const laneUis = new Map();
 let lanes = [];
@@ -83,7 +85,18 @@ function createLaneUi(device) {
   gear.addEventListener('click', () => toggleSettings(device.index));
   el.append(gear);
   overlayLayer.append(el);
-  const ui = { device, el, gear, instrument: null, kind: null, logic: null, channels: {}, panel: null, debug: null };
+  const ui = {
+    device,
+    el,
+    gear,
+    instrument: null,
+    kind: null,
+    logic: null,
+    channels: {},
+    highway: new HighwayState(),
+    panel: null,
+    debug: null,
+  };
   laneUis.set(device.index, ui);
   translateLaneUi(ui);
   setupInstrument(ui);
@@ -116,7 +129,7 @@ function toggleSettings(index) {
   ui.panel = new SettingsPanel({
     container: ui.el,
     device: ui.device,
-    getKind: () => ui.kind,
+    getInstrument: () => ({ kind: ui.kind, instrument: ui.instrument }),
     onClose: () => closeSettings(index),
     onOpenDebug: () => openDebug(index),
   });
@@ -179,6 +192,7 @@ function setupInstrument(ui) {
     return;
   }
   releaseInstrument(ui);
+  ui.highway.clear();
   ui.instrument = name;
   ui.kind = instrumentKind(name);
   if (!created) return;
@@ -198,9 +212,18 @@ function playInstruments() {
         if (event.action === 'openSettings') toggleSettings(ui.device.index);
         continue;
       }
-      (ui.channels[event.part || 'main'] || ui.channels.main).handle(event, now);
+      const channel = ui.channels[event.part || 'main'] || ui.channels.main;
+      channel.handle(event, now);
+      if (event.type === 'noteOn') {
+        const columns = ui.kind === 'drums' ? ui.logic.pads.length : 5;
+        ui.highway.noteOn(event, channel.tracker, placeNote(ui.kind, event, laneColorOf(ui), columns), now);
+      }
     }
   }
+}
+
+function laneColorOf(ui) {
+  return lanes.find((lane) => lane.device === ui.device)?.color || '#ffffff';
 }
 
 // ---------------------------------------------------------------------------
@@ -264,12 +287,25 @@ function draw() {
     });
     // The debug view covers the whole lane; no need to draw its content.
     if (ui.debug) continue;
-    const view = { device: ui.device, color: lane.color, kind: ui.kind, instrument: ui.logic, channels: ui.channels };
-    drawSimpleView(ctx, view, area, t, now);
+    const view = {
+      device: ui.device,
+      color: lane.color,
+      kind: ui.kind,
+      instrument: ui.logic,
+      channels: ui.channels,
+      highway: ui.highway,
+    };
+    // Visual style is a global setting (R5.2, design 6).
+    if (visualStyle === 'highway') drawHighway(ctx, view, area, t, now);
+    else {
+      ui.highway.update(now);
+      drawSimpleView(ctx, view, area, t, now);
+    }
   }
 }
 
 let startScreen = null;
+let visualStyle = getGlobalSettings().view;
 
 function frame() {
   manager.poll();
@@ -298,10 +334,23 @@ function fillLanguageSelect() {
   );
 }
 
+function fillViewSelect() {
+  viewSelect.replaceChildren(
+    ...CHOICES.view.map((value) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = t(`view.${value}`);
+      option.selected = value === visualStyle;
+      return option;
+    }),
+  );
+}
+
 function onLanguageChanged() {
   document.title = t('app.title');
   applyTranslations(document);
   fillLanguageSelect();
+  fillViewSelect();
   for (const ui of laneUis.values()) {
     translateLaneUi(ui);
     ui.panel?.refresh();
@@ -322,6 +371,10 @@ async function main() {
     setGlobalSetting('language', languageSelect.value);
     languageSelect.blur();
   });
+  viewSelect.addEventListener('change', () => {
+    setGlobalSetting('view', viewSelect.value);
+    viewSelect.blur();
+  });
   keyboardToggle.addEventListener('change', () => {
     setGlobalSetting('keyboard', keyboardToggle.checked);
     keyboardToggle.blur();
@@ -331,6 +384,10 @@ async function main() {
     if (change.scope === 'global') {
       if (change.key === 'language') setLanguage(change.value);
       else if (change.key === 'keyboard') applyKeyboardSetting();
+      else if (change.key === 'view') {
+        visualStyle = change.value;
+        fillViewSelect();
+      }
     } else if (change.scope === 'device') {
       for (const ui of laneUis.values()) {
         if (ui.device.id === change.id) {
