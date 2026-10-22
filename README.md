@@ -14,7 +14,7 @@ Current state: milestones 1-5 are implemented.
 - Guitar: five frets with strum, restrum, mute and chords, key and scale per controller, a synthesized plucked string (no recordings) or a General MIDI sound. Whammy bends the pitch and tilt swells the volume; both can be switched per controller.
 - Drums (regular gamepad by default) and a gamepad guitar/bass mode.
 - Computer keyboard as a piano, hidden by default (keyboard toggle in the top bar).
-- Two views: a highway where notes travel toward you with sustain trails, and a simple view with note names per fret.
+- Two views: a highway where played notes travel away from you with sustain trails, and a simple view with note names per fret.
 - Menus work with the controller: Start opens a controller's settings, the D-pad (or the guitar's strum bar) moves up/down, left/right changes a value or presses a button, Back closes. While a guitar's settings are open, the frets play directly without strumming, so you can try sounds while changing them.
 - Test pages under [`tests/`](tests/index.html) (open through a local server).
 
