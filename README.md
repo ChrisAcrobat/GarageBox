@@ -8,7 +8,16 @@ The app is published as a static website on GitHub Pages.
 
 Requirements and design are written in [`docs/`](docs/).
 
-Current state: milestone 1 (input and debug: start screen, controller detection, lanes, per-controller settings with debug view, settings store and i18n) is implemented. No sound yet.
+Current state: milestones 1-5 are implemented.
+
+- Input and debug: start screen, controller detection, one lane per controller, per-controller settings with a debug view, settings saved in the browser, English and Swedish.
+- Guitar: five frets with strum, restrum, mute and chords, key and scale per controller, a synthesized plucked string (no recordings) or a General MIDI sound. Whammy bends the pitch and tilt swells the volume; both can be switched per controller.
+- Drums (regular gamepad by default) and a gamepad guitar/bass mode.
+- Computer keyboard as a piano, hidden by default (keyboard toggle in the top bar).
+- Two views: a highway where notes travel toward you with sustain trails, and a simple view with note names per fret.
+- Test pages under [`tests/`](tests/index.html) (open through a local server).
+
+Some defaults (whammy/tilt behavior, sounds) are marked *provisional* in the [design](docs/design.md) and need testing on the real guitar.
 
 ## Overview
 
