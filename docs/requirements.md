@@ -110,6 +110,12 @@ Status: draft, under discussion.
 - F1 Optional output to a real MIDI device or music program (via Web MIDI) when one is available, as an alternative sound source.
 - F2 Recorded (sampled) instrument sounds, e.g. from a freely licensed sound bank, as an additional sound source.
 - F3 User-editable names for controllers/players, shown above each lane instead of or next to the controller number.
+- F4 A play-along mode in the style of Guitar Hero, where the highway scrolls towards the player and the player tries to hit predefined notes in time.
+  - F4.1 The mode ships with predefined songs, e.g. "Twinkle, Twinkle, Little Star".
+  - F4.2 Each song is its own JSON file. Fields include at least the song name and note charts per instrument.
+  - F4.3 An instrument can have several charts in the same song, e.g. "Guitar Lead" and "Guitar Rhythm".
+  - F4.4 Song names support several languages. Name lookup order: the user's current UI language, then English, then the first name in the list.
+- F5 If feasible, the user can provide a link to an audio file or a video (e.g. YouTube); the app analyses the audio and generates a note chart for F4 that the player then tries to follow.
 
 ## Open questions
 
