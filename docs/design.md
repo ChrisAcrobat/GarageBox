@@ -382,3 +382,16 @@ Not part of the current design or milestones; a starting point for when F13 and 
   - Storage: IndexedDB quota, eviction (especially Safari) and private windows; every saved version is a full copy, so long projects with many versions grow quickly. Offer deleting old versions.
   - MP3 encoder: licence (common JavaScript MP3 encoders are LGPL) and file size; if unsuitable, offer WAV only, or a compressed format the browser can encode itself (`MediaRecorder`, e.g. Opus in WebM/Ogg) instead of MP3.
   - CPU: playback of several tracks plus live play uses more voices; the per-instrument voice limit (24) applies per playback channel.
+
+### 13.2 Backing tracks (F14)
+
+- **Data model.** The project version gets `backingTracks: [{ backingId, name, kind: 'url' | 'file', url | blobId, durationSec, offsetSec, gainDb, muted }]`. `offsetSec > 0` starts the sound that many seconds after recording time 0; `offsetSec < 0` starts it at time 0 but `−offsetSec` seconds into the sound.
+- **Storage.** A link is stored as the URL only. A local file (suggested addition) is stored once as a `Blob` in a second object store `blobs` (key `blobId`, with name, type and size); versions refer to it by `blobId`, so saving a new version does not copy the audio. A blob is deleted when no version of any project refers to it any more (checked when a project or version is deleted).
+- **Loading.** `fetch(url)` → `arrayBuffer()` → `decodeAudioData` into an `AudioBuffer`, kept in memory while the project is open. A failed fetch (network error or a missing `Access-Control-Allow-Origin`, which looks the same to the page) shows a message with the local-file suggestion; a response that cannot be decoded (e.g. an HTML page from a streaming site) shows "not an audio file". There is no fallback through an `<audio>` element: without CORS a `MediaElementAudioSourceNode` outputs silence, and it could not be exported anyway.
+- **Playback.** Each backing track is an `AudioBufferSourceNode` → gain (`gainDb`) → master, started with `start(when, skip)` where `when = t0 + max(0, offsetSec)` and `skip = max(0, −offsetSec)` (`t0` = the `AudioContext` time of recording time 0, also on Record). Seeking restarts the sources at the matching position. Backing tracks do not go through an instrument's effect chain.
+- **Export.** The same sources are created in the `OfflineAudioContext` of the WAV/MP3 export (13.1); the MIDI writer ignores backing tracks.
+- **Notable technical risks.**
+  - CORS: most links to audio on other sites will not load; local files are the reliable path. Streaming services are out of reach (their pages are not audio files, and extracting their audio is against their terms).
+  - Latency: while recording, the players hear the backing track `outputLatency` (plus `baseLatency`) late and play to what they hear, so recorded note times must be shifted earlier by that latency to line up on playback; browsers report it with varying accuracy (a manual latency calibration may be needed).
+  - Memory and storage: a decoded song is large (about 10 MB per minute at 48 kHz stereo float), and stored local files count against the IndexedDB quota.
+  - Formats: `decodeAudioData` supports different formats per browser (MP3, WAV, AAC and Ogg/Opus mostly, but not everywhere).
