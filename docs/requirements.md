@@ -49,6 +49,7 @@ Status: draft, under discussion.
 - R4.4 If the strum bar is hit twice without releasing the fret button in between, the note plays twice, possibly with a new pitch.
 - R4.5 The whammy bar and the tilt (the angle the guitar is held at) affect the sound: one of them changes pitch and the other changes volume. Which one does what is not decided yet.
   - Note: on the Xplorer the tilt sensor may only report on/off rather than a gradual value. This must be verified with the real guitar before the mapping is chosen.
+- R4.5.1 The tilt value is smoothed before it affects the sound, so small shakes of the hand do not make the volume or pitch wobble. The amount of smoothing can be changed in the controller's advanced settings (R2.9), including turning it off. The device information view (debug view) keeps showing the raw value.
 - R4.6 Notes on different frets ring independently. A strum only (re)triggers notes on frets that are held at that moment; other ringing notes keep sounding and are not renewed.
 - R4.7 Ringing notes decay naturally and get quieter over time, like a plucked string.
 - R4.8 If several fret buttons are held when the strum bar is hit, all of their notes play together as a chord.
