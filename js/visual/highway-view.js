@@ -20,7 +20,7 @@ import { drawKeyboard, keyboardHeight } from './keyboard-view.js';
 import { noteName } from '../audio/theory.js';
 
 /** Seconds a note needs to travel from the near end to the far end. */
-export const HIGHWAY_SECONDS = 3;
+export const HIGHWAY_SECONDS = 6;
 /** Perspective strength: the far end is drawn 1 / (1 + K) as wide as the near end. */
 const K = 2.2;
 const SAMPLE_INTERVAL = 1 / 40;
