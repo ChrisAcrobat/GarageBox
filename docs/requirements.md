@@ -39,6 +39,7 @@ Status: draft, under discussion.
 - R3.3 MIDI-style instruments use the vendored library [webaudio-tinysynth](https://github.com/g200kg/webaudio-tinysynth) (Apache License 2.0), which synthesizes all General MIDI instruments without samples. Its license file is kept alongside the vendored copy.
 - R3.4 Generated sounds are written for this project with the Web Audio API. The guitar uses plucked-string synthesis (Karplus-Strong), which also gives the natural decay required by R4.7.
 - R3.5 Default sound source per instrument: guitar uses the generated plucked-string sound; drums use the MIDI-style drum kit. The sound source can be changed per controller in the advanced settings (R2.9).
+- R3.6 Guitar effects: every instrument except the drums can be given an effect sound in the controller's advanced settings (R2.9), so it can sound like an electric guitar through an amplifier. Choices: Clean (default, no effects, the sound as it is today), Crunch (light distortion and a small room) and Epic (heavy distortion, an echo and a large reverb, like a rock guitar on a big stage). The effects work with both sound sources and, like all other sound, are generated in the browser without recordings (R3.1). Choosing an effect must not make the instrument clearly louder than Clean.
 
 ## 4. Guitar (Guitar Hero Xplorer)
 
