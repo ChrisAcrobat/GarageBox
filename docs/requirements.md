@@ -133,6 +133,7 @@ Status: draft, under discussion.
   - F6.3 If the browser and hardware allow it, support several microphones at once (e.g. one per player or instrument).
 - F7 Pop-out settings page: a controller's advanced settings (R2.9) can be opened in a separate browser window (e.g. with `window.open` of a settings page that talks to the main page via `BroadcastChannel` or `postMessage`), so a mouse user can adjust settings on another screen while playing. Changes apply live in the main window.
 - F8 Show the tagline "Your controllers are the band." on the start screen, e.g. under the heading, as a translated UI string.
+- F9 Tilt glides between keys: tilting the guitar up or down moves the fret notes smoothly up or down through the keys (instead of only changing volume or bending the pitch), and the fret buttons could then cover more or fewer than five scale notes.
 
 ## Open questions
 
