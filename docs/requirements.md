@@ -93,23 +93,30 @@ Status: draft, under discussion.
 
 - R4c.1 The computer keyboard can act as an extra instrument, so the app can be tried and tested without a game controller.
 - R4c.2 The keyboard instrument is hidden by default and can be turned on in the settings. When hidden, key presses do not play notes.
-- R4c.3 Guitar emulation: keys `1`–`5` act as the five fret buttons (green to orange) and `Backspace` acts as the strum bar, with the same behavior as the Xplorer (section 4).
+- R4c.3 Guitar emulation: keys `1`–`5` act as the five fret buttons (green to orange) and `Backspace` acts as the strum bar, with the same behavior as the Xplorer (section 4). Only with the Piano instrument (R4c.12).
 - R4c.4 Melodic keys use the "musical typing" layout common in music software, based on a piano keyboard:
   - The home row (`A S D F G H J K L`) plays the natural notes (white piano keys), e.g. C D E F G A B C D.
   - The row above (`W E T Y U O P`) plays the sharps/flats (black piano keys), placed between the home-row keys they sit between, e.g. `W` = C#, `E` = D#.
   - The bottom row (`Z X C V B N M`) plays the same natural notes as the home row, one octave lower.
-- R4c.5 When the keyboard instrument is visible, an on-screen keyboard shows the note name on each key that plays a note.
+- R4c.5 When the keyboard instrument is visible, an on-screen keyboard shows the note name on each key that plays a note (with the Drums instrument, the drum sound instead, R4c.13).
 - R4c.6 Like all instruments, a key lights up on screen while it is pressed.
 - R4c.7 Key positions are based on physical key location (`KeyboardEvent.code`), so the layout works the same on Swedish and other keyboard layouts.
-- R4c.8 Momentary octave shift, combined with R4c.4 (no setting needed):
+- R4c.8 Momentary octave shift, combined with R4c.4 (no setting needed; only with the Piano instrument, R4c.12):
   - While `Shift` is held, all melodic keys play one octave higher.
   - While `Alt` is held, all melodic keys play one octave lower.
   - The shift applies to notes started while the modifier is held; ringing notes keep their pitch when it is released.
   - `Ctrl` is deliberately not used, since browser shortcuts such as `Ctrl+W` (close tab) cannot be blocked by the page.
   - The app prevents the browser's default action for `Alt` (e.g. focusing the menu) while the keyboard instrument is active.
 - R4c.9 Melodic keys behave like a piano: the note sounds while the key is held and stops (with a short soft release) when the key is released.
-- R4c.10 `Space` acts as a sustain pedal: while it is held, released notes keep ringing as they naturally would (R4.7: generated sounds die away, a sustaining MIDI program keeps sounding); when it is released, all notes whose keys are no longer held stop. The app prevents the browser's default action for `Space` (page scroll) while the keyboard instrument is active.
+- R4c.10 `Space` acts as a sustain pedal: while it is held, released notes keep ringing as they naturally would (R4.7: generated sounds die away, a sustaining MIDI program keeps sounding); when it is released, all notes whose keys are no longer held stop. Only with the Piano instrument (R4c.12). The app prevents the browser's default action for `Space` (page scroll) while the keyboard instrument is active.
 - R4c.11 The keyboard instrument's default sound is Acoustic Grand Piano from the MIDI-style instruments (R3.3). The sound can be changed in its advanced settings like any other instrument (R2.9).
+- R4c.12 Instrument choice: in the keyboard's advanced settings (R2.9) the keyboard instrument plays *Piano* (sv "Piano"; default, the behavior of R4c.3 – R4c.11) or *Drums* (sv "Trummor", R4c.13). The choice is saved like the other settings (R2.7) and counts as the keyboard's instrument choice, so *Reset to defaults* keeps it. Changing it stops all ringing notes of the keyboard.
+- R4c.13 Drums instrument: the musical-typing keys (R4c.4) play the MIDI drum kit (as R3.5 for drums) instead of notes: one drum sound per key, one-shot (the sound ends by itself, releasing the key does nothing), at a fixed strength. The sound of each key can be changed (or set to none) in the advanced settings like R4b.2. In this mode the octave shift (R4c.8), the `Space` sustain pedal (R4c.10) and the guitar keys `1`–`5` and `Backspace` (R4c.3) are off, and the settings that only apply to notes (sound source, MIDI program, effect, key, scale, mute fade-out, ring time) are hidden, as for drums. The lane shows drum columns like a drums lane, and the on-screen keyboard shows the drum sound on each key. Default mapping (kit layout: the home row is the main kit, the row above the cymbals, the bottom row extra sounds):
+  - Home row: `A` kick (GM 36), `S` snare (38), `D` closed hi-hat (42), `F` open hi-hat (46), `G` pedal hi-hat (44), `H` high tom (50), `J` hi-mid tom (48), `K` low tom (45), `L` low floor tom (41).
+  - Row above: `W` crash (49), `E` ride (51), `T` ride bell (53), `Y` Chinese cymbal (52), `U` splash (55), `O` crash 2 (57), `P` ride 2 (59).
+  - Bottom row: `Z` kick (36, second kick for double-kick patterns), `X` side stick (37), `C` hand clap (39), `V` electric snare (40), `B` high floor tom (43), `N` tambourine (54), `M` cowbell (56).
+- R4c.14 Numpad drum kit: while the keyboard instrument is on, in both Piano and Drums mode, the numeric keypad is a small drum kit laid out like a kit seen from above: `Numpad7` crash (49), `Numpad8` open hi-hat (46), `Numpad9` ride (51), `Numpad4` high tom (50), `Numpad5` snare (38), `Numpad6` low tom (45), `Numpad1` closed hi-hat (42), `Numpad2` kick (36), `Numpad3` low floor tom (41), `Numpad0` kick (36). Keys are found by physical position (`KeyboardEvent.code`, R4c.7), so it works whether NumLock is on or off. Hits are one-shot drum sounds like R4c.13, and each key's sound can be changed (or set to none) in the advanced settings like R4b.2. The app prevents the browser's default action for the numpad keys while the keyboard instrument is on. Laptops without a numeric keypad use the Drums instrument (R4c.13) instead.
+- R4c.15 Numpad hits are shown in the keyboard lane as one-shot drum gems (also in Piano mode, next to the notes) and are recorded as part of the keyboard's track in a recording (F13.5).
 
 ## 5. Visuals
 
@@ -180,7 +187,7 @@ Status: draft, under discussion.
   - F13.8 Editing (simple tools, each undoable until the project is saved):
     - Trim: cut away time at the start and/or the end of the recording (e.g. the count-in bars). Notes that start inside the removed part are removed; notes that started before the new start and still ring are cut.
     - Per-track volume and mute.
-    - Per-track instrument and sound: change the instrument of a recorded guitar, bass or keyboard track (e.g. guitar to bass, a different MIDI instrument, another effect); the recorded notes stay the same. A drums track keeps its drum kit, but its drum sounds can be reassigned like R4b.2.
+    - Per-track instrument and sound: change the instrument of a recorded guitar, bass or keyboard track (e.g. guitar to bass, a different MIDI instrument, another effect); the recorded notes stay the same. A drums track keeps its drum kit, but its drum sounds can be reassigned like R4b.2; the same holds for the drum hits of a keyboard track (Drums instrument and numpad kit, R4c.13, R4c.14), while its piano notes can change sound as above.
     - Move a group of notes: select notes of one track in a time range and move them earlier or later (optionally snapping to the beat grid); their pitch bends, glides and note ends move with them.
   - F13.9 Saving and versions: recordings are stored in the browser (IndexedDB), never uploaded. Saving a project stores a new copy (version) with a reference to the version it came from; existing versions are never changed. The list of saved projects shows only the latest version of each project, with a way to open its history and go back to (open, and save on from) an older version. Deleting a project removes all its versions after a confirmation. A project can be renamed.
   - F13.10 Export, if possible: WAV and MP3 (the sound rendered again from the recorded events, with the current track volumes, instruments and mutes; muted tracks, e.g. the drumsticks and metronome tracks while muted, are left out, also from MIDI) and MIDI (a Standard MIDI File with one track per recorded track, the tempo and time signature, and program changes for the instruments). MIDI cannot carry the generated sounds, the effects or a different glide per string, so it is an approximation.
