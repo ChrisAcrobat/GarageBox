@@ -108,6 +108,7 @@ Status: draft, under discussion.
 
 - R6.1 All project documentation is written in English.
 - R6.2 If the app supports multiple languages, UI texts are split into one JSON file per language, plus one shared file for words that are the same in every language (if any).
+- R6.3 Note names: there are two sets of note names, the international names (C C# D D# E F F# G G# A A# B) and the names used in the current UI language. Each language file defines its own set. If the language's set is the same as the international one (as in English), no setting is shown and the international names are used. If they differ (as in Swedish, where B is called H), a global setting "Note names" lets the user choose between the two, with the international names as the default. The choice applies everywhere note names are shown (lanes, highway, on-screen keyboard, settings) and is saved like the other settings.
 
 ## 7. Technology and deployment
 
