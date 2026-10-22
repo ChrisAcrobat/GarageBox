@@ -56,6 +56,7 @@ Status: draft, under discussion.
 - R4.10 Start opens the advanced settings (R2.9) for that controller.
 - R4.11 Back mutes all ringing notes on that controller (using the soft fade-out from R4.3.1).
 - R4.12 The Xbox (guide) button has no function, since browsers usually do not expose it.
+- R4.13 The pitch range (octave) of the fret buttons can be changed in the controller's advanced settings (R2.9): Low (one octave down), Middle (default) and High (one octave up). This applies to the guitar and the bass, also in the gamepad guitar/bass mode (R2.10); Middle keeps the default ranges (guitar from E3, bass from E2).
 
 ## 4b. Drums (regular gamepad)
 
