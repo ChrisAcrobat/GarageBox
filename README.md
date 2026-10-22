@@ -10,7 +10,7 @@ The app is published as a static website on GitHub Pages.
 
 Requirements and design are written in [`docs/`](docs/).
 
-Current state: milestones 1-5 are implemented.
+Current state: [milestones 1-5](docs/design.md#12-milestones) are implemented.
 
 - Input and debug: start screen, controller detection, one lane per controller, per-controller settings with a debug view, settings saved in the browser, English and Swedish.
 - Guitar: five frets with strum, restrum, mute and chords, key and scale per controller, a synthesized plucked string (no recordings) or a General MIDI sound. The whammy bar bends the pitch down. Back turns tilt on: while it is on, tilting the neck moves the frets up or down through the scale, and Back again locks the new range (saved per controller).
