@@ -1,4 +1,4 @@
-# Requirements – Music Sandbox
+# Requirements – GarageBox - Music Sandbox
 
 Status: draft, under discussion.
 
@@ -96,6 +96,11 @@ Status: draft, under discussion.
 - R5.3 Each controller (instrument) has its own visual lane or panel. With several controllers connected, the lanes are shown side by side, like multiplayer Guitar Hero.
 - R5.3.1 Above each lane the app shows the controller number (e.g. "1", "2", matching `gamepad.index` + 1) and the lane has its own color.
 - R5.4 In the highway view, a ringing note is drawn as a long trail (sustain line) from its start for as long as it sounds. The trail fades in step with the note's volume (decay, fade-out, mute) and ends when the note stops.
+
+## 5b. Name
+
+- R5b.1 The app is called **GarageBox - Music Sandbox** (short form "GarageBox"). This name is used in the page title, the app title (`app.title` in `lang/common.json`) and the titles of the test pages. The tagline "Your controllers are the band." may be shown on the start screen.
+- R5b.2 The README states that the project is inspired by Apple's GarageBand and is not affiliated with Apple.
 
 ## 6. Language
 

@@ -1,4 +1,4 @@
-# Design – Music Sandbox
+# Design – GarageBox - Music Sandbox
 
 Status: milestones 1-5 implemented; decisions marked *provisional* wait for the owner's review. Requirement IDs (R…) refer to [requirements.md](requirements.md).
 

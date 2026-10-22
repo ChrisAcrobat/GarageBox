@@ -1,6 +1,8 @@
-# Music Sandbox
+# GarageBox - Music Sandbox
 
-A web-based music sandbox where game controllers become instruments. Plug in a Guitar Hero guitar or a regular gamepad and play directly in the browser.
+*Your controllers are the band.*
+
+A web-based music sandbox where game controllers become instruments, so your controllers form a band. Plug in a Guitar Hero guitar or a regular gamepad and play directly in the browser.
 
 The app is published as a static website on GitHub Pages.
 
@@ -33,3 +35,7 @@ Some defaults (whammy/tilt behavior, sounds) are marked *provisional* in the [de
 
 - [Requirements](docs/requirements.md) – core requirements and open questions.
 - [Design](docs/design.md) – architecture, file structure and module design.
+
+## Inspiration
+
+GarageBox is inspired by Apple's GarageBand app. It is an independent hobby project and is not affiliated with, endorsed by or connected to Apple Inc. GarageBand is a trademark of Apple Inc.
