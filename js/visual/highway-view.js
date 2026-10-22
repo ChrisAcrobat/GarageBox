@@ -184,10 +184,13 @@ function drawNote(ctx, note, project, colWidth, now) {
     }
   }
 
-  // The gem at the head.
+  // The gem at the head. Once it has reached the far end it is gone (it must
+  // not pile up there while a long note still rings); the trail stays.
+  if (now - note.start >= HIGHWAY_SECONDS) return;
   const p = project(note.x, head);
   const size = colWidth * 0.42 * p.s * (note.oneShot ? 0.6 + 0.4 * (note.velocity / 127) : 1);
-  const fade = 1 - head * 0.6;
+  // Fade out over the last part of the road so the gem does not just pop away.
+  const fade = (1 - head * 0.6) * Math.min(1, (1 - head) / 0.15);
   ctx.save();
   ctx.globalAlpha = fade;
   ctx.beginPath();
