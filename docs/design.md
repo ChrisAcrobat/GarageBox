@@ -198,7 +198,7 @@ Per fret it keeps: `held` (button down) and the `voiceId` of its ringing note (o
 
 ### 9.1 Hardware check with the Xplorer
 
-Before the guitar mapping is final, we need to see the raw input. Each device's advanced settings panel has a **Debug view** button. It opens a debug view that covers exactly that device's lane (e.g. half the screen with two controllers connected), so other lanes keep working. It shows `gamepad.id`, the detected type, the parsed VID:PID, and the live value of every raw button and axis, plus the logical controls they map to. A close button returns to the normal lane. With it we confirm on Chrome/Linux:
+Before the guitar mapping is final, we need to see the raw input. Each device's advanced settings panel has a **Device information** button (internally called the debug view; the UI name was changed from "Debug view" because the view shows information about a controller, not only for fixing problems). It opens a debug view that covers exactly that device's lane (e.g. half the screen with two controllers connected), so other lanes keep working. It shows `gamepad.id`, the detected type, the parsed VID:PID, and the live value of every raw button and axis, plus the logical controls they map to. A close button returns to the normal lane. With it we confirm on Chrome/Linux:
 
 - the id string and VID:PID,
 - the button indexes of the five frets, strum up/down, Start and Back,
