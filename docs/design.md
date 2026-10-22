@@ -249,7 +249,7 @@ Menus can be driven with the controller (R2.12). Navigation is only active while
 
 ## 8. Settings, storage and language
 
-- `store.js` keeps defaults in one object and saves user changes in `localStorage`, global settings under one key and per-device settings keyed by `gamepad.id` (R2.7). Unknown or missing values fall back to defaults, so new settings never break old saved data.
+- `store.js` keeps defaults in one object and saves user changes in `localStorage`, global settings under one key and per-device settings keyed per R2.7: key `id:<gamepad.id>` when the id is non-empty and unique among connected devices, else `slot:<type>:<gamepad.index + 1>` (e.g. `slot:guitar:1`). The key is chosen on connect; when a second device with the same id connects, both use slot keys, and the slot key starts from the settings saved under the shared id key if it has none of its own. Play state that changes the sound (e.g. a locked pitch offset) is saved under the same key as the settings. Unknown or missing values fall back to defaults, so new settings never break old saved data.
 - `i18n.js` loads `lang/common.json` plus `lang/<lang>.json`, chosen from the setting or `navigator.language`, with English as fallback (R6.2). UI code only uses text keys, never literal strings.
 
 ## 9. Testing
