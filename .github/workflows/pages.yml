@@ -1,6 +1,6 @@
 # Deploys the app to GitHub Pages.
-# Only the files the app needs are published; README.md, docs/, tests/
-# and other non-app files are left out (R7.3). No build step is involved.
+# Only the app in src/ is published; README.md, docs/, tests/ and other
+# non-app files live outside src/ and are left out (R7.3). No build step.
 name: Deploy to GitHub Pages
 
 on:
@@ -29,9 +29,7 @@ jobs:
       - name: Collect app files
         run: |
           mkdir _site
-          for path in index.html css js lang vendor; do
-            if [ -e "$path" ]; then cp -r "$path" _site/; fi
-          done
+          cp -r src/. _site/
           touch _site/.nojekyll
           find _site -type f | sort
 

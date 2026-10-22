@@ -111,7 +111,7 @@ Status: draft, under discussion.
 
 - R7.1 The app is written in plain JavaScript (ES modules), HTML and CSS, loaded directly by the browser. No build step and no Node.js tooling.
 - R7.2 Third-party libraries, if any, are vendored into the repository as static files (no package manager, no runtime CDN dependency).
-- R7.3 Deployment to GitHub Pages is done by a GitHub Actions workflow that publishes only the files the app needs, excluding `README.md`, `docs/` and other non-app files. The workflow itself must not require Node.js-based build tooling.
+- R7.3 Deployment to GitHub Pages is done by a GitHub Actions workflow that publishes only the files the app needs. All app files live in a `src/` folder and the workflow publishes exactly that folder; `README.md`, `docs/`, `tests/` and other non-app files stay outside `src/`. The workflow itself must not require Node.js-based build tooling.
 
 ## Future work (out of scope for now)
 

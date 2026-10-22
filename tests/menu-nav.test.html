@@ -19,11 +19,11 @@
     <div id="sandbox"></div>
     <script type="module">
       import { createSuite, edge } from './test-runner.js';
-      import { MenuInput, MenuNavigator, MENU_CONTROLS, CURSOR_CLASS, REPEAT_DELAY_MS, REPEAT_INTERVAL_MS, intentFor, wrapIndex } from '../js/ui/menu-nav.js';
-      import { SettingsPanel } from '../js/ui/settings-panel.js';
-      import { detectController } from '../js/input/detect.js';
-      import { MAPPINGS } from '../js/input/mappings.js';
-      import { resetDeviceSettings, getDeviceSettings } from '../js/settings/store.js';
+      import { MenuInput, MenuNavigator, MENU_CONTROLS, CURSOR_CLASS, REPEAT_DELAY_MS, REPEAT_INTERVAL_MS, intentFor, wrapIndex } from '../src/js/ui/menu-nav.js';
+      import { SettingsPanel } from '../src/js/ui/settings-panel.js';
+      import { detectController } from '../src/js/input/detect.js';
+      import { MAPPINGS } from '../src/js/input/mappings.js';
+      import { resetDeviceSettings, getDeviceSettings } from '../src/js/settings/store.js';
 
       const s = createSuite('menu navigation tests');
       const { check } = s;

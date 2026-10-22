@@ -23,56 +23,60 @@ Each layer only talks to the next through small, plain data objects, so instrume
 ## 2. File structure
 
 ```
-index.html
-css/
-  style.css
-js/
-  main.js                  App start-up, main loop, wiring
-  input/
-    gamepad-manager.js     Connect/disconnect, polling, edge detection
-    detect.js              Controller type detection (R2.5)
-    known-devices.js       VID:PID lists for guitars and drum kits
-    mappings.js            Raw button/axis indexes -> logical controls
-    keyboard-input.js      Keyboard events -> logical controls (R4c)
-  instruments/
-    instrument.js          Shared base: voice bookkeeping, event output
-    guitar.js              Fret/strum logic (R4), also used for gamepad guitar/bass
-    drums.js               Drum mapping and velocity (R4b)
-    keys.js                Piano-style keyboard with sustain pedal (R4c)
-    setup.js               Builds an instrument and its sound config from settings
-  audio/
-    audio-engine.js        AudioContext, master output, routing to sources
-    pluck-worklet.js       Karplus-Strong plucked string (AudioWorklet) (R3.4)
-    pluck-source.js        Main-thread wrapper for the worklet
-    midi-source.js         Wrapper around webaudio-tinysynth (R3.3)
-    theory.js              Note names, scales, MIDI note numbers
-  visual/
-    lanes.js               Layout of lanes side by side (R5.3)
-    highway-view.js        Highway with notes travelling away (R5.2, R5.4)
-    simple-view.js         Panel with lit buttons and note names (R5.2)
-    keyboard-view.js       On-screen computer keyboard (R4c.5, R4c.6)
-  ui/
-    start-screen.js        "Click to start" and "press any button" prompts
-    settings-panel.js      Per-controller advanced settings (R2.9)
-    debug-view.js          Raw input view covering one lane (9.1)
-    menu-nav.js            Gamepad navigation of the menus (7.4)
-  settings/
-    store.js               Defaults, load/save in localStorage (R2.7)
-  i18n/
-    i18n.js                Loads language JSON files (R6.2)
-lang/
-  common.json              Words that are the same in every language
-  en.json
-  sv.json
-vendor/
-  webaudio-tinysynth/
-    webaudio-tinysynth.js
-    LICENSE
+README.md
+docs/                      Requirements and design (not published)
+tests/                     Logic test pages (not published)
+src/                       The app; only this folder is published
+  index.html
+  css/
+    style.css
+  js/
+    main.js                  App start-up, main loop, wiring
+    input/
+      gamepad-manager.js     Connect/disconnect, polling, edge detection
+      detect.js              Controller type detection (R2.5)
+      known-devices.js       VID:PID lists for guitars and drum kits
+      mappings.js            Raw button/axis indexes -> logical controls
+      keyboard-input.js      Keyboard events -> logical controls (R4c)
+    instruments/
+      instrument.js          Shared base: voice bookkeeping, event output
+      guitar.js              Fret/strum logic (R4), also used for gamepad guitar/bass
+      drums.js               Drum mapping and velocity (R4b)
+      keys.js                Piano-style keyboard with sustain pedal (R4c)
+      setup.js               Builds an instrument and its sound config from settings
+    audio/
+      audio-engine.js        AudioContext, master output, routing to sources
+      pluck-worklet.js       Karplus-Strong plucked string (AudioWorklet) (R3.4)
+      pluck-source.js        Main-thread wrapper for the worklet
+      midi-source.js         Wrapper around webaudio-tinysynth (R3.3)
+      theory.js              Note names, scales, MIDI note numbers
+    visual/
+      lanes.js               Layout of lanes side by side (R5.3)
+      highway-view.js        Highway with notes travelling away (R5.2, R5.4)
+      simple-view.js         Panel with lit buttons and note names (R5.2)
+      keyboard-view.js       On-screen computer keyboard (R4c.5, R4c.6)
+    ui/
+      start-screen.js        "Click to start" and "press any button" prompts
+      settings-panel.js      Per-controller advanced settings (R2.9)
+      debug-view.js          Raw input view covering one lane (9.1)
+      menu-nav.js            Gamepad navigation of the menus (7.4)
+    settings/
+      store.js               Defaults, load/save in localStorage (R2.7)
+    i18n/
+      i18n.js                Loads language JSON files (R6.2)
+  lang/
+    common.json              Words that are the same in every language
+    en.json
+    sv.json
+  vendor/
+    webaudio-tinysynth/
+      webaudio-tinysynth.js
+      LICENSE
 .github/workflows/
   pages.yml                Deploy to GitHub Pages (R7.3)
 ```
 
-All code is ES modules loaded with `<script type="module">` (R7.1). For local testing the folder is served with any static file server, e.g. `python3 -m http.server`, because ES modules and AudioWorklets do not load from `file://`.
+All app code lives in `src/` and is ES modules loaded with `<script type="module">` (R7.1). Tests in `tests/` import modules from `../src/`. For local testing the repository root is served with any static file server, e.g. `python3 -m http.server`, because ES modules and AudioWorklets do not load from `file://`.
 
 ## 3. Input layer
 
@@ -246,7 +250,7 @@ Pages (open `tests/index.html` through a local server; each page's title starts 
 
 ## 10. Deployment
 
-`.github/workflows/pages.yml` runs on pushes to the main branch. It copies only `index.html`, `css/`, `js/`, `lang/` and `vendor/` into a `_site` folder with plain shell commands, then publishes it with the official `actions/upload-pages-artifact` and `actions/deploy-pages` actions. No Node.js build step is involved (R7.3).
+`.github/workflows/pages.yml` runs on pushes to the main branch. It copies the contents of `src/` into a `_site` folder with plain shell commands, then publishes it with the official `actions/upload-pages-artifact` and `actions/deploy-pages` actions. No Node.js build step is involved (R7.3).
 
 ## 11. Design questions (closed)
 

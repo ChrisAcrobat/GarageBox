@@ -17,9 +17,9 @@
     <ul id="results"></ul>
     <script type="module">
       import { createSuite, edge, summarize } from './test-runner.js';
-      import { Keys, KEY_OFFSETS } from '../js/instruments/keys.js';
-      import { KeyboardDevice, KEY_CONTROLS } from '../js/input/keyboard-input.js';
-      import { noteName } from '../js/audio/theory.js';
+      import { Keys, KEY_OFFSETS } from '../src/js/instruments/keys.js';
+      import { KeyboardDevice, KEY_CONTROLS } from '../src/js/input/keyboard-input.js';
+      import { noteName } from '../src/js/audio/theory.js';
 
       const s = createSuite('keys tests');
       const { check } = s;

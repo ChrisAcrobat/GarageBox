@@ -17,10 +17,10 @@
     <ul id="results"></ul>
     <script type="module">
       import { createSuite, edge, summarize } from './test-runner.js';
-      import { Guitar, GAMEPAD_GUITAR_CONTROLS, deflection, TILT_REST } from '../js/instruments/guitar.js';
-      import { guitarOptions } from '../js/instruments/setup.js';
-      import { guitarRootMidi, scaleNotes, noteName } from '../js/audio/theory.js';
-      import { DEFAULTS } from '../js/settings/store.js';
+      import { Guitar, GAMEPAD_GUITAR_CONTROLS, deflection, TILT_REST } from '../src/js/instruments/guitar.js';
+      import { guitarOptions } from '../src/js/instruments/setup.js';
+      import { guitarRootMidi, scaleNotes, noteName } from '../src/js/audio/theory.js';
+      import { DEFAULTS } from '../src/js/settings/store.js';
 
       const s = createSuite('guitar tests');
       const { check } = s;
