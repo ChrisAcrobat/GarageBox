@@ -21,6 +21,7 @@ Status: draft, under discussion.
 - R2.7 The chosen instrument is stored per controller (`gamepad.id`) in the browser's local storage.
 - R2.8 Since the browser only exposes a controller after a button press, the app shows a prompt to press any button.
 - R2.9 Each controller has its own advanced settings menu, where the user can change things like key, scale, note mapping and other instrument parameters. All settings have sensible defaults so the menu is never required to start playing.
+- R2.9.1 Settings that are a number (for example mute fade-out, ring time, tilt smoothing, bend range) are number fields, not drop-down lists: the value can be typed in freely within the field's allowed range, and stepped up and down with the controller (R2.12). A typed value outside the range is set to the nearest allowed value; an empty or invalid entry goes back to the previous value. Settings that are a choice between named options (for example tone, octave, key, scale) stay drop-down lists.
 - R2.10 A regular gamepad can be set to one of these instruments:
   - Drums (default, see section 4b).
   - Guitar: same notes and behavior as the Xplorer (section 4). Four face buttons plus one shoulder button act as the five fret buttons, and the D-pad up/down acts as the strum bar.
@@ -47,7 +48,7 @@ Status: draft, under discussion.
 - R4.1 The guitar has five colored fret buttons. A note plays when a fret button is held and the strum bar is flicked up or down.
 - R4.2 When the fret button is released, the note keeps ringing.
 - R4.3 When the fret button of a ringing note is pressed again, that note is muted immediately on press-down. A new note only starts when the strum bar is hit.
-- R4.3.1 Muting is a short, soft fade-out rather than a hard cut. The fade time is a tunable parameter, to be adjusted by testing.
+- R4.3.1 Muting is a soft fade-out rather than a hard cut. The fade time is a setting (R2.9.1) with a default of 1000 ms, and it can be set both shorter and longer.
 - R4.4 If the strum bar is hit twice without releasing the fret button in between, the note plays twice, possibly with a new pitch.
 - R4.5 The whammy bar and the tilt (the angle the guitar is held at) affect the sound: one of them changes pitch and the other changes volume. Which one does what is not decided yet.
   - Note: on the Xplorer the tilt sensor may only report on/off rather than a gradual value. This must be verified with the real guitar before the mapping is chosen.
