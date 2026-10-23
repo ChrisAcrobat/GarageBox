@@ -48,6 +48,10 @@ const laneUis = new Map();
 let lanes = [];
 let layoutDirty = true;
 const size = { width: 0, height: 0 };
+/** The start screen (StartScreen) while the app has one, else null. */
+let startScreen = null;
+/** The global visual style, 'highway' or 'simple' (R5.2). */
+let visualStyle = getGlobalSettings().view;
 
 const manager = new GamepadManager({
   onConnect: (device) => {
@@ -522,9 +526,6 @@ function draw() {
     if (ui.starPower.visible) ui.starPower.draw(ctx, lane, now);
   }
 }
-
-let startScreen = null;
-let visualStyle = getGlobalSettings().view;
 
 function frame() {
   manager.poll();
