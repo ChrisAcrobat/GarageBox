@@ -776,8 +776,9 @@
 
       await s.section('mute fade-out and ring time hints (R4.3.1, R4.7.1)', () => s.withCleanStorage(() => {
         const hintOf = (key) => { const p = openPanel(fakeDevice('device:guitar:1', XPLORER), 'guitar', 'guitar'); try { const f = p.el.querySelector(`[data-key="${key}"]`); return f?.closest('label')?.querySelector('.field-hint')?.textContent ?? null; } finally { p.destroy(); } };
-        check('mute fade-out field has its hint', () => hintOf('fadeMs'), 'settings.fadeHint');
-        check('ring time field has its hint', () => hintOf('decay'), 'settings.decayHint');
+        check('mute fade-out field has its hint', () => hintOf('fadeMs'), I18N.t('settings.fadeHint'));
+        check('ring time field has its hint', () => hintOf('decay'), I18N.t('settings.decayHint'));
+        check('both hints are translated', () => [I18N.t('settings.fadeHint') !== 'settings.fadeHint', I18N.t('settings.decayHint') !== 'settings.decayHint'], [true, true]);
       }));
 
       s.finish();
