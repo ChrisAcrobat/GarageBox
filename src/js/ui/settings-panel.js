@@ -43,7 +43,6 @@ function fieldDefinitions(device) {
   const notes = (c) => c.kind !== 'drums' && !keysDrums(c);
   const plucked = (c) => (c.kind === 'guitar' && (c.source === 'pluck' || c.source === 'bass')) || (c.kind === 'keys' && !keysDrums(c));
   const guitarNotes = (c) => guitarPart(c) && notes(c);
-  const drumOptions = DRUM_NOTES.map((value) => ({ value, text: t(`drum.${value}`) }));
   const fields = [];
   if (device.isKeyboard) {
     // The keyboard's instrument: Piano or Drums (R4c.12).
@@ -51,7 +50,7 @@ function fieldDefinitions(device) {
       key: 'keysMode',
       label: 'settings.instrument',
       get: (settings) => resolveKeysMode(settings.keysMode),
-      options: KEYS_MODES.map((value) => ({ value, text: t(`keysMode.${value}`) })),
+      options: choiceOptions(KEYS_MODES, 'keysMode'),
     });
   } else {
     fields.push({
@@ -70,7 +69,7 @@ function fieldDefinitions(device) {
       when: (c) => (SOURCES_FOR[c.instrument] || []).length > 1 && notes(c),
       options: (c) => [
         { value: 'auto', text: t('source.autoWith', { source: t(`source.${DEFAULT_SOURCES[c.instrument]}`) }) },
-        ...SOURCES_FOR[c.instrument].map((value) => ({ value, text: t(`source.${value}`) })),
+        ...choiceOptions(SOURCES_FOR[c.instrument], 'source'),
       ],
     },
     {
@@ -86,14 +85,14 @@ function fieldDefinitions(device) {
       key: 'effect',
       label: 'settings.effect',
       when: notes,
-      options: CHOICES.effect.map((value) => ({ value, text: t(`effect.${value}`) })),
+      options: choiceOptions(CHOICES.effect, 'effect'),
     },
     {
       key: 'dpadAction',
       label: 'settings.dpadAction',
       when: guitarLane,
       hint: () => 'settings.dpadActionHint',
-      options: CHOICES.dpadAction.map((value) => ({ value, text: t(`dpadAction.${value}`) })),
+      options: choiceOptions(CHOICES.dpadAction, 'dpadAction'),
     },
     {
       key: 'root',
@@ -106,20 +105,20 @@ function fieldDefinitions(device) {
       key: 'scale',
       label: 'settings.scale',
       when: guitarNotes,
-      options: CHOICES.scale.map((value) => ({ value, text: t(`scale.${value}`) })),
+      options: choiceOptions(CHOICES.scale, 'scale'),
     },
     {
       key: 'octave',
       label: 'settings.octave',
       when: (c) => c.kind === 'guitar',
-      options: CHOICES.octave.map((value) => ({ value, text: t(`octave.${value}`) })),
+      options: choiceOptions(CHOICES.octave, 'octave'),
     },
     {
       key: 'whammy',
       label: 'settings.whammy',
       when: (c) => c.kind === 'guitar' && has('whammy'),
       hint: (c) => (c.settings.whammy === 'off' ? null : `settings.whammyHint.${c.settings.whammy}`),
-      options: CHOICES.whammy.map((value) => ({ value, text: t(`expression.${value}`) })),
+      options: choiceOptions(CHOICES.whammy, 'expression'),
     },
     {
       key: 'bendRange',
@@ -161,9 +160,26 @@ function fieldDefinitions(device) {
       key: 'brightness',
       label: 'settings.brightness',
       when: plucked,
-      options: CHOICES.brightness.map((value) => ({ value, text: t(`brightness.${value}`) })),
+      options: choiceOptions(CHOICES.brightness, 'brightness'),
     },
   );
+  fields.push(...drumSoundFields(device, keysDrums));
+  return fields;
+}
+
+/** Select options for `values`, labelled with the text keys `<prefix>.<value>`. */
+function choiceOptions(values, prefix) {
+  return values.map((value) => ({ value, text: t(`${prefix}.${value}`) }));
+}
+
+/**
+ * The drum sound fields (grouped): one per drum control (R4b.2) and, on the
+ * keyboard, one per letter key in Drums mode (R4c.13, shown when `keysDrums`)
+ * and one per numpad key in both modes (R4c.14).
+ */
+function drumSoundFields(device, keysDrums) {
+  const drumOptions = choiceOptions(DRUM_NOTES, 'drum');
+  const fields = [];
   // Drums: one sound per control (R4b.2).
   for (const control of Object.keys(device.mapping.controls)) {
     if (!(control in DEFAULT_DRUM_MAP)) continue;
