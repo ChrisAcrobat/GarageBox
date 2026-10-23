@@ -193,16 +193,21 @@ export class VoiceTracker {
     return env * v.peak;
   }
 
+  /**
+   * Removes voices whose sound has stopped (below SILENT_LEVEL). Both views
+   * call this every frame for every channel of a lane (design 5, R5.4.2).
+   * Checked without the channel volume, so a quiet volume does not drop voices.
+   */
+  prune(now) {
+    for (const [id, v] of this.voices) {
+      if (this._envelope(v, now) < SILENT_LEVEL) this.voices.delete(id);
+    }
+  }
+
   /** Removes silent voices. Returns the remaining voices with their level. */
   active(now) {
-    const out = [];
-    for (const [id, v] of this.voices) {
-      // Checked without the channel volume, so a quiet volume does not drop voices.
-      const env = this._envelope(v, now);
-      if (env < SILENT_LEVEL) this.voices.delete(id);
-      else out.push({ ...v, level: env * this.gain });
-    }
-    return out;
+    this.prune(now);
+    return [...this.voices.values()].map((v) => ({ ...v, level: this._envelope(v, now) * this.gain }));
   }
 }
 

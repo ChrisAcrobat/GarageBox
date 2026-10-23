@@ -290,6 +290,15 @@ export function guitarFretStates(guitar, tracker, now) {
 }
 
 /**
+ * Drops the silent voices of every channel of a lane (main, guitar keys,
+ * keyboard drums). Called by both views each frame, so voices and highway
+ * notes end in every view and channel (design 5, R5.4.2).
+ */
+export function pruneLaneVoices(lane, now) {
+  for (const channel of Object.values(lane.channels || {})) channel?.tracker?.prune(now);
+}
+
+/**
  * Draws the simple view of one lane into `area`.
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} lane lane state from main.js: { device, color, kind, instrument, channels }
@@ -301,6 +310,7 @@ export function drawSimpleView(ctx, lane, area, t, now) {
   const { device, color, instrument } = lane;
   const { x, w } = area;
   let y = area.y;
+  pruneLaneVoices(lane, now);
 
   if (lane.kind === 'guitar' && instrument) {
     const tracker = lane.channels.main.tracker;

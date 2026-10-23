@@ -18,7 +18,7 @@
 // per drum sound, like a drums lane (R4c.13).
 
 import { FRET_COLORS, withAlpha } from './lanes.js';
-import { drawFretRow, guitarFretStates, guitarLabelStrip } from './simple-view.js';
+import { drawFretRow, guitarFretStates, guitarLabelStrip, pruneLaneVoices } from './simple-view.js';
 import { drawKeyboard, keyboardHeight } from './keyboard-view.js';
 import { noteName } from '../audio/theory.js';
 
@@ -300,6 +300,7 @@ function drawRingingLabels(ctx, highway, project, yNear) {
 export function drawHighway(ctx, lane, area, t, now) {
   const { kind, instrument, color } = lane;
   const highway = lane.highway;
+  pruneLaneVoices(lane, now); // silent voices end their notes (R5.4.2, R5.4.3)
   highway.update(now);
 
   // Bottom strip: what the player presses.
