@@ -705,6 +705,7 @@
         const gl = tg({ tiltGlide: true });
         tilt(gl, 0.44); tapBack(gl, 0.44); tilt(gl, 0.465);
         check('glide on: a quarter step of tilt slides the strip linearly (frac 0.25), without animation', () => [strip(gl, 60000), strip(gl, 60001)], [[0.25, 'E3', 0.25], [0.25, 'E3', 0.25]]);
+        check('glide on with reduced motion: the strip shows the whole step the sound rounds to (R5.7), not the slide', () => strip(gl, 60002, true), [0, 'E3', 0]);
       });
 
       await s.section('orientation bars (R5.8)', () => {
@@ -722,7 +723,7 @@
         check('locked base +5 keeps A4 at 2 bars', () => [g.stepBase, noteName(g.referenceMidi()), SV.guitarLabelStrip(g, false).bars], [5, 'A3', [0, 0, 2, 0, 0, 0]]);
         const csm = () => new Guitar({ ...guitarOptions({ ...DEFAULTS.device, root: 1, scale: 'minorPentatonic' }, 'guitar'), tiltSmoothing: 0 });
         check('C# minor pentatonic: reference F#3, strip C#3..C#4 marks F#3 with 1 bar', () => { const h = csm(); const st = SV.guitarLabelStrip(h, false); return [noteName(h.referenceMidi()), st.labels, st.bars]; }, ['F#3', ['C#3', 'E3', 'F#3', 'G#3', 'B3', 'C#4'], [0, 0, 1, 0, 0, 0]]);
-        check('C# minor pentatonic at base +5 / -5: F#4 / F#2 get 2 bars', () => { const h = csm(); const r = []; for (const base of [5, -5]) { h.configure({ rangeOffset: base }); const st = SV.guitarLabelStrip(h, false); r.push(st.labels[2], st.bars); } return r; }, ['F#4', [0, 0, 2, 0, 0, 0], 'F#2', [0, 0, 2, 0, 0, 0]]);
+        check('C# minor pentatonic at base +5 / -5: F#4 / F#2 get 2 bars', () => { const r = []; for (const base of [5, -5]) { const h = csm(); h.configure({ rangeOffset: base }); const st = SV.guitarLabelStrip(h, false); r.push(st.labels[2], st.bars); } return r; }, ['F#4', [0, 0, 2, 0, 0, 0], 'F#2', [0, 0, 2, 0, 0, 0]]);
         check('G major: reference B3, strip G3..E4 marks B3', () => { const h = new Guitar(guitarOptions({ ...DEFAULTS.device, root: 7, scale: 'major' }, 'guitar')); const st = SV.guitarLabelStrip(h, false); return [noteName(h.referenceMidi()), st.labels, st.bars]; }, ['B3', ['G3', 'A3', 'B3', 'C4', 'D4', 'E4'], [0, 0, 1, 0, 0, 0]]);
         check('changing the key on a running guitar moves the reference (A3 -> B3)', () => { const h = new Guitar(); const before = noteName(h.referenceMidi()); h.configure(guitarOptions({ ...DEFAULTS.device, root: 7, scale: 'major' }, 'guitar')); return [before, noteName(h.referenceMidi())]; }, ['A3', 'B3']);
       });
