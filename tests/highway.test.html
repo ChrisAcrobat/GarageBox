@@ -111,8 +111,8 @@
 
       await s.section('trail width follows the bend (R5.4.5)', () => {
         const r = (x) => Math.round(x * 1000) / 1000;
-        check('bend range -2: no bend = 100 %; half whammy -1 = 62.5 %; full whammy -2 = 25 %', [0, -1, -2].map((b) => r(HV.bendWidth(b, -2))), [1, 0.625, 0.25]);
-        check('beyond the bend range stays at 25 %', r(HV.bendWidth(-4, -2)), 0.25);
+        check('bend range -2: no bend = 100 %; half whammy -1 = 60 %; full whammy -2 = 20 %', [0, -1, -2].map((b) => r(HV.bendWidth(b, -2))), [1, 0.6, 0.2]);
+        check('beyond the bend range stays at 20 %', r(HV.bendWidth(-4, -2)), 0.2);
         check('bend range +2: full whammy +2 = 150 %, half = 125 %', [2, 1].map((b) => r(HV.bendWidth(b, 2))), [1.5, 1.25]);
         check('bend range 0 = normal width', r(HV.bendWidth(0, 0)), 1);
       });
