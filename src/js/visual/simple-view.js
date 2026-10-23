@@ -17,7 +17,7 @@
 
 import { ANALOG_CONTROLS } from '../input/mappings.js';
 import { noteName } from '../audio/theory.js';
-import { splitOffset } from '../instruments/guitar.js';
+import { splitOffset, TILT_STEP_HYSTERESIS } from '../instruments/guitar.js';
 import { FRET_COLORS, withAlpha, fitText } from './lanes.js';
 import { drawKeyboard, keyboardHeight } from './keyboard-view.js';
 
@@ -164,11 +164,31 @@ export function stripEase(t) {
   return x * x * (3 - 2 * x);
 }
 
+/** Largest strip nudge towards the next step, in steps (R5.7.2.1); a first guess. */
+export const STRIP_NUDGE_MAX = 1 / 6;
+
+/** Fraction of the way to the switch point where the nudge starts (R5.7.2.1); a first guess. */
+export const STRIP_NUDGE_START = 0.5;
+
 /**
- * The shown position of a note strip, in steps (R5.7.2). update() moves it
- * to `target` in one eased move of `durationMs`, whatever the distance; a new
- * target during a move starts a new move from the position shown now. The
- * first value, and every `instant` update, is shown at once.
+ * Strip nudge (R5.7.2.1) for a tilt `d` steps away from the step the sound
+ * uses: 0 up to STRIP_NUDGE_START of the way to the switch point
+ * `threshold`, then an eased rise to ±STRIP_NUDGE_MAX at the switch point.
+ */
+export function stripNudge(d, threshold = 0.5 + TILT_STEP_HYSTERESIS) {
+  const a = Math.abs(d);
+  const s = STRIP_NUDGE_START * threshold;
+  if (a <= s) return 0;
+  return Math.sign(d) * STRIP_NUDGE_MAX * stripEase((a - s) / (threshold - s));
+}
+
+/**
+ * The shown position of a note strip, in steps (R5.7.2): an animated base
+ * plus a nudge (R5.7.2.1) that is added directly. update() moves the base to
+ * `target` in one eased move of `durationMs`, whatever the distance. A new
+ * target starts a new move from the position shown now (nudge included), so
+ * the strip never jumps back. The first value, and every `instant` update,
+ * is shown at once.
  */
 export class StripAnimator {
   constructor(durationMs = STRIP_JUMP_MS) {
@@ -176,25 +196,25 @@ export class StripAnimator {
     this.from = null;
     this.to = null;
     this.start = 0;
+    this.lastNudge = 0;
   }
 
-  /** The position shown at `nowMs` (the current move, without retargeting). */
-  _shown(nowMs) {
+  /** The animated base at `nowMs` (the current move, without retargeting). */
+  _base(nowMs) {
     return this.from + (this.to - this.from) * stripEase((nowMs - this.start) / this.durationMs);
   }
 
-  update(target, nowMs, { instant = false } = {}) {
+  update(target, nowMs, { instant = false, nudge = 0 } = {}) {
     if (instant || this.to === null) {
       this.from = this.to = target;
       this.start = nowMs;
-      return target;
-    }
-    if (Math.abs(target - this.to) > 1e-9) {
-      this.from = this._shown(nowMs);
+    } else if (Math.abs(target - this.to) > 1e-9) {
+      this.from = this._base(nowMs) + this.lastNudge - nudge;
       this.to = target;
       this.start = nowMs;
     }
-    return this._shown(nowMs);
+    this.lastNudge = nudge;
+    return this._base(nowMs) + nudge;
   }
 }
 
@@ -211,24 +231,39 @@ function stripAnimatorFor(guitar) {
 }
 
 /**
+ * The nudge of a guitar's strip (R5.7.2.1): towards the next step as the
+ * tilt nears the switch point, only with tilt on and glide off, and not
+ * towards a direction the range limit blocks.
+ */
+function guitarStripNudge(guitar) {
+  if (!guitar.tiltEnabled || !guitar.displaySteps || !guitar.rangeSteps) return 0;
+  const d = guitar.displaySteps() - guitar.rangeSteps();
+  if (guitar.stepLimit && Math.abs(guitar.rangeSteps() + Math.sign(d)) > guitar.stepLimit()) return 0;
+  return stripNudge(d);
+}
+
+/**
  * The note-name strip of a guitar (R5.7): six labels starting at the whole
  * part of the shown offset and the fraction to scroll by. The strip heads for
  * `target`: with tilt glide the continuous displaySteps() (followed at once,
  * R5.7.1), otherwise the step the sound uses, rangeSteps(), reached with an
- * animated jump (R5.7.2). With reduced motion the target is always
- * rangeSteps(), even with glide on, and every change is shown at once, so the
- * strip moves in whole steps (R5.7).
+ * animated jump (R5.7.2) and nudged towards the next step near the switch
+ * point (R5.7.2.1). With reduced motion the target is always rangeSteps(),
+ * even with glide on, every change is shown at once and there is no nudge, so
+ * the strip moves in whole steps (R5.7).
  */
 export function guitarLabelStrip(guitar, reducedMotion = prefersReducedMotion(), nowMs = performance.now()) {
   const glide = !!guitar.glideActive?.();
   const target = glide && !reducedMotion && guitar.displaySteps ? guitar.displaySteps() : guitar.rangeSteps ? guitar.rangeSteps() : 0;
-  const offset = stripAnimatorFor(guitar).update(target, nowMs, { instant: reducedMotion || glide });
+  const instant = reducedMotion || glide;
+  const nudge = instant ? 0 : guitarStripNudge(guitar);
+  const offset = stripAnimatorFor(guitar).update(target, nowMs, { instant, nudge });
   const { whole, frac } = splitOffset(offset);
   const midis = [0, 1, 2, 3, 4, 5].map((j) => guitar.noteFor(j, whole));
   const labels = midis.map((midi) => (midi >= 0 && midi <= 127 ? noteName(midi) : ''));
   const refMidi = guitar.referenceMidi ? guitar.referenceMidi() : null;
   const bars = midis.map((midi) => orientationBars(midi, refMidi));
-  return { labels, midis, bars, frac, offset, target, refMidi };
+  return { labels, midis, bars, frac, offset, target, nudge, refMidi };
 }
 
 /** Lays out labelled pills left to right, wrapping lines. Returns the next y. */
