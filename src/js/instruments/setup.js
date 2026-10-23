@@ -29,10 +29,32 @@ export const DEFAULT_SOURCES = Object.freeze({
 /** Sound sources an instrument can use. Drums only have the MIDI drum kit. */
 export const SOURCES_FOR = Object.freeze({
   guitar: ['pluck', 'midi'],
-  bass: ['pluck', 'midi'],
+  bass: ['bass', 'pluck', 'midi'],
   drums: ['midi'],
   keys: ['midi', 'pluck'],
 });
+
+/**
+ * Generated sources that are not built yet and the source that plays in their
+ * place. The generated bass source (R3.4.1, bass-source.js) is added in a
+ * separate build; until then a stored 'bass' source plays the plucked string.
+ */
+const STAND_IN_SOURCES = Object.freeze({ bass: 'pluck' });
+
+/**
+ * The sounds D-pad "sound" steps through for an instrument (R4.15): the
+ * generated sources, then the MIDI source with the default program (-1) and a
+ * few General MIDI programs of the same family.
+ */
+export function soundCycle(instrument) {
+  const programs = instrument === 'bass' ? [32, 34, 35, 36, 37, 38, 39] : [24, 25, 26, 28, 29, 30, 31];
+  const generated = instrument === 'bass' ? ['bass', 'pluck'] : ['pluck'];
+  return [
+    ...generated.map((source) => ({ source })),
+    { source: 'midi', program: -1 },
+    ...programs.map((program) => ({ source: 'midi', program })),
+  ];
+}
 
 /** True for instruments that use the guitar logic (design 4.2, R2.10). */
 export function isGuitarLike(instrument) {
@@ -46,30 +68,41 @@ export function instrumentKind(instrument) {
 
 export function resolveSource(settings, instrument) {
   const allowed = SOURCES_FOR[instrument] || ['midi'];
-  return allowed.includes(settings.source) ? settings.source : DEFAULT_SOURCES[instrument];
+  const source = allowed.includes(settings.source) ? settings.source : DEFAULT_SOURCES[instrument];
+  return STAND_IN_SOURCES[source] ?? source;
 }
 
 export function resolveProgram(settings, instrument) {
   return settings.program >= 0 ? settings.program : DEFAULT_PROGRAMS[instrument] ?? 0;
 }
 
-/** Guitar options from device settings; bass is one octave lower (R2.10). */
-export function guitarOptions(settings, instrument, { gamepad = false } = {}) {
+/**
+ * Guitar options from device settings; bass is one octave lower (R2.10) and
+ * the octave setting moves both by whole octaves (R4.13).
+ */
+export function guitarOptions(settings, instrument, { gamepad = false, starPower = false } = {}) {
   const bass = instrument === 'bass';
-  const root = guitarRootMidi(settings.root) - (bass ? 12 : 0);
+  const root = guitarRootMidi(settings.root) - (bass ? 12 : 0) + 12 * (settings.octave ?? 0);
   return {
     notes: scaleNotes(root, settings.scale, 5),
     rootMidi: root,
     scale: [...(SCALES[settings.scale] || SCALES.minorPentatonic)],
     fade: settings.fadeMs / 1000,
     whammy: settings.whammy ?? 'bend',
-    tilt: settings.tilt ?? 'off',
     bendRange: settings.bendRange ?? -2,
     tiltSmoothing: (settings.tiltSmoothing ?? 80) / 1000,
-    rangeOffset: settings.rangeOffset ?? 0, // experiment E: saved locked range offset
-    tiltGlide: settings.tiltGlide === true, // experiment E: tilt glides the pitch
+    rangeOffset: settings.rangeOffset ?? 0, // saved locked range offset (R4.5.6)
+    tiltGlide: settings.tiltGlide === true, // tilt glides the pitch (R4.14)
+    dpadAction: settings.dpadAction ?? 'octave',
+    starPower,
     controlNames: gamepad ? GAMEPAD_GUITAR_CONTROLS : null,
   };
+}
+
+/** True when the device can trigger star power: it has both a whammy and a tilt control (R5.5). */
+export function canStarPower(device) {
+  const controls = device?.mapping?.controls || {};
+  return 'whammy' in controls && 'tilt' in controls;
 }
 
 /**
@@ -113,8 +146,9 @@ export function drumOptions(settings, device) {
 export function createInstrument(device, instrument, settings) {
   if (isGuitarLike(instrument)) {
     const gamepad = device.detection.type !== 'guitar';
+    const starPower = canStarPower(device) && settings.starPower !== false;
     return {
-      instrument: new Guitar(guitarOptions(settings, instrument, { gamepad })),
+      instrument: new Guitar(guitarOptions(settings, instrument, { gamepad, starPower })),
       sounds: { main: guitarSound(settings, instrument) },
     };
   }
@@ -126,7 +160,7 @@ export function createInstrument(device, instrument, settings) {
   }
   if (instrument === 'keys') {
     return {
-      // Experiment E: the keyboard has no tilt, so no tilt glide either.
+      // The keyboard has no tilt, so no tilt glide either; its D-pad action is not used.
       instrument: new Keys({ guitar: { ...guitarOptions(settings, 'guitar'), tiltGlide: false } }),
       // The guitar emulation on keys 1-5 always uses the plucked string.
       sounds: { main: keysSound(settings), guitar: guitarSound(settings, 'guitar', 'pluck') },
