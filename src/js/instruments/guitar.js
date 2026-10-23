@@ -270,9 +270,13 @@ export class Guitar extends Instrument {
 
   /** Current range offset in scale steps (base + tilt delta while tilt is on). */
   rangeSteps() {
+    return this._clampSteps(this.stepBase + (this.tiltEnabled ? this.tiltDelta : 0));
+  }
+
+  /** `steps` limited to +-stepLimit(). */
+  _clampSteps(steps) {
     const limit = this.stepLimit();
-    const total = this.stepBase + (this.tiltEnabled ? this.tiltDelta : 0);
-    return Math.max(-limit, Math.min(limit, total));
+    return Math.max(-limit, Math.min(limit, steps));
   }
 
   /**
@@ -391,8 +395,7 @@ export class Guitar extends Instrument {
    * on, the tilt is measured again from the current angle and stays on.
    */
   shiftOctave(dir, time) {
-    const limit = this.stepLimit();
-    const to = Math.max(-limit, Math.min(limit, this.rangeSteps() + dir * this.options.scale.length));
+    const to = this._clampSteps(this.rangeSteps() + dir * this.options.scale.length);
     this._setBase(to);
     this.emit({ type: 'action', action: 'rangeShifted', base: to, steps: this.rangeSteps(), time });
   }
@@ -426,26 +429,34 @@ export class Guitar extends Instrument {
   /** Starts fret i's note; `hold` for strummed notes (strum hold, R4.7.2), never for tap-to-play. */
   _play(fret, i, time, hold = false) {
     const voiceId = newVoiceId();
-    const held = hold ? { hold: true } : {};
     if (hold) this.heldVoices.add(voiceId);
-    if (this.glideActive()) {
+    const gliding = this.glideActive();
+    let midi;
+    let glide = 0;
+    if (gliding) {
       // The note of the whole step below, detuned up to the glided pitch.
       // (0.01 tolerance: a smoothed tilt resting a hair below a whole step uses that
       // step's own note instead of the step below plus an almost-full-step glide.)
       const offset = this.displaySteps();
-      const midi = this.noteFor(i, splitOffset(offset + 0.01).whole);
-      const glide = this.pitchFor(i, offset) - midi;
-      fret.voiceId = voiceId;
-      fret.midi = midi;
-      fret.glide = glide;
-      this.emit({ type: 'noteOn', voiceId, midi, velocity: this.options.velocity, time, column: i, glide, ...held });
-      return;
+      midi = this.noteFor(i, splitOffset(offset + 0.01).whole);
+      glide = this.pitchFor(i, offset) - midi;
+    } else {
+      midi = this.noteFor(i);
     }
-    const midi = this.noteFor(i);
     fret.voiceId = voiceId;
     fret.midi = midi;
-    fret.glide = 0;
-    this.emit({ type: 'noteOn', voiceId, midi, velocity: this.options.velocity, time, column: i, ...held });
+    fret.glide = glide;
+    // The noteOn carries `glide` only while gliding, and `hold` only for strummed notes.
+    this.emit({
+      type: 'noteOn',
+      voiceId,
+      midi,
+      velocity: this.options.velocity,
+      time,
+      column: i,
+      ...(gliding ? { glide } : {}),
+      ...(hold ? { hold: true } : {}),
+    });
   }
 
   /** Sends a 'glide' event when a ringing fret's pitch offset changed. */
@@ -507,8 +518,7 @@ export class Guitar extends Instrument {
       // With glide the sound is at the continuous offset, so lock the nearest
       // whole step to it (the strip snaps there too) and let ringing notes
       // settle on it. Without glide: the step the sound uses.
-      const limit = this.stepLimit();
-      this.stepBase = this.options.tiltGlide ? Math.max(-limit, Math.min(limit, Math.round(this.displaySteps()))) : this.rangeSteps();
+      this.stepBase = this.options.tiltGlide ? this._clampSteps(Math.round(this.displaySteps())) : this.rangeSteps();
       if (this.options.tiltGlide) this._settleGlide(this.stepBase, time);
       // Keep the options in step; the UI saves it as the rangeOffset setting.
       this.options = { ...this.options, rangeOffset: this.stepBase };
