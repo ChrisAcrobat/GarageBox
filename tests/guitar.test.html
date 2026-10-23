@@ -123,7 +123,7 @@
         check('the noteOff uses the mute fade-out of the options', offs[0]?.fade, g.options.fade);
         check('pressing again does not start a new note', play(g, [release('fret1'), press('fret1')]), []);
         check('fade time follows the setting', new Guitar({ fade: 0.3 }).options.fade, 0.3);
-        check('default settings: mute fade-out 250 ms -> fade 0.25 s (R4.3.1)', () => guitarOptions(DEFAULTS.device, 'guitar').fade, 0.25);
+        check('default settings: mute fade-out 500 ms -> fade 0.5 s (R4.3.1)', () => guitarOptions(DEFAULTS.device, 'guitar').fade, 0.5);
       });
 
       await s.section('independent frets, chords, same frame (R4.6, R4.8)', () => {
@@ -231,7 +231,7 @@
       });
 
       await s.section('number-field settings (R2.9.1)', () => s.withCleanStorage(() => {
-        check('defaults: fade 250 ms, ring time 10 s, smoothing 80 ms, bend -2', [DEFAULTS.device.fadeMs, DEFAULTS.device.decay, DEFAULTS.device.tiltSmoothing, DEFAULTS.device.bendRange], [250, 10, 80, -2]);
+        check('defaults: fade 500 ms, ring time 10 s, smoothing 80 ms, bend -2', [DEFAULTS.device.fadeMs, DEFAULTS.device.decay, DEFAULTS.device.tiltSmoothing, DEFAULTS.device.bendRange], [500, 10, 80, -2]);
         const device = fakeDevice('device:guitar:1', XPLORER);
         const panel = openPanel(device, 'guitar', 'guitar');
         try {
@@ -248,7 +248,7 @@
           check('an empty (invalid) entry restores the previous value', () => enter('fadeMs', ''), [10, 10]);
           check('ring time 40 is clamped to 30', () => enter('decay', '40'), [30, 30]);
           check('bend range -30 is clamped to -24', () => enter('bendRange', '-30'), [-24, -24]);
-          check('an invalid stored fade falls back to the default', () => { localStorage.setItem('musicSandbox.devices', JSON.stringify({ [device.id]: { fadeMs: 'x' } })); return ST.getDeviceSettings(device.id).fadeMs; }, 250);
+          check('an invalid stored fade falls back to the default', () => { localStorage.setItem('musicSandbox.devices', JSON.stringify({ [device.id]: { fadeMs: 'x' } })); return ST.getDeviceSettings(device.id).fadeMs; }, 500);
         } finally {
           panel.destroy();
         }
