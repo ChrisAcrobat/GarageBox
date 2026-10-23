@@ -208,9 +208,21 @@ export function setGlobalSetting(key, value) {
 }
 
 /** Returns the settings of one device (keyed by its settings id), merged with defaults. */
+/**
+ * Number of resets of each device's settings in this page session (not
+ * saved). getDeviceSettings() puts it under the RESET_COUNT symbol, so an
+ * instrument can tell a reset from another settings change even when the
+ * values stay the same (a reset with tilt on and a saved range offset that is
+ * already 0, R4.5.6).
+ */
+export const RESET_COUNT = Symbol('resetCount');
+const resetCounts = new Map();
+
 export function getDeviceSettings(id) {
   const all = readJson(DEVICES_KEY) || {};
-  return mergeWithDefaults(DEFAULTS.device, all[id]);
+  const settings = mergeWithDefaults(DEFAULTS.device, all[id]);
+  settings[RESET_COUNT] = resetCounts.get(id) || 0;
+  return settings;
 }
 
 /** Settings that make up a device's instrument choice, kept by a reset with `keepInstrument`. */
@@ -236,6 +248,7 @@ export function resetDeviceSettings(id, { keepInstrument = false } = {}) {
   if (Object.keys(kept).length) all[id] = kept;
   else delete all[id];
   writeJson(DEVICES_KEY, all);
+  resetCounts.set(id, (resetCounts.get(id) || 0) + 1);
   notify({ scope: 'device', id, key: null, value: null });
 }
 

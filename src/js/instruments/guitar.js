@@ -213,9 +213,13 @@ export class Guitar extends Instrument {
     }
     // The locked offset comes from the settings (rangeOffset). If it changed
     // (load, reset), it becomes the base; while tilt is on the tilt is
-    // measured again from here, so the range is exactly the new base.
+    // measured again from here, so the range is exactly the new base. A reset
+    // (a new resetCount) does this even when the offset stays the same,
+    // e.g. 0 -> 0 with the neck tilted (R4.5.6).
     const base = Number.isInteger(this.options.rangeOffset) ? this.options.rangeOffset : 0;
-    if (base !== this.stepBase) this._setBase(base);
+    const reset = options.resetCount !== undefined && options.resetCount !== this.resetCount;
+    if (options.resetCount !== undefined) this.resetCount = options.resetCount;
+    if (base !== this.stepBase || (reset && this.tiltEnabled)) this._setBase(base);
     // Force bend/volume to be re-sent with the new assignment.
     this.lastBend = null;
     this.lastGain = null;

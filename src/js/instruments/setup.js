@@ -11,7 +11,7 @@ import { Guitar, GAMEPAD_GUITAR_CONTROLS } from './guitar.js';
 import { Drums } from './drums.js';
 import { Keys } from './keys.js';
 import { guitarRootMidi, scaleNotes, SCALES } from '../audio/theory.js';
-import { BRIGHTNESS_VALUES } from '../settings/store.js';
+import { BRIGHTNESS_VALUES, RESET_COUNT } from '../settings/store.js';
 
 /** Default General MIDI program (0-based) per instrument when the MIDI source is used. */
 export const DEFAULT_PROGRAMS = Object.freeze({
@@ -86,6 +86,7 @@ export function guitarOptions(settings, instrument, { gamepad = false, starPower
     bendRange: settings.bendRange ?? -2,
     tiltSmoothing: (settings.tiltSmoothing ?? 80) / 1000,
     rangeOffset: settings.rangeOffset ?? 0, // saved locked range offset (R4.5.6)
+    resetCount: settings[RESET_COUNT] ?? 0, // a new count = the settings were reset (R4.5.6)
     tiltGlide: settings.tiltGlide === true, // tilt glides the pitch (R4.14)
     dpadAction: settings.dpadAction ?? 'octave',
     starPower,
