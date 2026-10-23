@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>App smoke test – GarageBox - Music Sandbox</title>
+    <style>
+      body { background: #0e0f12; color: #e8eaed; font: 14px/1.5 ui-monospace, monospace; padding: 16px; }
+      .pass { color: #3dd68c; }
+      .fail { color: #ff6369; }
+      iframe { width: 900px; height: 600px; border: 1px solid #333; }
+    </style>
+  </head>
+  <body>
+    <h1>App smoke test</h1>
+    <p>Loads <code>src/index.html</code> in a frame, starts it with the computer keyboard, plays a few keys, switches the view, the language and the keyboard's mode, and checks that no error is reported on the way (uncaught errors, unhandled rejections, <code>console.error</code>). It catches faults that only show in the running app, such as a function that is no longer defined in a draw path. See <a href="./README.md">tests/README.md</a>.</p>
+    <p id="summary"></p>
+    <ul id="results"></ul>
+    <iframe id="app" title="app"></iframe>
+    <script type="module">
+      import { createSuite } from './test-runner.js';
+
+      const s = createSuite('app smoke test', { timeoutMs: 30000 });
+      const { check } = s;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const frame = document.getElementById('app');
+
+      // The app's page with an error hook in front of its own scripts; <base> makes its relative
+      // URLs resolve to src/ as when it is opened directly.
+      const hook = `<script>
+        window.__errors = [];
+        addEventListener('error', (e) => __errors.push('error: ' + (e.message || e.target?.src || e.target?.href || 'resource')), true);
+        addEventListener('unhandledrejection', (e) => __errors.push('rejection: ' + (e.reason?.message || e.reason)));
+        const orig = console.error.bind(console);
+        console.error = (...a) => { __errors.push('console.error: ' + a.join(' ')); orig(...a); };
+      <\/script>`;
+      const html = await (await fetch('../src/index.html')).text();
+      // Errors reported since the previous call, at most 3 distinct ones (a draw error repeats every frame).
+      let seen = 0;
+      const errors = () => {
+        const all = frame.contentWindow?.__errors || [];
+        const fresh = [...new Set(all.slice(seen))].slice(0, 3);
+        seen = all.length;
+        return fresh;
+      };
+
+      await s.withCleanStorage(async () => {
+        await s.section('load and start (src/index.html)', async () => {
+          await new Promise((resolve) => {
+            frame.addEventListener('load', resolve, { once: true });
+            frame.srcdoc = html.replace('<head>', `<head><base href="${new URL('../src/', location.href)}">${hook}`);
+          });
+          await sleep(800);
+          const doc = frame.contentDocument;
+          check('the page loads without errors', errors(), []);
+          check('the start screen is shown', !!doc.querySelector('#start-screen .start-button'), true);
+          doc.querySelector('#start-screen .start-button')?.click();
+          await sleep(300);
+          doc.getElementById('start-keyboard')?.click();
+          await sleep(500);
+          check('"Use the keyboard" adds the keyboard lane (it gets a settings button)', doc.querySelectorAll('#lane-overlays button').length > 0, true);
+          check('starting with the keyboard gives no errors', errors(), []);
+        });
+
+        await s.section('play, switch view, language and keyboard mode', async () => {
+          const win = frame.contentWindow;
+          const doc = frame.contentDocument;
+          const key = async (code, key) => {
+            win.dispatchEvent(new win.KeyboardEvent('keydown', { code, key, bubbles: true }));
+            await sleep(60);
+            win.dispatchEvent(new win.KeyboardEvent('keyup', { code, key, bubbles: true }));
+          };
+          const select = async (el, value) => { if (!el) return; el.value = value; el.dispatchEvent(new win.Event('change', { bubbles: true })); await sleep(300); };
+          for (const [code, k] of [['KeyA', 'a'], ['KeyS', 's'], ['Digit1', '1'], ['Space', ' '], ['Numpad5', '5']]) await key(code, k);
+          await sleep(300);
+          check('playing piano, guitar keys and the numpad in the highway view gives no errors', errors(), []);
+          await select(doc.getElementById('view-select'), 'simple');
+          for (const [code, k] of [['KeyD', 'd'], ['Digit2', '2']]) await key(code, k);
+          await sleep(300);
+          await select(doc.getElementById('view-select'), 'highway');
+          check('switching to the simple view and back gives no errors', errors(), []);
+          await select(doc.getElementById('language-select'), 'sv');
+          check('switching the language to Swedish gives no errors', errors(), []);
+          doc.querySelector('#lane-overlays button')?.click();
+          await sleep(300);
+          const mode = doc.querySelector('#lane-overlays select[data-key="keysMode"]');
+          check('the keyboard panel has the Piano/Drums choice', !!mode, true);
+          await select(mode, 'drums');
+          for (const [code, k] of [['KeyA', 'a'], ['KeyK', 'k']]) await key(code, k);
+          await sleep(300);
+          await select(doc.querySelector('#lane-overlays select[data-key="keysMode"]'), 'piano');
+          await sleep(300);
+          check('Drums mode and back to Piano give no errors', errors(), []);
+          frame.srcdoc = '';
+        });
+      });
+
+      s.finish();
+    </script>
+  </body>
+</html>
