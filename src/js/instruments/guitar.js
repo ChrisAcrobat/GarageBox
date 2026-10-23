@@ -146,7 +146,7 @@ export const DEFAULT_GUITAR_OPTIONS = Object.freeze({
   // move the fret range by scale steps (tilt, D-pad octave).
   rootMidi: 52,
   scale: [0, 3, 5, 7, 10],
-  fade: 0.25, // seconds (R4.3.1)
+  fade: 0.5, // seconds (R4.3.1)
   velocity: 100,
   whammy: 'bend', // 'bend' | 'volume' | 'off' (R4.5)
   bendRange: -2, // semitones at full deflection (negative = down)

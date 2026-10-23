@@ -42,7 +42,7 @@ export const DEFAULTS = Object.freeze({
     // Octave of the fret range (R4.13): -1, 0 or +1 octave.
     octave: 0,
     // Mute fade-out in milliseconds (R4.3.1, number field R2.9.1).
-    fadeMs: 250,
+    fadeMs: 500,
     // Ring time of the plucked string and bass sources: seconds until a note
     // has died away (R4.7), and tone color.
     decay: 10,
