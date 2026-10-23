@@ -123,7 +123,8 @@ function fretLabelSize(r) {
 function drawLabelStrip(ctx, frets, strip, x, y, r, spacing) {
   const { labels, frac } = strip;
   const bars = strip.bars || [];
-  ctx.font = `700 ${fretLabelSize(r)}px system-ui, sans-serif`;
+  const size = fretLabelSize(r);
+  ctx.font = `700 ${size}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   const first = x + r;
