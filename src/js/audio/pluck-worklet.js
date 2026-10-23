@@ -23,7 +23,7 @@
 // Strum hold (R4.7.2, design 5): a voice started with `hold` runs with loop
 // gain 1 (no ring-time loss; only the loop low-pass takes energy) and a
 // make-up gain that keeps its output at its level between 50 and 100 ms
-// (HOLD_REFERENCE_START, HOLD_REFERENCE_SECONDS), at most x4 (MAX_MAKEUP).
+// (HOLD_REFERENCE_START, HOLD_REFERENCE_SECONDS), at most x16 (MAX_MAKEUP).
 // On holdEnd the make-up freezes and the ring-time loop gain applies again,
 // so the note falls 60 dB in the ring time from the level it had at the
 // release.
@@ -38,7 +38,7 @@ const OUTPUT_GAIN = 1.2; // about as loud as the MIDI guitar at the same velocit
 const HOLD_REFERENCE_START = 0.05;
 const HOLD_REFERENCE_SECONDS = 0.05;
 const HOLD_FOLLOW_SECONDS = 0.02; // smoothing of the level follower and the make-up gain
-const MAX_MAKEUP = 4; // +12 dB
+const MAX_MAKEUP = 16; // +24 dB (decision 4-pluck-hold-makeup-limit)
 
 class StringVoice {
   constructor(id, frequency, velocity, decay, brightness, bendRatio, sampleRate, glideSemitones = 0, hold = false) {
