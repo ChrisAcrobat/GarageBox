@@ -149,6 +149,8 @@
   "settings.bendRangeHint": "How far the pitch moves at full whammy. 12 semitones = one octave.",
   "settings.tiltSmoothing": "Tilt smoothing",
   "settings.tiltSmoothingHint": "Evens out small shakes of the hand. Higher = steadier but slower to follow the neck.",
+  "settings.fadeHint": "How long a note takes to fade away when you mute it. Shorter = a tighter stop.",
+  "settings.decayHint": "How long a note keeps ringing by itself before it dies away, if you don't mute it.",
   "settings.tiltGlide": "Tilt glides the pitch",
   "expression.bend": "Pitch bend",
   "expression.volume": "Volume",

@@ -147,6 +147,7 @@ function fieldDefinitions(device) {
       label: 'settings.fade',
       unit: 'unit.msName',
       when: guitarNotes,
+      hint: () => 'settings.fadeHint',
       number: true,
     },
     {
@@ -154,6 +155,7 @@ function fieldDefinitions(device) {
       label: 'settings.decay',
       unit: 'unit.secondsName',
       when: plucked,
+      hint: () => 'settings.decayHint',
       number: true,
     },
     {

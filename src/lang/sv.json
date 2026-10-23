@@ -149,6 +149,8 @@
   "settings.bendRangeHint": "Hur långt tonhöjden ändras när whammy-spaken är helt nedtryckt. 12 halvtoner = en oktav.",
   "settings.tiltSmoothing": "Utjämning av lutning",
   "settings.tiltSmoothingHint": "Jämnar ut små skakningar på handen. Högre = stadigare men följer halsen långsammare.",
+  "settings.fadeHint": "Hur lång tid det tar för tonen att tona ut när du tystar den. Kortare = tvärare stopp.",
+  "settings.decayHint": "Hur länge en ton klingar av sig själv innan den dör ut, om du inte tystar den.",
   "settings.tiltGlide": "Tilten glider tonhöjden",
   "expression.bend": "Tonhöjdsböjning",
   "expression.volume": "Volym",
