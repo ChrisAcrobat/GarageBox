@@ -175,6 +175,10 @@ export class Guitar extends Instrument {
     this.frets = FRETS.map(() => ({ held: false, voiceId: null, midi: null, tapped: false, glide: 0 }));
     // Ringing notes must settle on a whole step at the next frame (tilt glide).
     this.glideSettlePending = false;
+    // Strum hold (R4.7.2): strum controls currently down, and the voices
+    // started by strums while they are down (they get holdEnd on release).
+    this.strumsDown = new Set();
+    this.heldVoices = new Set();
     this.tapToPlay = false;
     this.lastBend = null;
     this.lastGain = null;
@@ -333,7 +337,21 @@ export class Guitar extends Instrument {
     }
 
     // 2. Strum: one strum per frame is enough even if up and down both fired.
-    if (named.some((e) => STRUMS.includes(e.name) && e.type === 'pressed')) this._strum(time);
+    // The strummed voices are held while any strum control is down (R4.7.2);
+    // the hold ends once none is down after this frame's edges, so a press
+    // and release in one frame sends noteOn (hold) and holdEnd together.
+    let strummed = false;
+    for (const e of named) {
+      if (!STRUMS.includes(e.name)) continue;
+      if (e.type === 'pressed') {
+        this.strumsDown.add(e.name);
+        strummed = true;
+      } else if (e.type === 'released') {
+        this.strumsDown.delete(e.name);
+      }
+    }
+    if (strummed) this._strum(time);
+    if (this.strumsDown.size === 0) this._endHold(time);
 
     // 3. Start, Back (tap toggles tilt on release, holds reset) and the D-pad action.
     for (const e of named) {
@@ -383,12 +401,33 @@ export class Guitar extends Instrument {
     this.frets.forEach((fret, i) => {
       if (!fret.held) return; // R4.6
       this._mute(fret, time); // R4.4: a ringing note from an earlier strum restarts
-      this._play(fret, i, time);
+      this._play(fret, i, time, true);
     });
   }
 
-  _play(fret, i, time) {
+  /** Sends holdEnd for every held voice (strum released, R4.7.2). */
+  _endHold(time) {
+    for (const voiceId of this.heldVoices) this.emit({ type: 'holdEnd', voiceId, time });
+    this.heldVoices.clear();
+  }
+
+  /**
+   * Ends a strum hold at once, e.g. when a controller menu takes the strum
+   * bar (design 7.4). Returns the holdEnd events; the later strum release
+   * then does nothing.
+   */
+  releaseStrumHold(time = 0) {
+    this.out = [];
+    this._endHold(time);
+    this.strumsDown.clear();
+    return this.out;
+  }
+
+  /** Starts fret i's note; `hold` for strummed notes (strum hold, R4.7.2), never for tap-to-play. */
+  _play(fret, i, time, hold = false) {
     const voiceId = newVoiceId();
+    const held = hold ? { hold: true } : {};
+    if (hold) this.heldVoices.add(voiceId);
     if (this.glideActive()) {
       // The note of the whole step below, detuned up to the glided pitch.
       // (0.01 tolerance: a smoothed tilt resting a hair below a whole step uses that
@@ -399,14 +438,14 @@ export class Guitar extends Instrument {
       fret.voiceId = voiceId;
       fret.midi = midi;
       fret.glide = glide;
-      this.emit({ type: 'noteOn', voiceId, midi, velocity: this.options.velocity, time, column: i, glide });
+      this.emit({ type: 'noteOn', voiceId, midi, velocity: this.options.velocity, time, column: i, glide, ...held });
       return;
     }
     const midi = this.noteFor(i);
     fret.voiceId = voiceId;
     fret.midi = midi;
     fret.glide = 0;
-    this.emit({ type: 'noteOn', voiceId, midi, velocity: this.options.velocity, time, column: i });
+    this.emit({ type: 'noteOn', voiceId, midi, velocity: this.options.velocity, time, column: i, ...held });
   }
 
   /** Sends a 'glide' event when a ringing fret's pitch offset changed. */
@@ -435,6 +474,8 @@ export class Guitar extends Instrument {
   _mute(fret, time) {
     fret.tapped = false;
     if (fret.voiceId === null) return;
+    // A muted voice already gets its noteOff, so no holdEnd follows.
+    this.heldVoices.delete(fret.voiceId);
     this.emit({ type: 'noteOff', voiceId: fret.voiceId, fade: this.options.fade, time });
     fret.voiceId = null;
     fret.midi = null;

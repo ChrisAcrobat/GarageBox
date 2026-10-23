@@ -260,6 +260,9 @@ function menuInput(ui, nowMs) {
   // release of a Back press that closed a menu then does nothing (R4.11.1).
   ui.logic?.cancelBackHold?.();
   ui.backHold.cancel();
+  // The menu takes the strum bar, so a strum hold ends now (R4.7.2); the
+  // holdEnd events are played with this frame's events.
+  ui.menuEvents = ui.logic?.releaseStrumHold?.(nowMs / 1000) || [];
   const intents = ui.menuInput.update(edges, ui.device.controls, nowMs);
   if (startActive) {
     // The start screen only needs Start, so it is not rotated.
@@ -282,7 +285,9 @@ function playInstruments() {
     if (!ui.logic) continue;
     // Tap-to-play only while the settings panel is open as a gamepad menu (design 7.4).
     ui.logic.setTapToPlay?.(!!ui.panel?.gamepadMenu);
-    const events = ui.logic.handle(edges, ui.device.controls, now);
+    const events = ui.menuEvents || [];
+    ui.menuEvents = null;
+    events.push(...ui.logic.handle(edges, ui.device.controls, now));
     if (!ui.logic.handlesBackHold) events.push(...genericBackHold(ui, edges, now));
     for (const event of events) {
       if (event.type === 'action') {
