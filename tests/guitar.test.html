@@ -683,11 +683,11 @@
         tilt(g, 0.465);
         check('glide off, a quarter step of tilt does not move the strip', () => strip(g, T + 500), [0, 'E3', 0]);
         tilt(g, 0.509);
-        check('glide off, +0.69: sound still 0, strip does not move', () => [g.rangeSteps(), ...strip(g, T + 1000)], [0, 0, 'E3', 0]);
+        check('glide off, +0.69: sound still 0, strip nudged to 0.1663 (R5.7.2.1)', () => [g.rangeSteps(), ...strip(g, T + 1000)], [0, 0.1663, 'E3', 0.1663]);
         tilt(g, 0.511);
         T = 20000;
-        check('+0.71: the sound changes to 1, the strip starts at 0', () => [g.rangeSteps(), ...strip(g, T)], [1, 0, 'E3', 0]);
-        check('the strip at 75 ms: halfway, labels of step 0 with frac 0.5', () => strip(g, T + 75), [0.5, 'E3', 0.5]);
+        check('+0.71: the sound changes to 1, the jump starts at the nudged 0.1663 (no jump back)', () => [g.rangeSteps(), ...strip(g, T)], [1, 0.1663, 'E3', 0.1663]);
+        check('the strip at 75 ms: halfway from 0.1663 to 1 (0.5831), labels of step 0', () => strip(g, T + 75), [0.5831, 'E3', 0.5831]);
         check('the strip at 150 ms: on step 1 (labels of step 1, frac 0), and stays', () => [strip(g, T + 150), strip(g, T + 1000)], [[1, 'G3', 0], [1, 'G3', 0]]);
         T = 30000;
         tilt(g, 0.735);
@@ -706,6 +706,63 @@
         tilt(gl, 0.44); tapBack(gl, 0.44); tilt(gl, 0.465);
         check('glide on: a quarter step of tilt slides the strip linearly (frac 0.25), without animation', () => [strip(gl, 60000), strip(gl, 60001)], [[0.25, 'E3', 0.25], [0.25, 'E3', 0.25]]);
         check('glide on with reduced motion: the strip shows the whole step the sound rounds to (R5.7), not the slide', () => strip(gl, 60002, true), [0, 'E3', 0]);
+      });
+
+      await s.section('note strip nudge before a step change (R5.7.2.1)', async () => {
+        const NUD = await s.load('../src/js/visual/simple-view.js', ['stripNudge', 'STRIP_NUDGE_MAX', 'STRIP_NUDGE_START']);
+        const nudge = NUD.stripNudge || (() => NaN);
+        const r4 = (v) => +(+v).toFixed(4);
+        check('STRIP_NUDGE_MAX = 1/6, STRIP_NUDGE_START = 0.5 (first guesses)', [NUD.STRIP_NUDGE_MAX, NUD.STRIP_NUDGE_START], [1 / 6, 0.5]);
+        check('stripNudge: no nudge in the middle (0, 0.2, 0.3, 0.35)', () => [0, 0.2, 0.3, 0.35].map((d) => r4(nudge(d))), [0, 0, 0, 0]);
+        check('stripNudge: 0.5, 0.6, 0.69, 0.7, 0.8 = 0.0656, 0.1336, 0.1663, 0.1667, 0.1667', () => [0.5, 0.6, 0.69, 0.7, 0.8].map((d) => r4(nudge(d))), [0.0656, 0.1336, 0.1663, 0.1667, 0.1667]);
+        check('stripNudge is odd: -0.6 -> -0.1336, -0.3 -> 0', () => [r4(nudge(-0.6)), r4(nudge(-0.3))], [-0.1336, 0]);
+        check('stripNudge with threshold 1: 0.5 -> 0, 0.75 -> 0.0833', () => [r4(nudge(0.5, 1)), r4(nudge(0.75, 1))], [0, 0.0833]);
+        const anim = () => (SV.StripAnimator ? new SV.StripAnimator() : { update: () => NaN });
+        check('StripAnimator with nudge: a jump starts at the nudged position (0.15, 0.15, 0.575 at 75 ms)', () => { const a = anim(); return [a.update(0, 0, { nudge: 0.15 }), a.update(1, 10, { nudge: 0 }), a.update(1, 85, { nudge: 0 })].map(r4); }, [0.15, 0.15, 0.575]);
+        check('StripAnimator with nudge: the nudge is added on top of the base at once (0.95, then 1.1)', () => { const a = anim(); a.update(0, 0, { nudge: 0.15 }); a.update(1, 10, { nudge: 0 }); return [a.update(1, 160, { nudge: -0.05 }), a.update(1, 200, { nudge: 0.1 })].map(r4); }, [0.95, 1.1]);
+
+        const strip = (g, ms, reduced = false) => { const st = SV.guitarLabelStrip(g, reduced, ms); return [r4(st.offset), st.labels[0], r4(st.frac)]; };
+        const g = tg();
+        tilt(g, 0.44); tapBack(g, 0.44);
+        let T = 100000;
+        tilt(g, 0.46);
+        check('+0.2: no nudge', () => strip(g, T), [0, 'E3', 0]);
+        tilt(g, 0.47);
+        check('+0.3: no nudge', () => strip(g, T + 10), [0, 'E3', 0]);
+        tilt(g, 0.5);
+        const at06 = strip(g, T + 20)[0];
+        check('+0.6: a positive nudge of 0.1336, sound still 0', () => [g.rangeSteps(), at06], [0, 0.1336]);
+        tilt(g, 0.509);
+        const at069 = strip(g, T + 30)[0];
+        check('+0.69: nudge 0.1663, larger than at +0.6 and just under 1/6', () => [at069, at069 > at06, at069 < 1 / 6], [0.1663, true, true]);
+        tilt(g, 0.511);
+        check('+0.71: sound 1, the jump goes from 0.1663 to 1 without jumping back (0.1663, 0.5831, 1)', () => [g.rangeSteps(), strip(g, T + 40)[0], strip(g, T + 115)[0], strip(g, T + 190)[0]], [1, 0.1663, 0.5831, 1]);
+
+        const gd = tg({ rangeOffset: 1 });
+        tilt(gd, 0.44); tapBack(gd, 0.44);
+        T = 200000;
+        check('base 1, at rest: strip on step 1 (labels G3)', () => strip(gd, T), [1, 'G3', 0]);
+        tilt(gd, 0.38);
+        check('-0.6: negative nudge, 0.8664: labels of step 0 (E3) with frac 0.8664', () => [gd.rangeSteps(), ...strip(gd, T + 10)], [1, 0.8664, 'E3', 0.8664]);
+        tilt(gd, 0.371);
+        check('-0.69: 0.8337', () => strip(gd, T + 20)[0], 0.8337);
+        tilt(gd, 0.369);
+        check('-0.71: sound 0, the jump goes from 0.8337 to 0 (0.8337, 0.4169, 0)', () => [gd.rangeSteps(), strip(gd, T + 30)[0], strip(gd, T + 105)[0], strip(gd, T + 180)[0]], [0, 0.8337, 0.4169, 0]);
+
+        const gr = tg();
+        tilt(gr, 0.44); tapBack(gr, 0.44); tilt(gr, 0.5);
+        check('reduced motion: no nudge at +0.6', () => strip(gr, 300000, true), [0, 'E3', 0]);
+        const gl = tg({ tiltGlide: true });
+        tilt(gl, 0.44); tapBack(gl, 0.44); tilt(gl, 0.5);
+        check('glide on: no nudge, linear 0.6', () => strip(gl, 300000), [0.6, 'E3', 0.6]);
+        const gt = tg();
+        tilt(gt, 0.44); tapBack(gt, 0.44); tilt(gt, 0.5); tapBack(gt, 0.5);
+        check('tilt off: no nudge (strip on the locked step)', () => [gt.rangeSteps(), strip(gt, 300000)[0]], [0, 0]);
+        const gm = tg({ rangeOffset: 15 });
+        tilt(gm, 0.44); tapBack(gm, 0.44); tilt(gm, 0.509);
+        check('range limit (base 15 = limit): no nudge upwards at +0.69', () => [gm.stepLimit(), gm.rangeSteps(), strip(gm, 300000)[0]], [15, 15, 15]);
+        tilt(gm, 0.38);
+        check('range limit: a nudge downwards (-0.6) is allowed: 14.8664', () => strip(gm, 300010)[0], 14.8664);
       });
 
       await s.section('orientation bars (R5.8)', () => {
