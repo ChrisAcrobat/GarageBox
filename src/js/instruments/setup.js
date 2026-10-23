@@ -3,7 +3,9 @@
 //
 // createInstrument() returns { instrument, sounds } where `sounds` has one
 // channel configuration per part: `main` for every instrument, plus `guitar`
-// for the keyboard's guitar emulation on keys 1-5 (R4c.3).
+// for the keyboard's guitar emulation on keys 1-5 (R4c.3) and `drums` for its
+// drum hits (Drums mode and numpad kit, R4c.13, R4c.14). A sound marked
+// `lazy` gets its channel on first use (design 4.4).
 
 import { Guitar, GAMEPAD_GUITAR_CONTROLS } from './guitar.js';
 import { Drums } from './drums.js';
@@ -129,6 +131,20 @@ export function keysSound(settings) {
   };
 }
 
+/** The MIDI drum kit on channel 10, without an effect chain (R3.5, R3.6). */
+export const DRUM_KIT_SOUND = Object.freeze({ source: 'midi', model: 'oneShot', drums: true });
+
+/** Keys options from device settings (R4c.3, R4c.12 - R4c.14). */
+export function keysOptions(settings) {
+  return {
+    // The keyboard has no tilt, so no tilt glide either; its D-pad action is not used.
+    guitar: { ...guitarOptions(settings, 'guitar'), tiltGlide: false },
+    keysMode: settings.keysMode,
+    keysDrumMap: settings.keysDrumMap,
+    numpadDrumMap: settings.numpadDrumMap,
+  };
+}
+
 export function drumOptions(settings, device) {
   return { map: settings.drumMap, controls: Object.keys(device.mapping.controls) };
 }
@@ -149,15 +165,15 @@ export function createInstrument(device, instrument, settings) {
   if (instrument === 'drums') {
     return {
       instrument: new Drums(drumOptions(settings, device)),
-      sounds: { main: { source: 'midi', model: 'oneShot', drums: true } },
+      sounds: { main: { ...DRUM_KIT_SOUND } },
     };
   }
   if (instrument === 'keys') {
     return {
-      // The keyboard has no tilt, so no tilt glide either; its D-pad action is not used.
-      instrument: new Keys({ guitar: { ...guitarOptions(settings, 'guitar'), tiltGlide: false } }),
-      // The guitar emulation on keys 1-5 always uses the plucked string.
-      sounds: { main: keysSound(settings), guitar: guitarSound(settings, 'guitar', 'pluck') },
+      instrument: new Keys(keysOptions(settings)),
+      // The guitar emulation on keys 1-5 always uses the plucked string; the
+      // drum hits use the drum kit, created when the first hit is played.
+      sounds: { main: keysSound(settings), guitar: guitarSound(settings, 'guitar', 'pluck'), drums: { ...DRUM_KIT_SOUND, lazy: true } },
     };
   }
   return null;

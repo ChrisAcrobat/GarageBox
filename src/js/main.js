@@ -39,7 +39,8 @@ const startKeyboardButton = document.getElementById('start-keyboard');
 /**
  * Per-device state, keyed by device index (gamepad.index, or KEYBOARD_INDEX):
  * { device, el, gear, instrument (name), kind, logic (Instrument|null),
- *   channels: { main: Channel, guitar?: Channel }, highway: HighwayState,
+ *   channels: { main: Channel, guitar?: Channel, drums?: Channel },
+ *   sounds (channel config per part), highway: HighwayState,
  *   panel: SettingsPanel|null, debug: DebugView|null, menuInput: MenuInput,
  *   backHold: BackHold, starPower: StarPowerVisual }
  */
@@ -222,6 +223,7 @@ function setupInstrument(ui) {
   const created = createInstrument(ui.device, name, settings);
   if (ui.logic && ui.instrument === name && created) {
     ui.logic.configure(created.instrument.options);
+    ui.sounds = created.sounds;
     for (const [part, sound] of Object.entries(created.sounds)) ui.channels[part]?.configure(sound);
     return;
   }
@@ -232,7 +234,24 @@ function setupInstrument(ui) {
   if (!created) return;
   ui.logic = created.instrument;
   ui.channels = {};
-  for (const [part, sound] of Object.entries(created.sounds)) ui.channels[part] = getEngine().createChannel(sound);
+  ui.sounds = created.sounds;
+  for (const [part, sound] of Object.entries(created.sounds)) {
+    if (!sound.lazy) ui.channels[part] = getEngine().createChannel(sound);
+  }
+}
+
+/** The audio channel of an event's part, created on first use for a lazy sound (design 4.4). */
+function channelFor(ui, part = 'main') {
+  if (!ui.channels[part] && ui.sounds?.[part]) ui.channels[part] = getEngine().createChannel(ui.sounds[part]);
+  return ui.channels[part] || ui.channels.main;
+}
+
+/** Number of columns the highway uses to place a lane's notes (design 6). */
+function laneColumns(ui) {
+  if (ui.kind === 'drums') return ui.logic.pads.length;
+  // Keyboard: drum columns in Drums mode; 0 = pitch columns plus the numpad column (R4c.15).
+  if (ui.kind === 'keys') return ui.logic.drumsMode ? ui.logic.drumColumns().length : 0;
+  return 5;
 }
 
 /**
@@ -298,11 +317,10 @@ function playInstruments() {
         ui.starPower.set(event.on, now); // visual only (R5.5)
         continue;
       }
-      const channel = ui.channels[event.part || 'main'] || ui.channels.main;
+      const channel = channelFor(ui, event.part);
       channel.handle(event, now);
       if (event.type === 'noteOn') {
-        const columns = ui.kind === 'drums' ? ui.logic.pads.length : 5;
-        ui.highway.noteOn(event, channel.tracker, placeNote(ui.kind, event, laneColorOf(ui), columns), now);
+        ui.highway.noteOn(event, channel.tracker, placeNote(ui.kind, event, laneColorOf(ui), laneColumns(ui)), now);
       }
     }
   }
