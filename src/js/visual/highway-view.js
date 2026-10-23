@@ -167,8 +167,8 @@ function drawRoad(ctx, road, project, columns, color, now) {
 
   // Column lines.
   for (let i = 1; i < columns; i++) drawColumnLine(ctx, project, i / columns);
+  // Cross lines (thin, also when there are no column lines) moving away with the notes, every half second.
   ctx.lineWidth = 1;
-  // Cross lines moving away with the notes, every half second.
   const step = 0.5;
   const offset = (now % step) / HIGHWAY_SECONDS;
   for (let d = offset; d < 1; d += step / HIGHWAY_SECONDS) {
