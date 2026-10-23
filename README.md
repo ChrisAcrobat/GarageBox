@@ -39,13 +39,14 @@ Some defaults (e.g. sounds) are marked *provisional* in the [design](docs/design
 
 ## Decision review
 
-Decisions made during design or implementation are logged in the local folder `decisions-review/`, which is git-ignored and never committed. Each decision has its own file, written in English, with the decision, why it was made, the alternatives and where it applies.
+Decisions made during design or implementation are logged in the folder [`decisions-review/`](decisions-review/README.md), and each decision file is committed when the decision is taken. Each decision has its own file, written in English, with the decision, why it was made, the alternatives and where it applies.
 
 - File name: `<importance-number>-<slug>.md`, e.g. `2-tilt-smoothing.md`. The importance number is a single digit: 0 means most critical to review (how the app sounds, behaves or plays), 9 means tiny details.
 - The owner reviews the decisions one at a time, most important first.
-- A reviewed decision is written into [`docs/requirements.md`](docs/requirements.md) and [`docs/design.md`](docs/design.md) (and the tests), then its file is deleted. The doc change is committed as its own commit, with the importance number and a short summary in the message, e.g. `Decision (importance 1): own bass sound`; older decisions that have an original number keep it, e.g. `Decision 86 (importance 1): own bass sound`.
+- A reviewed decision is written into [`docs/requirements.md`](docs/requirements.md) and [`docs/design.md`](docs/design.md) (and the tests), and its file is deleted in the same commit (it stays in the git history). The doc change is committed as its own commit, with the importance number and a short summary in the message, e.g. `Decision (importance 1): own bass sound`; older decisions that have an original number keep it, e.g. `Decision 86 (importance 1): own bass sound`.
 - Decisions kept for a later experiment stay in the folder, marked as such.
 - Open developer questions are answered only by updating the docs.
+- How builds, refactoring and QA are run is described in [`docs/process.md`](docs/process.md).
 
 ## Inspiration
 
