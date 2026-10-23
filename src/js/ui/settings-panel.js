@@ -9,24 +9,31 @@
 // (no cursor; the controller keeps playing).
 
 import { t } from '../i18n/i18n.js';
-import { CHOICES, getDeviceSettings, setDeviceSetting, resetDeviceSettings } from '../settings/store.js';
+import { CHOICES, NUMBER_FIELDS, clampNumber, getDeviceSettings, setDeviceSetting, resetDeviceSettings } from '../settings/store.js';
 import { defaultInstrumentFor } from '../input/detect.js';
-import { NOTE_NAMES } from '../audio/theory.js';
-import { DEFAULT_PROGRAMS, DEFAULT_SOURCES, SOURCES_FOR, resolveSource } from '../instruments/setup.js';
+import { activeNoteNames } from '../audio/theory.js';
+import { DEFAULT_PROGRAMS, DEFAULT_SOURCES, SOURCES_FOR, resolveSource, canStarPower } from '../instruments/setup.js';
 import { DEFAULT_DRUM_MAP, DRUM_NOTES } from '../instruments/drums.js';
 import { MenuNavigator } from './menu-nav.js';
+
+/** The settings id of a device (type + slot, R2.7); fake devices without one use their id. */
+export function settingsIdOf(device) {
+  return device.settingsId ?? device.id;
+}
 
 /**
  * Field definitions. `when(c)` decides whether a field applies, from the
  * context c = { kind, instrument, source, device, settings }, where kind is
- * 'guitar' (guitar and bass), 'drums' or 'keys'.
+ * 'guitar' (guitar and bass), 'drums' or 'keys'. A field is a select
+ * (`options`), a number field (`number: true`, range from NUMBER_FIELDS,
+ * R2.9.1) or a checkbox (`checkbox: true`).
  */
 function fieldDefinitions(device) {
   const auto = defaultInstrumentFor(device.detection);
   const has = (name) => name in device.mapping.controls;
   const guitarPart = (c) => c.kind === 'guitar' || c.kind === 'keys';
+  const guitarLane = (c) => c.kind === 'guitar' && !device.isKeyboard;
   const plucked = (c) => (c.kind === 'guitar' && c.source === 'pluck') || c.kind === 'keys';
-  const expression = (c) => c.kind === 'guitar' && (has('whammy') || has('tilt'));
   const fields = [];
   if (!device.isKeyboard) {
     fields.push({
@@ -58,11 +65,24 @@ function fieldDefinitions(device) {
       ],
     },
     {
+      key: 'effect',
+      label: 'settings.effect',
+      when: (c) => c.kind !== 'drums',
+      options: CHOICES.effect.map((value) => ({ value, text: t(`effect.${value}`) })),
+    },
+    {
+      key: 'dpadAction',
+      label: 'settings.dpadAction',
+      when: guitarLane,
+      hint: () => 'settings.dpadActionHint',
+      options: CHOICES.dpadAction.map((value) => ({ value, text: t(`dpadAction.${value}`) })),
+    },
+    {
       key: 'root',
       label: 'settings.root',
       when: guitarPart,
       hint: (c) => (c.kind === 'keys' ? 'settings.keysGuitarHint' : null),
-      options: CHOICES.root.map((value) => ({ value, text: NOTE_NAMES[value] })),
+      options: () => CHOICES.root.map((value) => ({ value, text: activeNoteNames()[value] })),
     },
     {
       key: 'scale',
@@ -71,46 +91,53 @@ function fieldDefinitions(device) {
       options: CHOICES.scale.map((value) => ({ value, text: t(`scale.${value}`) })),
     },
     {
+      key: 'octave',
+      label: 'settings.octave',
+      when: (c) => c.kind === 'guitar',
+      options: CHOICES.octave.map((value) => ({ value, text: t(`octave.${value}`) })),
+    },
+    {
       key: 'whammy',
       label: 'settings.whammy',
-      when: (c) => expression(c) && has('whammy'),
+      when: (c) => c.kind === 'guitar' && has('whammy'),
       hint: (c) => (c.settings.whammy === 'off' ? null : `settings.whammyHint.${c.settings.whammy}`),
       options: CHOICES.whammy.map((value) => ({ value, text: t(`expression.${value}`) })),
     },
     {
-      key: 'tilt',
-      label: 'settings.tilt',
-      // Experiment E: tilt has no sound effect (it shifts the fret range with
-      // Back instead), so its assignment choice is hidden.
-      when: () => false,
-      hint: (c) => (c.settings.tilt === 'off' ? null : `settings.tiltHint.${c.settings.tilt}`),
-      options: CHOICES.tilt.map((value) => ({ value, text: t(`expression.${value}`) })),
-    },
-    {
       key: 'bendRange',
       label: 'settings.bendRange',
-      when: (c) => expression(c) && (c.settings.whammy === 'bend' || c.settings.tilt === 'bend'),
+      unit: 'unit.semitonesName',
+      when: (c) => c.kind === 'guitar' && has('whammy') && c.settings.whammy === 'bend',
       hint: () => 'settings.bendRangeHint',
-      options: CHOICES.bendRange.map((value) => ({ value, text: t('unit.semitones', { value: value > 0 ? `+${value}` : String(value).replace('-', '−') }) })),
+      number: true,
     },
     {
       key: 'tiltSmoothing',
       label: 'settings.tiltSmoothing',
-      when: (c) => expression(c) && has('tilt'),
+      unit: 'unit.msName',
+      when: (c) => c.kind === 'guitar' && has('tilt'),
       hint: () => 'settings.tiltSmoothingHint',
-      options: CHOICES.tiltSmoothing.map((value) => ({ value, text: value === 0 ? t('expression.off') : t('unit.ms', { value }) })),
+      number: true,
+    },
+    {
+      key: 'starPower',
+      label: 'settings.starPower',
+      when: (c) => guitarLane(c) && canStarPower(device),
+      checkbox: true,
     },
     {
       key: 'fadeMs',
       label: 'settings.fade',
+      unit: 'unit.msName',
       when: guitarPart,
-      options: CHOICES.fadeMs.map((value) => ({ value, text: t('unit.ms', { value }) })),
+      number: true,
     },
     {
       key: 'decay',
       label: 'settings.decay',
+      unit: 'unit.secondsName',
       when: plucked,
-      options: CHOICES.decay.map((value) => ({ value, text: t('unit.seconds', { value }) })),
+      number: true,
     },
     {
       key: 'brightness',
@@ -135,10 +162,10 @@ function fieldDefinitions(device) {
 }
 
 /**
- * Experiment E: boolean device settings shown as checkboxes below the panel
- * buttons. Tilt glide only where tilt exists: guitar/bass lanes of a device
- * with a tilt control (not drums, not the keyboard's guitar keys, not a
- * gamepad in guitar mode, which has no tilt).
+ * Boolean device settings shown as checkboxes below the panel buttons. Tilt
+ * glide (R4.14) only where tilt exists: guitar/bass lanes of a device with a
+ * tilt control (not drums, not the keyboard's guitar keys, not a gamepad in
+ * guitar mode, which has no tilt). It is the panel's last control.
  */
 export function checkboxDefinitions(device) {
   const hasTilt = 'tilt' in device.mapping.controls;
@@ -188,7 +215,8 @@ export class SettingsPanel {
 
     this.closeButton.addEventListener('click', onClose);
     this.debugButton.addEventListener('click', onOpenDebug);
-    this.resetButton.addEventListener('click', () => resetDeviceSettings(device.id));
+    // Reset to defaults keeps the chosen instrument, like Back held 5 s (R4.11.2).
+    this.resetButton.addEventListener('click', () => resetDeviceSettings(settingsIdOf(device), { keepInstrument: true }));
     this.el.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') onClose();
     });
@@ -198,13 +226,14 @@ export class SettingsPanel {
     container.appendChild(this.el);
     // Gamepad cursor only in a gamepad menu (design 7.4).
     if (this.gamepadMenu) this.nav = new MenuNavigator(this.el, { initial: '.fields select' });
-    if (focus) this.fieldsEl.querySelector('select')?.focus({ preventScroll: true });
+    if (focus) this.fieldsEl.querySelector('select, input')?.focus({ preventScroll: true });
   }
 
   /**
-   * Handles one menu intent of this lane's controller: up/down move the
-   * gamepad cursor, left/right change the value (right presses a button),
-   * Back closes the panel. Start is handled by main.js (toggle, R4.10).
+   * Handles one menu intent of this lane's controller (R2.12): up/down move
+   * the gamepad cursor, left/right change the value, Start toggles a
+   * checkbox or presses a button (it never closes the panel), Back closes it.
+   * Rotation for guitars is applied by main.js before this.
    */
   navigate(intent) {
     if (!this.gamepadMenu) return;
@@ -227,7 +256,7 @@ export class SettingsPanel {
     this.debugButton.hidden = !!device.isKeyboard;
     this.resetButton.textContent = t('settings.reset');
 
-    const settings = getDeviceSettings(device.id);
+    const settings = getDeviceSettings(settingsIdOf(device));
     const { kind, instrument } = this.getInstrument();
     const c = { kind, instrument, source: resolveSource(settings, instrument), device, settings };
     const focusedKey = this.el.contains(document.activeElement) ? document.activeElement.dataset.key : null;
@@ -241,13 +270,14 @@ export class SettingsPanel {
       children.push(heading, ...drumFields.map((f) => this._field(f, settings, c)));
     }
     this.fieldsEl.replaceChildren(...children);
-    // Experiment E: per-device checkboxes at the very bottom of the panel.
+    // Per-device checkboxes at the very bottom of the panel.
     this.optionsEl.replaceChildren(...checkboxDefinitions(device).filter((f) => f.when(c)).map((f) => this._checkbox(f, settings)));
     this.optionsEl.hidden = !this.optionsEl.childElementCount;
     if (focusedKey) this.el.querySelector(`[data-key="${focusedKey}"]`)?.focus({ preventScroll: true });
     // Gamepad menu: how to use it. Mouse-opened gamepad panel: how to get one.
     let hintKey = null;
-    if (this.gamepadMenu) hintKey = kind === 'guitar' ? 'settings.gamepadHintGuitar' : 'settings.gamepadHint';
+    // A guitar controller has rotated directions (R2.12); guitar/bass lanes play frets in the menu (R2.13).
+    if (this.gamepadMenu) hintKey = device.detection?.type === 'guitar' ? 'settings.gamepadHintGuitar' : kind === 'guitar' ? 'settings.gamepadHintFrets' : 'settings.gamepadHint';
     else if (!device.isKeyboard) hintKey = 'settings.gamepadHintMouse';
     this.hintEl.hidden = !hintKey;
     this.hintEl.textContent = hintKey ? t(hintKey) : '';
@@ -255,11 +285,25 @@ export class SettingsPanel {
   }
 
   _field(def, settings, c) {
+    if (def.checkbox) return this._checkbox(def, settings);
     const label = document.createElement('label');
     label.className = 'field';
     const span = document.createElement('span');
     span.className = 'field-label';
-    span.textContent = t(def.label);
+    span.textContent = def.unit ? `${t(def.label)} (${t(def.unit)})` : t(def.label);
+    const control = def.number ? this._numberInput(def, settings) : this._select(def, settings, c);
+    label.append(span, control);
+    const hintKey = def.hint?.(c);
+    if (hintKey) {
+      const hint = document.createElement('span');
+      hint.className = 'field-hint';
+      hint.textContent = t(hintKey);
+      label.append(hint);
+    }
+    return label;
+  }
+
+  _select(def, settings, c) {
     const select = document.createElement('select');
     select.dataset.key = def.key;
     const options = typeof def.options === 'function' ? def.options(c) : def.options;
@@ -272,22 +316,42 @@ export class SettingsPanel {
       select.append(option);
     });
     select.addEventListener('change', () => {
+      const id = settingsIdOf(this.device);
       const value = options[Number(select.value)].value;
-      const [key, stored] = def.set ? def.set(getDeviceSettings(this.device.id), value) : [def.key, value];
-      setDeviceSetting(this.device.id, key, stored);
+      const [key, stored] = def.set ? def.set(getDeviceSettings(id), value) : [def.key, value];
+      setDeviceSetting(id, key, stored);
     });
-    label.append(span, select);
-    const hintKey = def.hint?.(c);
-    if (hintKey) {
-      const hint = document.createElement('span');
-      hint.className = 'field-hint';
-      hint.textContent = t(hintKey);
-      label.append(hint);
-    }
-    return label;
+    return select;
   }
 
-  /** Experiment E: a checkbox row for a boolean device setting (the gamepad menu toggles it with left/right). */
+  /**
+   * A number field (R2.9.1): a typed value outside the range is set to the
+   * nearest allowed value; an empty or invalid entry restores the stored value.
+   */
+  _numberInput(def, settings) {
+    const { min, max, step } = NUMBER_FIELDS[def.key];
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.dataset.key = def.key;
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(settings[def.key]);
+    input.addEventListener('change', () => {
+      const id = settingsIdOf(this.device);
+      const typed = input.value.trim() === '' ? NaN : Number(input.value);
+      if (!Number.isFinite(typed)) {
+        input.value = String(getDeviceSettings(id)[def.key]);
+        return;
+      }
+      const value = clampNumber(def.key, typed);
+      input.value = String(value);
+      setDeviceSetting(id, def.key, value);
+    });
+    return input;
+  }
+
+  /** A checkbox row for a boolean device setting (the gamepad menu toggles it with Start). */
   _checkbox(def, settings) {
     const label = document.createElement('label');
     label.className = 'field field-checkbox';
@@ -295,7 +359,7 @@ export class SettingsPanel {
     input.type = 'checkbox';
     input.dataset.key = def.key;
     input.checked = settings[def.key] === true;
-    input.addEventListener('change', () => setDeviceSetting(this.device.id, def.key, input.checked));
+    input.addEventListener('change', () => setDeviceSetting(settingsIdOf(this.device), def.key, input.checked));
     const span = document.createElement('span');
     span.className = 'field-checkbox-label';
     span.textContent = t(def.label);
