@@ -658,6 +658,34 @@
         check('tilt off: tilting does not move the strip', g.displaySteps(), 2);
       });
 
+      await s.section('note strip snap with tilt glide off (R5.7.2)', async () => {
+        const SNAP = await s.load('../src/js/visual/simple-view.js', ['stripSnap', 'STRIP_SNAP_STEEPNESS']);
+        const snap = SNAP.stripSnap || (() => NaN);
+        const r3 = (v) => +(+v).toFixed(3);
+        check('STRIP_SNAP_STEEPNESS = 4 (first guess)', SNAP.STRIP_SNAP_STEEPNESS, 4);
+        check('stripSnap at 0, 0.25, 0.3, 0.5, 0.7, 1 = 0, 0.012, 0.033, 0.5, 0.967, 1', () => [0, 0.25, 0.3, 0.5, 0.7, 1].map((f) => r3(snap(f))), [0, 0.012, 0.033, 0.5, 0.967, 1]);
+        check('stripSnap is symmetric: snap(1 - f) = 1 - snap(f)', () => [0.1, 0.2, 0.35, 0.45].every((f) => Math.abs(snap(1 - f) - (1 - snap(f))) < 1e-9), true);
+        check('stripSnap with steepness 1 is linear', () => [0.1, 0.25, 0.6].map((f) => r3(snap(f, 1))), [0.1, 0.25, 0.6]);
+        const g = tg();
+        tilt(g, 0.44); tapBack(g, 0.44);
+        tilt(g, 0.465);
+        check('glide off, a quarter step of tilt: strip frac 0.012, offset stays 0.25', () => { const st = SV.guitarLabelStrip(g, false); return [st.labels[0], r3(st.frac), r3(st.offset)]; }, ['E3', 0.012, 0.25]);
+        check('glide off, reduced motion: frac 0', () => SV.guitarLabelStrip(g, true).frac, 0);
+        const gl = tg({ tiltGlide: true });
+        tilt(gl, 0.44); tapBack(gl, 0.44); tilt(gl, 0.465);
+        check('glide on, a quarter step of tilt: strip frac stays linear 0.25', () => r3(SV.guitarLabelStrip(gl, false).frac), 0.25);
+        tilt(g, 0.509);
+        check('going up, +0.69: sound still 0, strip frac 0.961', () => [g.rangeSteps(), r3(SV.guitarLabelStrip(g, false).frac)], [0, 0.961]);
+        tilt(g, 0.511);
+        check('going up, +0.71: sound changes to 1, strip frac 0.973', () => [g.rangeSteps(), r3(SV.guitarLabelStrip(g, false).frac)], [1, 0.973]);
+        tilt(g, 0.471);
+        check('going down, +0.31: sound still 1, strip frac 0.039', () => [g.rangeSteps(), r3(SV.guitarLabelStrip(g, false).frac)], [1, 0.039]);
+        tilt(g, 0.469);
+        check('going down, +0.29: sound changes to 0', () => g.rangeSteps(), 0);
+        tapBack(g, 0.469);
+        check('tilt off: strip frac 0 on the locked step', () => SV.guitarLabelStrip(g, false).frac, 0);
+      });
+
       await s.section('orientation bars (R5.8)', () => {
         const bars = SV.orientationBars;
         check('reference A3: 57 -> 1, 45 and 69 -> 2, 33 and 81 -> 3, 93 -> 4', () => [57, 45, 69, 33, 81, 93].map((m) => bars(m, 57)), [1, 2, 2, 3, 3, 4]);
@@ -668,7 +696,7 @@
         check('default reference A3', () => noteName(new Guitar().referenceMidi()), 'A3');
         check('default strip E3 G3 A3 B3 D4 E4 with bars 0 0 1 0 0 0', () => { const st = SV.guitarLabelStrip(new Guitar(), false); return [st.labels, st.bars]; }, [['E3', 'G3', 'A3', 'B3', 'D4', 'E4'], [0, 0, 1, 0, 0, 0]]);
         const g = tg(); tilt(g, 0.44); tapBack(g, 0.44); tilt(g, 0.965);
-        check('about an octave up mid-slide (+5.25): E4..E5, A4 has 2 bars, frac 0.25, reference still A3', () => { const st = SV.guitarLabelStrip(g, false); return [noteName(g.referenceMidi()), st.labels, st.bars, +st.frac.toFixed(2)]; }, ['A3', ['E4', 'G4', 'A4', 'B4', 'D5', 'E5'], [0, 0, 2, 0, 0, 0], 0.25]);
+        check('about an octave up mid-slide (+5.25): E4..E5, A4 has 2 bars, frac 0.012 (snapped, R5.7.2), reference still A3', () => { const st = SV.guitarLabelStrip(g, false); return [noteName(g.referenceMidi()), st.labels, st.bars, +st.frac.toFixed(3)]; }, ['A3', ['E4', 'G4', 'A4', 'B4', 'D5', 'E5'], [0, 0, 2, 0, 0, 0], 0.012]);
         tapBack(g, 0.965);
         check('locked base +5 keeps A4 at 2 bars', () => [g.stepBase, noteName(g.referenceMidi()), SV.guitarLabelStrip(g, false).bars], [5, 'A3', [0, 0, 2, 0, 0, 0]]);
         const csm = () => new Guitar({ ...guitarOptions({ ...DEFAULTS.device, root: 1, scale: 'minorPentatonic' }, 'guitar'), tiltSmoothing: 0 });

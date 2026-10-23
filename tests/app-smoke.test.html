@@ -91,6 +91,22 @@
           await select(doc.querySelector('#lane-overlays select[data-key="keysMode"]'), 'piano');
           await sleep(300);
           check('Drums mode and back to Piano give no errors', errors(), []);
+          {
+            const win = frame.contentWindow;
+            const toggle = doc.getElementById('keyboard-toggle');
+            const before = toggle?.checked;
+            const o = { bubbles: true, cancelable: true, composed: true, button: 0, buttons: 1, isPrimary: true, pointerId: 1, pointerType: 'mouse' };
+            check('the keyboard panel is open before the click outside', !!doc.querySelector('#lane-overlays .settings-panel'), true);
+            toggle?.dispatchEvent(new win.PointerEvent('pointerdown', o));
+            toggle?.dispatchEvent(new win.MouseEvent('mousedown', o));
+            toggle?.dispatchEvent(new win.PointerEvent('pointerup', o));
+            toggle?.dispatchEvent(new win.MouseEvent('mouseup', o));
+            toggle?.dispatchEvent(new win.MouseEvent('click', o));
+            await sleep(300);
+            check('a click outside (on the keyboard toggle) closes the keyboard panel (R2.15)', !!doc.querySelector('#lane-overlays .settings-panel'), false);
+            check('the closing click does not change the keyboard toggle (R2.15.3)', toggle?.checked, before);
+            check('closing by clicking outside gives no errors', errors(), []);
+          }
           frame.srcdoc = '';
         });
       });

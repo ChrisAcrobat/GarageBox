@@ -291,6 +291,76 @@
         check('no checkbox on the keyboard panel', none(keyboardDevice(), 'keys', 'keys'), [false, true]);
       }));
 
+      await s.section('click outside closes the menu (R2.15, 7.2)', () => s.withCleanStorage(async () => {
+        await s.load('../src/js/ui/outside-click.js', ['closeOnOutsideClick']);
+        const DV = await s.load('../src/js/ui/debug-view.js', ['DebugView']);
+        const device = fakeDevice('device:gamepad:1', PAD);
+        const click = (target, button = 0) => {
+          const o = { bubbles: true, cancelable: true, composed: true, button, buttons: button === 0 ? 1 : 2, isPrimary: true, pointerId: 1, pointerType: 'mouse' };
+          target.dispatchEvent(new PointerEvent('pointerdown', o));
+          target.dispatchEvent(new MouseEvent('mousedown', o));
+          target.dispatchEvent(new PointerEvent('pointerup', o));
+          target.dispatchEvent(new MouseEvent('mouseup', o));
+          if (button === 0) target.dispatchEvent(new MouseEvent('click', o));
+        };
+        const outside = document.createElement('button');
+        outside.type = 'button';
+        outside.textContent = 'outside';
+        let outsideClicks = 0;
+        outside.addEventListener('click', () => outsideClicks++);
+        box.append(outside);
+        const open = [];
+        const make = (extra = {}) => {
+          const st = { closed: 0, panel: null };
+          st.panel = openPanel(device, 'guitar', 'guitar', { onClose: () => { st.closed++; if (st.panel?.el.isConnected) st.panel.destroy(); }, ...extra });
+          open.push(st.panel);
+          return st;
+        };
+        try {
+          const a = make({ focus: true });
+          click(a.panel.el.querySelector('.panel-title'));
+          click(a.panel.el.querySelector('[data-key="instrument"]') || a.panel.el.querySelector('.fields'));
+          check('clicks inside the panel (title, a field) do not close it', [a.closed, a.panel.el.isConnected], [0, true]);
+          click(outside, 2);
+          check('a right click outside does not close it', a.closed, 0);
+          click(outside);
+          check('a click outside closes it once, through its onClose', [a.closed, a.panel.el.isConnected], [1, false]);
+          check('the closing click is swallowed (the button under it gets no click)', outsideClicks, 0);
+          click(outside);
+          check('after the close a click outside works as usual (no close, not swallowed)', [a.closed, outsideClicks], [1, 1]);
+
+          const g = make({ gamepadMenu: true });
+          click(outside);
+          check('a gamepad-opened panel closes the same way', [g.closed, g.panel.el.isConnected, outsideClicks], [1, false, 1]);
+
+          const x = make();
+          x.panel.el.querySelector('.close-button')?.click();
+          check('the close button uses the same onClose (reference)', x.closed, 1);
+
+          const p1 = make();
+          const p2 = make();
+          click(p1.panel.el.querySelector('.panel-title'));
+          check('two panels open: a click inside one closes only the other', [p1.closed, p2.closed], [0, 1]);
+          click(outside);
+          check('then a click outside closes the remaining one', [p1.closed, outsideClicks], [1, 1]);
+
+          if (DV.DebugView) {
+            const idle = new Proxy({}, { get: () => ({ value: 0, pressed: false }) });
+            const dvDevice = { ...device, raw: { id: PAD, buttons: [], axes: [], mapping: 'standard' }, controls: idle, rawEdges: [], edges: [] };
+            let dvClosed = 0;
+            const dv = new DV.DebugView({ container: box, device: dvDevice, onClose: () => { dvClosed++; dv.destroy(); }, focus: false });
+            open.push(dv);
+            click(dv.el.querySelector('.panel-title') || dv.el);
+            check('device information view: a click inside does not close it', dvClosed, 0);
+            click(outside);
+            check('device information view: a click outside closes it (swallowed)', [dvClosed, dv.el.isConnected, outsideClicks], [1, false, 1]);
+          }
+        } finally {
+          for (const p of open) if (p.el?.isConnected) p.destroy();
+          outside.remove();
+        }
+      }));
+
       s.finish();
     </script>
   </body>
