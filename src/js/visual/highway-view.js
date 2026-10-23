@@ -29,10 +29,10 @@ const K = 2.2;
 const SAMPLE_INTERVAL = 1 / 40;
 /**
  * How much thinner the trail gets at full whammy when bending down (R5.4.5):
- * width = 1 - FULL_WHAMMY_THINNING x d, so 0.9 gives 10 % at full whammy.
+ * width = 1 - FULL_WHAMMY_THINNING x d, so 0.75 gives 25 % at full whammy.
  * A first guess; change it here to try other thicknesses.
  */
-export const FULL_WHAMMY_THINNING = 0.9;
+export const FULL_WHAMMY_THINNING = 0.75;
 /** How much wider the trail gets at full whammy when bending up (150 %). */
 const FULL_WHAMMY_WIDENING = 0.5;
 /** Pitch range spread across the keyboard lane's road. */
