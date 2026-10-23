@@ -69,10 +69,13 @@
           [4.1, (src) => src.holdEnd(1)],
         ]);
         check('the source has holdEnd(voiceId)', held.errors, []);
-        // Reference after the thump has settled (the filter sweep lasts about 0.25 s).
-        const l0 = db(held.data, 0.5, 0.55);
-        const l4 = db(held.data, 4.0, 4.05);
-        check(`a held voice keeps its level within 0.5 dB for 4 s (${l0.toFixed(1)} -> ${l4.toFixed(1)} dB)`, near(l4, l0, 0.5), true);
+        // Reference after the thump has settled (the filter sweep lasts about 0.25 s). Both windows span
+        // 8 whole periods of the lowest partial (the sub-octave of E2, 41.2 Hz), so the RMS does not depend
+        // on where a window cuts the wave (QA decision 3-bass-hold-whole-periods).
+        const W = 8 / 41.2035;
+        const l0 = db(held.data, 0.5, 0.5 + W);
+        const l4 = db(held.data, 4.09 - W, 4.09);
+        check(`a held voice keeps its level within 0.5 dB for 4 s (${l0.toFixed(2)} -> ${l4.toFixed(2)} dB)`, near(l4, l0, 0.5), true);
         const t60 = timeTo60dB(held.data, 4.3, 5.0);
         check(`after holdEnd it falls 60 dB in the ring time ±10 % (measured ${t60.toFixed(2)} s for ${RING} s)`, near(t60, RING, RING * 0.1), true);
       });
