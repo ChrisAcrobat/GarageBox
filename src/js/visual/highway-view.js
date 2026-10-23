@@ -194,42 +194,49 @@ function drawColumnLine(ctx, project, x) {
   ctx.stroke();
 }
 
+/** One note: its sustain trail, then its gem. Head and tail are 0..1 along the road. */
 function drawNote(ctx, note, project, colWidth, now) {
   const head = Math.min(1, (now - note.start) / HIGHWAY_SECONDS);
   const tail = note.end === null ? 0 : Math.min(1, (now - note.end) / HIGHWAY_SECONDS);
   if (tail >= 1) return;
-
-  // Sustain trail from the tail (near) to the head (far), in slices with the
-  // opacity the note had when that part of the trail was "played" and the
-  // width of the bend at that time (R5.4.5).
-  if (!note.oneShot && head > tail) {
-    const slices = Math.max(2, Math.ceil((head - tail) * 48));
-    for (let i = 0; i < slices; i++) {
-      const d0 = tail + ((head - tail) * i) / slices;
-      const d1 = tail + ((head - tail) * (i + 1)) / slices;
-      const sample = sampleAt(note, now - ((d0 + d1) / 2) * HIGHWAY_SECONDS);
-      const level = sample.level;
-      if (level < 0.01) continue;
-      const a = project(note.x, d0);
-      const b = project(note.x, d1);
-      const width = colWidth * 0.32 * bendWidth(sample.bend);
-      const wa = width * a.s;
-      const wb = width * b.s;
-      ctx.beginPath();
-      ctx.moveTo(a.x - wa / 2, a.y);
-      ctx.lineTo(a.x + wa / 2, a.y);
-      ctx.lineTo(b.x + wb / 2, b.y + 0.5);
-      ctx.lineTo(b.x - wb / 2, b.y + 0.5);
-      ctx.closePath();
-      ctx.fillStyle = withAlpha(note.color, Math.min(0.9, 0.15 + level * 0.85));
-      ctx.fill();
-    }
-  }
-
+  if (!note.oneShot && head > tail) drawTrail(ctx, note, project, colWidth, now, head, tail);
   // The gem at the head. Once it has reached the far end it is gone (it must
   // not pile up there while a long note still rings); the trail stays.
   if (now - note.start >= HIGHWAY_SECONDS) return;
-  const p = project(note.x, head);
+  drawGem(ctx, note, project(note.x, head), colWidth, head);
+}
+
+/**
+ * Sustain trail from the tail (near) to the head (far), in slices with the
+ * opacity the note had when that part of the trail was "played" and the
+ * width of the bend at that time (R5.4.5).
+ */
+function drawTrail(ctx, note, project, colWidth, now, head, tail) {
+  const slices = Math.max(2, Math.ceil((head - tail) * 48));
+  for (let i = 0; i < slices; i++) {
+    const d0 = tail + ((head - tail) * i) / slices;
+    const d1 = tail + ((head - tail) * (i + 1)) / slices;
+    const sample = sampleAt(note, now - ((d0 + d1) / 2) * HIGHWAY_SECONDS);
+    const level = sample.level;
+    if (level < 0.01) continue;
+    const a = project(note.x, d0);
+    const b = project(note.x, d1);
+    const width = colWidth * 0.32 * bendWidth(sample.bend);
+    const wa = width * a.s;
+    const wb = width * b.s;
+    ctx.beginPath();
+    ctx.moveTo(a.x - wa / 2, a.y);
+    ctx.lineTo(a.x + wa / 2, a.y);
+    ctx.lineTo(b.x + wb / 2, b.y + 0.5);
+    ctx.lineTo(b.x - wb / 2, b.y + 0.5);
+    ctx.closePath();
+    ctx.fillStyle = withAlpha(note.color, Math.min(0.9, 0.15 + level * 0.85));
+    ctx.fill();
+  }
+}
+
+/** The gem of a note at road point `p` (`head` 0..1 along the road). */
+function drawGem(ctx, note, p, colWidth, head) {
   const size = colWidth * 0.42 * p.s * (note.oneShot ? 0.6 + 0.4 * (note.velocity / 127) : 1);
   // Fade out over the last part of the road so the gem does not just pop away.
   const fade = (1 - head * 0.6) * Math.min(1, (1 - head) / 0.15);
@@ -271,6 +278,19 @@ function drawPadLabels(ctx, drums, project, columns, color, t, now) {
     ctx.fillText(t(`drum.${pad.note}`).split(' ')[0], x, y + 16);
   });
   return y + 36;
+}
+
+/** Note names of ringing notes (not yet ended) at the near end of the road. */
+function drawRingingLabels(ctx, highway, project, yNear) {
+  ctx.font = '600 11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  for (const note of highway.notes) {
+    if (note.end !== null) continue;
+    const p = project(note.x, 0);
+    ctx.fillStyle = withAlpha(note.color, 0.9);
+    ctx.fillText(noteName(note.midi), p.x, yNear - 2);
+  }
 }
 
 /**
@@ -322,16 +342,7 @@ export function drawHighway(ctx, lane, area, t, now) {
   } else if (kind === 'drums') {
     drawPadLabels(ctx, instrument, project, columns, color, t, now);
   } else if (kind === 'keys') {
-    // Note names of ringing notes near the end of the road, then the keyboard.
-    ctx.font = '600 11px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    for (const note of highway.notes) {
-      if (note.end !== null) continue;
-      const p = project(note.x, 0);
-      ctx.fillStyle = withAlpha(note.color, 0.9);
-      ctx.fillText(noteName(note.midi), p.x, road.yNear - 2);
-    }
+    drawRingingLabels(ctx, highway, project, road.yNear);
     drawKeyboard(ctx, lane.device, instrument, area.x, area.y + area.h - keyboardHeight(area.w), area.w, color, t);
   }
 }
