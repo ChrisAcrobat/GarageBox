@@ -23,8 +23,6 @@ import { drawKeyboard, keyboardHeight } from './keyboard-view.js';
 
 export { FRET_COLORS };
 
-export const FRETS = Object.freeze(['fret1', 'fret2', 'fret3', 'fret4', 'fret5']);
-
 export function sectionTitle(ctx, text, x, y, w) {
   ctx.font = '600 11px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
