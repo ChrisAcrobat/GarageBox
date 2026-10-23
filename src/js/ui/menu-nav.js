@@ -11,6 +11,8 @@
 //     controls. It does not move the browser's own focus, so several lanes can
 //     each have their own cursor at the same time and the computer keyboard
 //     and mouse keep working as before.
+// On a controller detected as a guitar the directions are turned 90 degrees
+// clockwise before they reach the cursor (rotateIntent(), R2.12).
 
 /** Logical controls (of any mapping) that act as each menu intent. */
 export const NAV_SOURCES = Object.freeze({
@@ -27,8 +29,8 @@ const REPEATING = ['up', 'down', 'left', 'right'];
 
 /**
  * Logical controls taken away from the instrument while its menu is open
- * (directions and Back). Start is left to the instrument, which already asks
- * the UI to open/close the settings panel.
+ * (directions and Back). Start is routed by main.js: in a gamepad menu it
+ * activates the control under the cursor, otherwise it reaches the instrument.
  */
 export const MENU_CONTROLS = Object.freeze(new Set([...NAV_SOURCES.up, ...NAV_SOURCES.down, ...NAV_SOURCES.left, ...NAV_SOURCES.right, ...NAV_SOURCES.back]));
 
@@ -40,6 +42,26 @@ const INTENT_OF = new Map(Object.entries(NAV_SOURCES).flatMap(([intent, names]) 
 /** Menu intent of a logical control name, or undefined. */
 export function intentFor(controlName) {
   return INTENT_OF.get(controlName);
+}
+
+const ROTATED = Object.freeze({ right: 'down', left: 'up', up: 'right', down: 'left' });
+
+/**
+ * A menu intent turned 90 degrees clockwise for a guitar controller (R2.12):
+ * right = next control, left = previous control, up = value forwards, down =
+ * value backwards. 'back' and 'start' are unchanged.
+ */
+export function rotateIntent(intent) {
+  return ROTATED[intent] ?? intent;
+}
+
+/**
+ * True when `device`'s menus use the rotated directions: a controller
+ * detected as a guitar, whatever it plays; not a regular gamepad in
+ * guitar/bass mode and not the computer keyboard.
+ */
+export function menuRotated(device) {
+  return !!device && !device.isKeyboard && device.detection?.type === 'guitar';
 }
 
 /** Edge-triggered menu intents with simple key repeat for one device. */
@@ -106,10 +128,12 @@ function identity(el) {
 }
 
 /**
- * A gamepad cursor over the controls of one menu element.
+ * A gamepad cursor over the controls of one menu element (R2.12).
  * D-pad up/down moves between controls (wrapping), left/right changes the
- * value: selects cycle their options, number/range inputs step, checkboxes
- * toggle, and on a button right presses it.
+ * value (selects cycle their options, number/range inputs step and stop at
+ * their min/max) and Start activates the control: it toggles a checkbox or
+ * presses a button. Each action has one button: left/right do nothing on
+ * checkboxes and buttons, Start does nothing on selects and number fields.
  */
 export class MenuNavigator {
   /**
@@ -177,26 +201,32 @@ export class MenuNavigator {
       el.selectedIndex = wrapIndex(el.selectedIndex, el.options.length, dir);
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
-    } else if (el instanceof HTMLInputElement && el.type === 'checkbox') {
-      el.click(); // toggles and fires input/change like a mouse click
     } else if (el instanceof HTMLInputElement && (el.type === 'number' || el.type === 'range')) {
-      if (dir > 0) el.stepUp();
+      if (dir > 0) el.stepUp(); // stops at max/min, no wrap
       else el.stepDown();
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
-    } else if (el instanceof HTMLButtonElement) {
-      if (dir > 0) el.click();
     }
     // The change handler may have re-rendered the menu.
     if (this.root.isConnected) this.sync();
   }
 
-  /** Handles 'up' | 'down' | 'left' | 'right'. Returns true if handled. */
+  /** Start: toggles a checkbox or presses a button under the cursor; nothing on other controls. */
+  activate() {
+    const el = this.current();
+    if (!el) return;
+    const checkbox = el instanceof HTMLInputElement && el.type === 'checkbox';
+    if (checkbox || el instanceof HTMLButtonElement) el.click(); // fires input/change like a mouse click
+    if (this.root.isConnected) this.sync();
+  }
+
+  /** Handles 'up' | 'down' | 'left' | 'right' | 'start'. Returns true if handled. */
   navigate(intent) {
     if (intent === 'up') this.move(-1);
     else if (intent === 'down') this.move(1);
     else if (intent === 'left') this.adjust(-1);
     else if (intent === 'right') this.adjust(1);
+    else if (intent === 'start') this.activate();
     else return false;
     return true;
   }

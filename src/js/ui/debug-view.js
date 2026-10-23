@@ -303,7 +303,7 @@ export class DebugView {
     this.clearButton.textContent = t('debug.clearLog');
     this.manualText.textContent = t('debug.copyManual');
     this.manualClose.textContent = t('common.close');
-    this.hintEl.textContent = t('debug.gamepadHint');
+    this.hintEl.textContent = t(this.device.detection?.type === 'guitar' ? 'debug.gamepadHintGuitar' : 'debug.gamepadHint'); // rotated on a guitar (R2.12)
     this.hintEl.hidden = !this.gamepadMenu;
     this.lastCount = -1;
 
