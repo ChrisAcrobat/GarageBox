@@ -135,19 +135,46 @@ function identity(el) {
  * presses a button. Each action has one button: left/right do nothing on
  * checkboxes and buttons, Start does nothing on selects and number fields.
  */
+/**
+ * Remembered highlight (R2.12.1): memory key → identity of the control last
+ * under the cursor. Page session only (never saved), so a reload starts at
+ * the top; a settings reset does not touch it.
+ */
+const rememberedControls = new Map();
+
+/** The control identity remembered under `memoryKey`, or undefined. */
+export function rememberedControl(memoryKey) {
+  return rememberedControls.get(memoryKey);
+}
+
+/** Forgets every remembered control (as a page reload; used by the tests). */
+export function clearRememberedControls() {
+  rememberedControls.clear();
+}
+
 export class MenuNavigator {
   /**
    * @param {HTMLElement} root the menu element
-   * @param {{ initial?: string }} [options] selector of the control the cursor starts on
+   * @param {{ initial?: string, memoryKey?: string }} [options] `initial`:
+   *   selector of the control the cursor starts on; `memoryKey`: start on, and
+   *   keep remembering, the control last highlighted under this key (R2.12.1)
    */
-  constructor(root, { initial } = {}) {
+  constructor(root, { initial, memoryKey } = {}) {
     this.root = root;
+    this.memoryKey = memoryKey ?? null;
     this.key = null;
     this.index = 0;
-    const start = initial ? root.querySelector(initial) : null;
     const list = this.controls();
+    const remembered = this.memoryKey !== null ? rememberedControls.get(this.memoryKey) : undefined;
+    const start = (remembered !== undefined && list.find((el) => identity(el) === remembered)) || (initial ? root.querySelector(initial) : null);
     if (start && list.includes(start)) this._set(list, list.indexOf(start));
     else if (list.length) this._set(list, 0);
+  }
+
+  /** Sets the identity under the cursor and remembers it under the memory key. */
+  _setKey(key) {
+    this.key = key;
+    if (this.memoryKey !== null) rememberedControls.set(this.memoryKey, key);
   }
 
   /** The menu's usable controls in document order. */
@@ -165,13 +192,13 @@ export class MenuNavigator {
       return byKey;
     }
     this.index = Math.min(this.index, list.length - 1);
-    this.key = identity(list[this.index]);
+    this._setKey(identity(list[this.index]));
     return list[this.index];
   }
 
   _set(list, index) {
     this.index = index;
-    this.key = identity(list[index]);
+    this._setKey(identity(list[index]));
     this.sync();
   }
 

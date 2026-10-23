@@ -282,7 +282,7 @@ export class SettingsPanel {
     this.refresh();
     container.appendChild(this.el);
     // Gamepad cursor only in a gamepad menu (design 7.4).
-    if (this.gamepadMenu) this.nav = new MenuNavigator(this.el, { initial: '.fields select' });
+    if (this.gamepadMenu) this.nav = new MenuNavigator(this.el, { initial: '.fields select', memoryKey: settingsIdOf(device) });
     if (focus) this.fieldsEl.querySelector('select, input')?.focus({ preventScroll: true });
   }
 
