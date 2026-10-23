@@ -123,7 +123,7 @@
         check('the noteOff uses the mute fade-out of the options', offs[0]?.fade, g.options.fade);
         check('pressing again does not start a new note', play(g, [release('fret1'), press('fret1')]), []);
         check('fade time follows the setting', new Guitar({ fade: 0.3 }).options.fade, 0.3);
-        check('default settings: mute fade-out 1000 ms -> fade 1 s (R4.3.1)', () => guitarOptions(DEFAULTS.device, 'guitar').fade, 1);
+        check('default settings: mute fade-out 250 ms -> fade 0.25 s (R4.3.1)', () => guitarOptions(DEFAULTS.device, 'guitar').fade, 0.25);
       });
 
       await s.section('independent frets, chords, same frame (R4.6, R4.8)', () => {
@@ -231,7 +231,7 @@
       });
 
       await s.section('number-field settings (R2.9.1)', () => s.withCleanStorage(() => {
-        check('defaults: fade 1000 ms, ring time 10 s, smoothing 80 ms, bend -2', [DEFAULTS.device.fadeMs, DEFAULTS.device.decay, DEFAULTS.device.tiltSmoothing, DEFAULTS.device.bendRange], [1000, 10, 80, -2]);
+        check('defaults: fade 250 ms, ring time 10 s, smoothing 80 ms, bend -2', [DEFAULTS.device.fadeMs, DEFAULTS.device.decay, DEFAULTS.device.tiltSmoothing, DEFAULTS.device.bendRange], [250, 10, 80, -2]);
         const device = fakeDevice('device:guitar:1', XPLORER);
         const panel = openPanel(device, 'guitar', 'guitar');
         try {
@@ -248,7 +248,7 @@
           check('an empty (invalid) entry restores the previous value', () => enter('fadeMs', ''), [10, 10]);
           check('ring time 40 is clamped to 30', () => enter('decay', '40'), [30, 30]);
           check('bend range -30 is clamped to -24', () => enter('bendRange', '-30'), [-24, -24]);
-          check('an invalid stored fade falls back to the default', () => { localStorage.setItem('musicSandbox.devices', JSON.stringify({ [device.id]: { fadeMs: 'x' } })); return ST.getDeviceSettings(device.id).fadeMs; }, 1000);
+          check('an invalid stored fade falls back to the default', () => { localStorage.setItem('musicSandbox.devices', JSON.stringify({ [device.id]: { fadeMs: 'x' } })); return ST.getDeviceSettings(device.id).fadeMs; }, 250);
         } finally {
           panel.destroy();
         }
@@ -772,6 +772,12 @@
         const has = (device, kind, instrument) => { const p = openPanel(device, kind, instrument); try { return !!p.el.querySelector('input[type="checkbox"][data-key="tiltGlide"]'); } finally { p.destroy(); } };
         check('the checkbox is offered on a guitar lane and a guitar playing bass (with tilt)', () => [has(fakeDevice(id, XPLORER), 'guitar', 'guitar'), has(fakeDevice(id, XPLORER), 'guitar', 'bass')], [true, true]);
         check('no checkbox for a gamepad (no tilt) or drums', () => [has(fakeDevice('device:gamepad:1', PAD), 'guitar', 'guitar'), has(fakeDevice(id, XPLORER), 'drums', 'drums')], [false, false]);
+      }));
+
+      await s.section('mute fade-out and ring time hints (R4.3.1, R4.7.1)', () => s.withCleanStorage(() => {
+        const hintOf = (key) => { const p = openPanel(fakeDevice('device:guitar:1', XPLORER), 'guitar', 'guitar'); try { const f = p.el.querySelector(`[data-key="${key}"]`); return f?.closest('label')?.querySelector('.field-hint')?.textContent ?? null; } finally { p.destroy(); } };
+        check('mute fade-out field has its hint', () => hintOf('fadeMs'), 'settings.fadeHint');
+        check('ring time field has its hint', () => hintOf('decay'), 'settings.decayHint');
       }));
 
       s.finish();
