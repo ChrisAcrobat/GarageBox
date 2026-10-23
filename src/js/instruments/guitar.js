@@ -608,7 +608,7 @@ export class Guitar extends Instrument {
     this._updateGlide(time);
     if (this.lastBend === null || Math.abs(semitones - this.lastBend) > 0.001) {
       this.lastBend = semitones;
-      this.emit({ type: 'bend', semitones, time });
+      this.emit({ type: 'bend', semitones, range: this.options.bendRange, time });
     }
     if (this.lastGain === null || Math.abs(gain - this.lastGain) > 0.001) {
       this.lastGain = gain;

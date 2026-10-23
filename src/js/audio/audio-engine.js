@@ -127,8 +127,9 @@ export class VoiceTracker {
     /** @type {Map<number, {voiceId:number, midi:number, column:number, start:number, peak:number, offAt:number|null, fade:number, oneShot:boolean, hold:boolean, holdEndAt:number|null}>} */
     this.voices = new Map();
     this.gain = 1;
-    /** Current pitch bend in semitones (shown as trail width, R5.4.5). */
+    /** Current pitch bend in semitones and the instrument's bend range (shown as trail width, R5.4.5). */
     this.bend = 0;
+    this.bendRange = 0;
   }
 
   configure({ model, decay, release } = {}) {
@@ -312,6 +313,7 @@ export class Channel {
         break;
       case 'bend':
         t.bend = event.semitones;
+        if (event.range !== undefined) t.bendRange = event.range;
         this.source?.bend(event.semitones);
         break;
       case 'glide': // tilt glide (R4.14): per-voice pitch offset

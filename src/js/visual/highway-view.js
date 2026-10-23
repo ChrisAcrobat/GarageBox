@@ -27,10 +27,14 @@ export const HIGHWAY_SECONDS = 6;
 /** Perspective strength: the far end is drawn 1 / (1 + K) as wide as the near end. */
 const K = 2.2;
 const SAMPLE_INTERVAL = 1 / 40;
-/** Trail width per semitone of bend, and its limits (R5.4.5): -2 semitones = 50 %. */
-const BEND_WIDTH_PER_SEMITONE = 0.25;
-const MIN_BEND_WIDTH = 0.5;
-const MAX_BEND_WIDTH = 1.5;
+/**
+ * How much thinner the trail gets at full whammy when bending down (R5.4.5):
+ * width = 1 - FULL_WHAMMY_THINNING x d, so 0.9 gives 10 % at full whammy.
+ * A first guess; change it here to try other thicknesses.
+ */
+export const FULL_WHAMMY_THINNING = 0.9;
+/** How much wider the trail gets at full whammy when bending up (150 %). */
+const FULL_WHAMMY_WIDENING = 0.5;
 /** Pitch range spread across the keyboard lane's road. */
 const KEYS_LOW = 36;
 const KEYS_HIGH = 91;
@@ -39,7 +43,7 @@ const KEYS_DRUM_COLUMN = 0.06;
 
 export class HighwayState {
   constructor() {
-    /** { voiceId, x (0..1 across the road), color, start, end, oneShot, velocity, midi, tracker, history: [{t, level, bend}] } */
+    /** { voiceId, x (0..1 across the road), color, start, end, oneShot, velocity, midi, tracker, history: [{t, level, bend, range}] } */
     this.notes = [];
   }
 
@@ -61,7 +65,7 @@ export class HighwayState {
       velocity: event.velocity ?? 100,
       midi: event.midi,
       tracker,
-      history: [{ t: now, level: tracker.level(event.voiceId, now) || (event.velocity ?? 100) / 127, bend: tracker.bend || 0 }],
+      history: [{ t: now, level: tracker.level(event.voiceId, now) || (event.velocity ?? 100) / 127, bend: tracker.bend || 0, range: tracker.bendRange || 0 }],
     });
   }
 
@@ -72,7 +76,7 @@ export class HighwayState {
       const alive = n.tracker.voices.has(n.voiceId);
       const level = alive ? n.tracker.level(n.voiceId, now) : 0;
       const last = n.history[n.history.length - 1];
-      if (now - last.t >= SAMPLE_INTERVAL) n.history.push({ t: now, level, bend: n.tracker.bend || 0 });
+      if (now - last.t >= SAMPLE_INTERVAL) n.history.push({ t: now, level, bend: n.tracker.bend || 0, range: n.tracker.bendRange || 0 });
       if (!alive) n.end = now;
     }
     this.notes = this.notes.filter((n) => n.end === null || now - n.end < HIGHWAY_SECONDS);
@@ -97,10 +101,16 @@ function sampleAt(note, t) {
   return h[lo];
 }
 
-/** Trail width factor for a bend in semitones (R5.4.5): linear, clamped. */
-export function bendWidth(semitones) {
-  const w = 1 + BEND_WIDTH_PER_SEMITONE * (semitones || 0);
-  return Math.max(MIN_BEND_WIDTH, Math.min(MAX_BEND_WIDTH, w));
+/**
+ * Trail width factor (R5.4.5) from how far the whammy is pressed:
+ * d = |semitones| / |bendRange| (0..1, 0 when the range is 0). A negative
+ * range (bending down, the default -2) thins the trail to
+ * 1 - FULL_WHAMMY_THINNING x d; a positive range widens it to 1 + 0.5 x d.
+ */
+export function bendWidth(semitones, bendRange) {
+  const range = Math.abs(bendRange || 0);
+  const d = range > 0 ? Math.min(1, Math.abs(semitones || 0) / range) : 0;
+  return bendRange > 0 ? 1 + FULL_WHAMMY_WIDENING * d : 1 - FULL_WHAMMY_THINNING * d;
 }
 
 /** x of a pitch on the keyboard road in Piano mode, left of the numpad column. */
@@ -221,7 +231,7 @@ function drawTrail(ctx, note, project, colWidth, now, head, tail) {
     if (level < 0.01) continue;
     const a = project(note.x, d0);
     const b = project(note.x, d1);
-    const width = colWidth * 0.32 * bendWidth(sample.bend);
+    const width = colWidth * 0.32 * bendWidth(sample.bend, sample.range);
     const wa = width * a.s;
     const wb = width * b.s;
     ctx.beginPath();

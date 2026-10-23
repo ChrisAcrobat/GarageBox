@@ -8,7 +8,7 @@
 // Note events (design 4.1):
 //   { type: 'noteOn',  voiceId, midi, velocity, time, column }
 //   { type: 'noteOff', voiceId, fade, time }      fade in seconds (R4.3.1)
-//   { type: 'bend',    semitones, time }          whole instrument
+//   { type: 'bend',    semitones, range?, time }  whole instrument; range = bend at full whammy (R5.4.5)
 //   { type: 'volume',  gain, time }               whole instrument
 //   { type: 'glide',   voiceId, semitones, time } tilt glide (R4.14): one voice's
 //                                                 pitch offset from its noteOn
