@@ -354,6 +354,14 @@
         ST.resetDeviceSettings(id, { keepInstrument: true });
         onG.configure({ ...guitarOptions(ST.getDeviceSettings(id), 'guitar'), tiltSmoothing: 0 });
         check('reset while tilt is on: range 0, tilt stays on', [onG.rangeSteps(), onG.tiltEnabled], [0, true]);
+        // Same, but the saved offset is already 0 (the usual case): the tilt delta must still be dropped (QA F2).
+        ST.resetDeviceSettings(id, { keepInstrument: true });
+        const zeroG = new Guitar({ ...guitarOptions(ST.getDeviceSettings(id), 'guitar'), tiltSmoothing: 0 });
+        tilt(zeroG, 0.44); tapBack(zeroG, 0.44); tilt(zeroG, 0.64);
+        const before = zeroG.rangeSteps();
+        ST.resetDeviceSettings(id, { keepInstrument: true });
+        zeroG.configure({ ...guitarOptions(ST.getDeviceSettings(id), 'guitar'), tiltSmoothing: 0 });
+        check('reset while tilt is on from a saved offset of 0 (+2 tilted): range 0, tilt stays on, fret 1 plays E3', [before, zeroG.rangeSteps(), zeroG.tiltEnabled, noteName(zeroG.noteFor(0))], [2, 0, true, 'E3']);
       }));
 
       // ---- D-pad action (R4.15) ---------------------------------------------
