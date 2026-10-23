@@ -13,167 +13,283 @@
   </head>
   <body>
     <h1>Menu navigation tests</h1>
-    <p>Open via a local server (e.g. <code>python3 -m http.server</code>) at <code>/tests/menu-nav.test.html</code>.</p>
+    <p>Menu intents, the gamepad cursor and the settings panel (design 7.2, 7.4, 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
     <p id="summary"></p>
     <ul id="results"></ul>
     <div id="sandbox"></div>
     <script type="module">
       import { createSuite, edge } from './test-runner.js';
-      import { MenuInput, MenuNavigator, MENU_CONTROLS, CURSOR_CLASS, REPEAT_DELAY_MS, REPEAT_INTERVAL_MS, intentFor, wrapIndex } from '../src/js/ui/menu-nav.js';
-      import { SettingsPanel } from '../src/js/ui/settings-panel.js';
-      import { detectController } from '../src/js/input/detect.js';
-      import { MAPPINGS } from '../src/js/input/mappings.js';
-      import { resetDeviceSettings, getDeviceSettings } from '../src/js/settings/store.js';
 
       const s = createSuite('menu navigation tests');
       const { check } = s;
+      const MN = await s.load('../src/js/ui/menu-nav.js', ['MenuInput', 'MenuNavigator', 'MENU_CONTROLS', 'CURSOR_CLASS', 'REPEAT_DELAY_MS', 'REPEAT_INTERVAL_MS', 'intentFor', 'wrapIndex', 'rotateIntent', 'menuRotated']);
+      const PANEL = await s.load('../src/js/ui/settings-panel.js', ['SettingsPanel']);
+      const DET = await s.load('../src/js/input/detect.js', ['detectController']);
+      const MAP = await s.load('../src/js/input/mappings.js', ['MAPPINGS', 'selectMapping']);
+      const ST = await s.load('../src/js/settings/store.js', ['DEFAULTS', 'resetDeviceSettings', 'getDeviceSettings', 'setDeviceSetting']);
+      const { MenuInput, MenuNavigator, MENU_CONTROLS, REPEAT_DELAY_MS, REPEAT_INTERVAL_MS, intentFor, wrapIndex } = MN;
+      const CURSOR_CLASS = MN.CURSOR_CLASS || 'gamepad-focus';
       const held = (...names) => Object.fromEntries(names.map((n) => [n, { pressed: true, value: 1 }]));
-
-      s.group('intents');
-      check('D-pad and strum map to up/down', ['dpadUp', 'strumUp', 'dpadDown', 'strumDown'].map(intentFor), ['up', 'up', 'down', 'down']);
-      check('left/right/back/start', ['dpadLeft', 'dpadRight', 'back', 'start'].map(intentFor), ['left', 'right', 'back', 'start']);
-      check('frets and face buttons are not menu controls', ['fret1', 'faceA', 'shoulderL', 'whammy'].map(intentFor), [undefined, undefined, undefined, undefined]);
-      check('menu takes D-pad, strum and Back from the instrument, not Start', ['dpadUp', 'strumDown', 'dpadRight', 'back', 'start', 'fret1'].map((n) => MENU_CONTROLS.has(n)), [true, true, true, true, false, false]);
-
-      s.group('edges and key repeat');
-      let m = new MenuInput();
-      check('press gives one intent', m.update([edge('strumDown')], held('strumDown'), 0), ['down']);
-      check('nothing while held before the delay', m.update([], held('strumDown'), REPEAT_DELAY_MS - 1), []);
-      check('repeat after the delay', m.update([], held('strumDown'), REPEAT_DELAY_MS), ['down']);
-      check('no repeat before the interval', m.update([], held('strumDown'), REPEAT_DELAY_MS + REPEAT_INTERVAL_MS - 1), []);
-      check('repeat every interval', m.update([], held('strumDown'), REPEAT_DELAY_MS + REPEAT_INTERVAL_MS), ['down']);
-      check('release stops the repeat', m.update([edge('strumDown', 'released')], {}, 5000), []);
-      check('still nothing later', m.update([], {}, 6000), []);
-      m = new MenuInput();
-      check('Back and Start do not repeat', [m.update([edge('back'), edge('start')], held('back', 'start'), 0), m.update([], held('back', 'start'), 2000)], [['back', 'start'], []]);
-      m = new MenuInput();
-      check('two names on one raw button give one intent', m.update([edge('strumUp'), edge('dpadUp')], held('strumUp', 'dpadUp'), 0), ['up']);
-      check('released edges give no intent', m.update([edge('strumUp', 'released')], {}, 10), []);
-      m = new MenuInput();
-      m.update([edge('dpadRight')], held('dpadRight'), 0);
-      m.reset();
-      check('reset() forgets held directions', m.update([], held('dpadRight'), 1000), []);
-      check('wrapIndex wraps both ways', [wrapIndex(0, 3, -1), wrapIndex(2, 3, 1), wrapIndex(1, 3, 1), wrapIndex(0, 0, 1)], [2, 0, 2, -1]);
-
-      s.group('MenuNavigator');
       const box = document.getElementById('sandbox');
-      box.innerHTML = `
-        <section id="menu">
-          <button type="button" class="close-button">x</button>
-          <select data-key="a"><option>1</option><option>2</option><option>3</option></select>
-          <button type="button" class="hidden-button" hidden>hidden</button>
-          <div hidden><select data-key="inhidden"><option>x</option></select></div>
-          <input type="checkbox" data-key="c" />
-          <input type="number" data-key="n" min="0" max="10" step="2" value="4" />
-          <button type="button" class="go-button">go</button>
-        </section>`;
-      const root = box.querySelector('#menu');
-      const log = [];
-      root.querySelector('select').addEventListener('change', (e) => log.push(`change:${e.target.selectedIndex}`));
-      root.querySelector('.go-button').addEventListener('click', () => log.push('go'));
-      const nav = new MenuNavigator(root, { initial: 'select' });
-      const cur = () => nav.current();
-      const tag = (el) => el.dataset.key || el.className.replace(CURSOR_CLASS, '').trim();
-      check('starts on the initial control', tag(cur()), 'a');
-      check('the cursor class is on exactly that control', [...root.querySelectorAll(`.${CURSOR_CLASS}`)].map(tag), ['a']);
-      check('hidden controls are skipped', nav.controls().map(tag), ['close-button', 'a', 'c', 'n', 'go-button']);
-      nav.navigate('right');
-      check('right selects the next option and fires change', [root.querySelector('select').selectedIndex, log.at(-1)], [1, 'change:1']);
-      nav.navigate('left');
-      nav.navigate('left');
-      check('left cycles backwards and wraps', root.querySelector('select').selectedIndex, 2);
-      nav.navigate('down');
-      check('down moves to the checkbox', tag(cur()), 'c');
-      nav.navigate('right');
-      const afterRight = root.querySelector('[data-key="c"]').checked;
-      nav.navigate('left');
-      check('left/right toggle a checkbox', [afterRight, root.querySelector('[data-key="c"]').checked], [true, false]);
-      nav.navigate('down');
-      nav.navigate('right');
-      const up = root.querySelector('[data-key="n"]').value;
-      nav.navigate('left');
-      nav.navigate('left');
-      check('number input steps up and down', [up, root.querySelector('[data-key="n"]').value], ['6', '2']);
-      nav.navigate('down');
-      nav.navigate('left');
-      check('left on a button does nothing', log.includes('go'), false);
-      nav.navigate('right');
-      check('right presses a button', log.at(-1), 'go');
-      nav.navigate('down');
-      check('down from the last control wraps to the first', tag(cur()), 'close-button');
-      nav.navigate('up');
-      check('up from the first wraps to the last', tag(cur()), 'go-button');
-      check('only one control has the cursor', root.querySelectorAll(`.${CURSOR_CLASS}`).length, 1);
-      // Re-render: the cursor follows the control by its key, not by element.
-      nav.navigate('up');
-      nav.navigate('up');
-      const old = root.querySelector('[data-key="c"]');
-      const copy = old.cloneNode(true);
-      copy.classList.remove(CURSOR_CLASS);
-      old.replaceWith(copy);
-      nav.sync();
-      check('after a re-render the cursor is on the new element of the same field', [tag(cur()), copy.classList.contains(CURSOR_CLASS)], ['c', true]);
-      check('the browser focus is not moved', root.contains(document.activeElement), false);
+      const XPLORER = 'RedOctane Inc(c)2006  Guitar Hero X-plorer   (STANDARD GAMEPAD Vendor: 1430 Product: 4748)';
+      const PAD = 'Xbox 360 Controller (XInput STANDARD GAMEPAD)';
+      const fakeDevice = (id, name, extra = {}) => {
+        const detection = DET.detectController(name);
+        return { id, settingsId: id, index: 0, detection, mapping: MAP.selectMapping(detection.type, 'standard'), ...extra };
+      };
+      const keyboardDevice = () => ({ id: 'computer-keyboard', settingsId: 'computer-keyboard', index: 0, isKeyboard: true, detection: { type: 'keyboard', source: 'none' }, mapping: { name: 'keyboard', controls: {} } });
+      function openPanel(device, kind, instrument, extra = {}) {
+        return new PANEL.SettingsPanel({ container: box, device, getInstrument: () => ({ kind, instrument }), onClose: () => {}, onOpenDebug: () => {}, focus: false, ...extra });
+      }
+      const NAMED = ['close-button', 'reset-button', 'debug-button'];
+      const ctlTag = (el) => el?.dataset.key || NAMED.find((c) => el?.classList.contains(c)) || [...(el?.classList || [])].filter((c) => c !== CURSOR_CLASS)[0] || el?.tagName;
 
-      s.group('settings panel');
-      const device = { index: 0, id: 'menu-nav-test-pad', detection: detectController('Pad'), mapping: MAPPINGS['gamepad-standard'] };
-      resetDeviceSettings(device.id);
-      let closed = 0;
-      const panel = new SettingsPanel({
-        container: box,
-        device,
-        getInstrument: () => ({ kind: 'drums', instrument: 'drums' }),
-        onClose: () => closed++,
-        onOpenDebug: () => {},
-        gamepadMenu: true,
-        focus: false,
+      await s.section('intents', () => {
+        check('D-pad and strum map to up/down', ['dpadUp', 'strumUp', 'dpadDown', 'strumDown'].map(intentFor), ['up', 'up', 'down', 'down']);
+        check('left/right/back/start', ['dpadLeft', 'dpadRight', 'back', 'start'].map(intentFor), ['left', 'right', 'back', 'start']);
+        check('frets and face buttons are not menu controls', ['fret1', 'faceA', 'shoulderL', 'whammy'].map(intentFor), [undefined, undefined, undefined, undefined]);
+        check('menu takes D-pad, strum and Back from the instrument (Start is routed by main.js)', ['dpadUp', 'strumDown', 'dpadRight', 'back', 'fret1'].map((n) => MENU_CONTROLS.has(n)), [true, true, true, true, false]);
       });
-      const panelCursor = () => panel.el.querySelector(`.${CURSOR_CLASS}`);
-      check('cursor starts on the first field (instrument)', panelCursor()?.dataset.key, 'instrument');
-      check('gamepad hint is shown', panel.el.querySelector('.gamepad-hint').hidden, false);
-      panel.navigate('right');
-      check('right changes the stored instrument', getDeviceSettings(device.id).instrument !== 'auto', true);
-      panel.navigate('down');
-      const key = panelCursor()?.dataset.key;
-      panel.refresh();
-      check('cursor survives refresh()', panelCursor()?.dataset.key, key);
-      panel.navigate('back');
-      check('Back closes the panel', closed, 1);
-      panel.destroy();
-      resetDeviceSettings(device.id);
-      s.group('settings panel opened with the mouse');
-      let mouseClosed = 0;
-      const mouse = new SettingsPanel({
-        container: box,
-        device,
-        getInstrument: () => ({ kind: 'guitar', instrument: 'guitar' }),
-        onClose: () => mouseClosed++,
-        onOpenDebug: () => {},
-      });
-      check('not a gamepad menu by default', mouse.gamepadMenu, false);
-      check('no gamepad cursor', mouse.el.querySelectorAll(`.${CURSOR_CLASS}`).length, 0);
-      check('shows the "open with Start" tip instead', [mouse.el.querySelector('.gamepad-hint').hidden, mouse.el.querySelector('.gamepad-hint').textContent], [false, 'settings.gamepadHintMouse']);
-      const before = getDeviceSettings(device.id).instrument;
-      mouse.navigate('right');
-      mouse.navigate('down');
-      mouse.navigate('back');
-      check('navigate() does nothing (no change, no close, no cursor)', [getDeviceSettings(device.id).instrument === before, mouseClosed, mouse.el.querySelectorAll(`.${CURSOR_CLASS}`).length], [true, 0, 0]);
-      check('the browser focus is on the first field as before', document.activeElement?.dataset.key, 'instrument');
-      mouse.destroy();
-      resetDeviceSettings(device.id);
 
-      s.group('keyboard panel');
-      const kb = new SettingsPanel({
-        container: box,
-        device: { ...device, isKeyboard: true, id: 'menu-nav-test-kb' },
-        getInstrument: () => ({ kind: 'keys', instrument: 'keys' }),
-        onClose: () => {},
-        onOpenDebug: () => {},
-        gamepadMenu: true,
+      await s.section('edges and key repeat', () => {
+        let m = new MenuInput();
+        check('press gives one intent', m.update([edge('strumDown')], held('strumDown'), 0), ['down']);
+        check('nothing while held before the delay', m.update([], held('strumDown'), REPEAT_DELAY_MS - 1), []);
+        check('repeat after the delay (400 ms)', [REPEAT_DELAY_MS, m.update([], held('strumDown'), REPEAT_DELAY_MS)], [400, ['down']]);
+        check('no repeat before the interval', m.update([], held('strumDown'), REPEAT_DELAY_MS + REPEAT_INTERVAL_MS - 1), []);
+        check('repeat every interval (120 ms)', [REPEAT_INTERVAL_MS, m.update([], held('strumDown'), REPEAT_DELAY_MS + REPEAT_INTERVAL_MS)], [120, ['down']]);
+        check('release stops the repeat', m.update([edge('strumDown', 'released')], {}, 5000), []);
+        check('still nothing later', m.update([], {}, 6000), []);
+        m = new MenuInput();
+        check('Back and Start do not repeat', [m.update([edge('back'), edge('start')], held('back', 'start'), 0), m.update([], held('back', 'start'), 2000)], [['back', 'start'], []]);
+        m = new MenuInput();
+        check('two names on one raw button give one intent', m.update([edge('strumUp'), edge('dpadUp')], held('strumUp', 'dpadUp'), 0), ['up']);
+        check('released edges give no intent', m.update([edge('strumUp', 'released')], {}, 10), []);
+        m = new MenuInput();
+        m.update([edge('dpadRight')], held('dpadRight'), 0);
+        m.reset();
+        check('reset() forgets held directions', m.update([], held('dpadRight'), 1000), []);
+        check('wrapIndex wraps both ways', [wrapIndex(0, 3, -1), wrapIndex(2, 3, 1), wrapIndex(1, 3, 1), wrapIndex(0, 0, 1)], [2, 0, 2, -1]);
       });
-      check('the keyboard panel has no gamepad cursor or hint', [kb.el.querySelectorAll(`.${CURSOR_CLASS}`).length, kb.el.querySelector('.gamepad-hint').hidden], [0, true]);
-      kb.destroy();
-      resetDeviceSettings('menu-nav-test-kb');
+
+      await s.section('MenuNavigator (7.4)', () => {
+        box.innerHTML = `
+          <section id="menu">
+            <button type="button" class="close-button">x</button>
+            <select data-key="a"><option>1</option><option>2</option><option>3</option></select>
+            <button type="button" class="hidden-button" hidden>hidden</button>
+            <div hidden><select data-key="inhidden"><option>x</option></select></div>
+            <input type="checkbox" data-key="c" />
+            <input type="number" data-key="n" min="0" max="10" step="2" value="4" />
+            <button type="button" class="go-button">go</button>
+          </section>`;
+        const root = box.querySelector('#menu');
+        const log = [];
+        root.querySelector('select').addEventListener('change', (e) => log.push(`change:${e.target.selectedIndex}`));
+        root.querySelector('[data-key="n"]').addEventListener('change', (e) => log.push(`n:${e.target.value}`));
+        root.querySelector('.go-button').addEventListener('click', () => log.push('go'));
+        const nav = new MenuNavigator(root, { initial: 'select' });
+        const cur = () => nav.current();
+        const field = (k) => root.querySelector(`[data-key="${k}"]`);
+        check('starts on the initial control', ctlTag(cur()), 'a');
+        check('the cursor class is on exactly that control', [...root.querySelectorAll(`.${CURSOR_CLASS}`)].map(ctlTag), ['a']);
+        check('hidden controls are skipped', nav.controls().map(ctlTag), ['close-button', 'a', 'c', 'n', 'go-button']);
+        nav.navigate('right');
+        check('right selects the next option and fires change', [field('a').selectedIndex, log.at(-1)], [1, 'change:1']);
+        nav.navigate('left');
+        nav.navigate('left');
+        check('left cycles backwards and wraps', field('a').selectedIndex, 2);
+        nav.navigate('start');
+        check('Start on a select does nothing', field('a').selectedIndex, 2);
+        nav.navigate('down');
+        check('down moves to the checkbox', ctlTag(cur()), 'c');
+        nav.navigate('right');
+        nav.navigate('left');
+        check('left/right do nothing on a checkbox', field('c').checked, false);
+        nav.navigate('start');
+        check('Start toggles a checkbox (and fires change)', field('c').checked, true);
+        nav.navigate('start');
+        check('Start again unchecks it', field('c').checked, false);
+        nav.navigate('down');
+        nav.navigate('right');
+        const up = field('n').value;
+        nav.navigate('left');
+        nav.navigate('left');
+        check('number input steps up and down by its step and fires change', [up, field('n').value, log.at(-1)], ['6', '2', 'n:2']);
+        nav.navigate('left');
+        nav.navigate('left');
+        check('number input is clamped at min (no wrap)', field('n').value, '0');
+        for (let i = 0; i < 8; i++) nav.navigate('right');
+        check('number input is clamped at max (no wrap)', field('n').value, '10');
+        nav.navigate('start');
+        check('Start on a number input does nothing', field('n').value, '10');
+        nav.navigate('down');
+        nav.navigate('left');
+        nav.navigate('right');
+        check('left/right do nothing on a button', log.includes('go'), false);
+        nav.navigate('start');
+        check('Start presses a button', log.at(-1), 'go');
+        nav.navigate('down');
+        check('down from the last control wraps to the first', ctlTag(cur()), 'close-button');
+        nav.navigate('up');
+        check('up from the first wraps to the last', ctlTag(cur()), 'go-button');
+        check('only one control has the cursor', root.querySelectorAll(`.${CURSOR_CLASS}`).length, 1);
+        nav.navigate('up');
+        nav.navigate('up');
+        const old = field('c');
+        const copy = old.cloneNode(true);
+        copy.classList.remove(CURSOR_CLASS);
+        old.replaceWith(copy);
+        nav.sync();
+        check('after a re-render the cursor is on the new element of the same field', [ctlTag(cur()), copy.classList.contains(CURSOR_CLASS)], ['c', true]);
+        check('the browser focus is not moved', root.contains(document.activeElement), false);
+        box.innerHTML = '';
+      });
+
+      await s.section('guitar rotation (R2.12)', () => {
+        const rot = MN.rotateIntent;
+        check('rotateIntent: right -> down, left -> up, up -> right, down -> left', () => ['right', 'left', 'up', 'down'].map(rot), ['down', 'up', 'right', 'left']);
+        check('rotateIntent: back and start are unchanged', () => ['back', 'start'].map(rot), ['back', 'start']);
+        check('menuRotated: a controller detected as a guitar (Xplorer)', () => MN.menuRotated(fakeDevice('device:guitar:1', XPLORER)), true);
+        check('menuRotated: a regular gamepad is not rotated (also in guitar mode)', () => MN.menuRotated(fakeDevice('device:gamepad:1', PAD)), false);
+        check('menuRotated: the keyboard is not rotated', () => MN.menuRotated(keyboardDevice()), false);
+        box.innerHTML = `<section id="rot"><select data-key="a"><option>1</option><option>2</option></select><select data-key="b"><option>1</option><option>2</option><option>3</option></select></section>`;
+        const root = box.querySelector('#rot');
+        const nav = new MenuNavigator(root, { initial: 'select' });
+        const go = (intent) => nav.navigate(rot(intent));
+        check('on a guitar: right moves to the next control', () => (go('right'), ctlTag(nav.current())), 'b');
+        check('on a guitar: up changes the value forwards, down backwards (wraps)', () => { go('up'); const a = root.querySelector('[data-key="b"]').selectedIndex; go('down'); go('down'); return [a, root.querySelector('[data-key="b"]').selectedIndex]; }, [1, 2]);
+        check('on a guitar: left moves to the previous control', () => (go('left'), ctlTag(nav.current())), 'a');
+        box.innerHTML = '';
+      });
+
+      await s.section('settings panel as a gamepad menu', () => s.withCleanStorage(() => {
+        const device = fakeDevice('device:gamepad:1', PAD);
+        let closed = 0;
+        const panel = openPanel(device, 'drums', 'drums', { onClose: () => closed++, gamepadMenu: true });
+        try {
+          const panelCursor = () => panel.el.querySelector(`.${CURSOR_CLASS}`);
+          check('cursor starts on the first field (instrument)', panelCursor()?.dataset.key, 'instrument');
+          check('gamepad hint is shown', panel.el.querySelector('.gamepad-hint').hidden, false);
+          panel.navigate('right');
+          check('right changes the stored instrument', ST.getDeviceSettings(device.id).instrument !== 'auto', true);
+          panel.navigate('down');
+          const key = panelCursor()?.dataset.key;
+          panel.refresh();
+          check('cursor survives refresh()', panelCursor()?.dataset.key, key);
+          panel.navigate('start');
+          check('Start does not close the panel', closed, 0);
+          panel.navigate('back');
+          check('Back closes the panel', closed, 1);
+        } finally {
+          panel.destroy();
+        }
+      }));
+
+      await s.section('settings panel opened with the mouse', () => s.withCleanStorage(() => {
+        const device = fakeDevice('device:gamepad:1', PAD);
+        let mouseClosed = 0;
+        const mouse = openPanel(device, 'guitar', 'guitar', { onClose: () => mouseClosed++, focus: true });
+        try {
+          check('not a gamepad menu by default', mouse.gamepadMenu, false);
+          check('no gamepad cursor', mouse.el.querySelectorAll(`.${CURSOR_CLASS}`).length, 0);
+          check('shows the "open with Start" tip instead', [mouse.el.querySelector('.gamepad-hint').hidden, mouse.el.querySelector('.gamepad-hint').textContent], [false, 'settings.gamepadHintMouse']);
+          const before = ST.getDeviceSettings(device.id).instrument;
+          mouse.navigate('right');
+          mouse.navigate('down');
+          mouse.navigate('start');
+          mouse.navigate('back');
+          check('navigate() does nothing (no change, no close, no cursor)', [ST.getDeviceSettings(device.id).instrument === before, mouseClosed, mouse.el.querySelectorAll(`.${CURSOR_CLASS}`).length], [true, 0, 0]);
+          check('the browser focus is on the first field as before', document.activeElement?.dataset.key, 'instrument');
+        } finally {
+          mouse.destroy();
+        }
+      }));
+
+      await s.section('keyboard panel', () => s.withCleanStorage(() => {
+        const kb = openPanel(keyboardDevice(), 'keys', 'keys', { gamepadMenu: true });
+        try {
+          check('the keyboard panel has no gamepad cursor or hint', [kb.el.querySelectorAll(`.${CURSOR_CLASS}`).length, kb.el.querySelector('.gamepad-hint').hidden], [0, true]);
+        } finally {
+          kb.destroy();
+        }
+      }));
+
+      // ---- which fields are shown (7.2) -------------------------------------
+      const shownKeys = (device, kind, instrument) => { const p = openPanel(device, kind, instrument); try { return [...p.el.querySelectorAll('[data-key]')].filter((el) => !el.closest('[hidden]')).map((el) => el.dataset.key); } finally { p.destroy(); } };
+
+      await s.section('ring time and tone follow the source (R4.7.1)', () => s.withCleanStorage(() => {
+        const id = 'device:guitar:1';
+        const device = fakeDevice(id, XPLORER);
+        const has = (keys) => ['decay', 'brightness'].map((k) => keys.includes(k));
+        check('pluck source (guitar default): ring time and tone shown', has(shownKeys(device, 'guitar', 'guitar')), [true, true]);
+        check('bass source (bass default): ring time and tone shown', has(shownKeys(device, 'guitar', 'bass')), [true, true]);
+        ST.setDeviceSetting(id, 'decay', 6);
+        ST.setDeviceSetting(id, 'source', 'midi');
+        check('MIDI source: ring time and tone hidden', has(shownKeys(device, 'guitar', 'guitar')), [false, false]);
+        check('MIDI source: the stored ring time is kept', ST.getDeviceSettings(id).decay, 6);
+        ST.setDeviceSetting(id, 'source', 'pluck');
+        const p = openPanel(device, 'guitar', 'guitar');
+        try {
+          check('back to pluck: the fields come back with the stored value', Number(p.el.querySelector('[data-key="decay"]')?.value), 6);
+        } finally {
+          p.destroy();
+        }
+        check('ring time default 10 s', ST.DEFAULTS.device.decay, 10);
+      }));
+
+      await s.section('effect, D-pad and star power fields (R3.6, R4.15, R5.5)', () => s.withCleanStorage(() => {
+        const guitar = fakeDevice('device:guitar:1', XPLORER);
+        const pad = fakeDevice('device:gamepad:1', PAD);
+        const g = shownKeys(guitar, 'guitar', 'guitar');
+        check('guitar lane: effect and dpadAction shown, dpadAction right after effect', [g.includes('effect'), g.indexOf('dpadAction') === g.indexOf('effect') + 1], [true, true]);
+        check('drums: no effect, no dpadAction', ['effect', 'dpadAction'].map((k) => shownKeys(guitar, 'drums', 'drums').includes(k)), [false, false]);
+        check('gamepad playing bass: effect and dpadAction shown', ['effect', 'dpadAction'].map((k) => shownKeys(pad, 'guitar', 'bass').includes(k)), [true, true]);
+        const kbKeys = shownKeys(keyboardDevice(), 'keys', 'keys');
+        check('keyboard (piano mode): effect shown, no dpadAction', [kbKeys.includes('effect'), kbKeys.includes('dpadAction')], [true, false]);
+        ST.setDeviceSetting('computer-keyboard', 'keysMode', 'drums');
+        check('keyboard in drums mode: no effect', shownKeys(keyboardDevice(), 'keys', 'keys').includes('effect'), false);
+        check('star power checkbox on a guitar with whammy and tilt, checked by default', () => { const p = openPanel(guitar, 'guitar', 'guitar'); try { const box2 = p.el.querySelector('input[type="checkbox"][data-key="starPower"]'); return [!!box2, box2?.checked, !!box2?.closest('.panel-options')]; } finally { p.destroy(); } }, [true, true, false]);
+        check('no star power checkbox on a gamepad (no whammy/tilt)', shownKeys(pad, 'guitar', 'guitar').includes('starPower'), false);
+        check('tilt smoothing only on a controller with tilt', [shownKeys(guitar, 'guitar', 'guitar').includes('tiltSmoothing'), shownKeys(pad, 'guitar', 'guitar').includes('tiltSmoothing')], [true, false]);
+        check('no tilt assignment field', shownKeys(guitar, 'guitar', 'guitar').includes('tilt'), false);
+      }));
+
+      await s.section('tilt glide checkbox (R4.14, 7.2, 7.4)', () => s.withCleanStorage(() => {
+        const id = 'device:guitar:1';
+        const device = fakeDevice(id, XPLORER);
+        const panel = openPanel(device, 'guitar', 'guitar', { gamepadMenu: true });
+        try {
+          const box2 = () => panel.el.querySelector('input[type="checkbox"][data-key="tiltGlide"]');
+          const cursor = () => ctlTag(panel.el.querySelector(`.${CURSOR_CLASS}`));
+          check('the checkbox exists, unchecked by default', [!!box2(), box2()?.checked], [true, false]);
+          check('it is inside div.panel-options, which is shown', [!!box2()?.closest('.panel-options'), panel.el.querySelector('.panel-options')?.hidden], [true, false]);
+          check('label key settings.tiltGlide (label.field.field-checkbox)', [box2()?.closest('label')?.matches('label.field.field-checkbox'), box2()?.closest('label')?.textContent.trim()], [true, 'settings.tiltGlide']);
+          check('the cursor starts on the first field', cursor(), 'instrument');
+          panel.navigate('up');
+          check('up from the first field reaches the close button', cursor(), 'close-button');
+          panel.navigate('up');
+          check('up again wraps to the checkbox (the last control)', cursor(), 'tiltGlide');
+          panel.navigate('right');
+          panel.navigate('left');
+          check('left/right do not toggle it', [box2().checked, ST.getDeviceSettings(id).tiltGlide], [false, false]);
+          panel.navigate('start');
+          panel.refresh();
+          check('Start toggles it and the value is saved', [box2().checked, ST.getDeviceSettings(id).tiltGlide], [true, true]);
+          panel.navigate('up');
+          check('up from it reaches Reset to defaults', cursor(), 'reset-button');
+          panel.navigate('down');
+          check('down returns to it', cursor(), 'tiltGlide');
+          panel.navigate('down');
+          check('down from it wraps to the close button', cursor(), 'close-button');
+        } finally {
+          panel.destroy();
+        }
+        const none = (dev, kind, instrument) => { const p = openPanel(dev, kind, instrument); try { return [!!p.el.querySelector('[data-key="tiltGlide"]'), p.el.querySelector('.panel-options')?.hidden ?? true]; } finally { p.destroy(); } };
+        check('no checkbox (panel-options hidden) when the controller plays drums', none(device, 'drums', 'drums'), [false, true]);
+        check('no checkbox for a gamepad in guitar mode', none(fakeDevice('device:gamepad:1', PAD), 'guitar', 'guitar'), [false, true]);
+        check('no checkbox on the keyboard panel', none(keyboardDevice(), 'keys', 'keys'), [false, true]);
+      }));
 
       s.finish();
     </script>

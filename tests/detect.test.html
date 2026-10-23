@@ -12,91 +12,100 @@
   </head>
   <body>
     <h1>Controller detection tests</h1>
-    <p>Open via a local server (e.g. <code>python3 -m http.server</code>) at <code>/tests/detect.test.html</code>.</p>
+    <p>Controller detection, mappings and the per-device settings key (R2.5 – R2.7, design 3.1, 8, 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
     <p id="summary"></p>
     <ul id="results"></ul>
     <script type="module">
-      import { detectController, parseVidPid, parseXInputSubtype, defaultInstrumentFor } from '../src/js/input/detect.js';
-      import { selectMapping, readLogical } from '../src/js/input/mappings.js';
+      import { createSuite } from './test-runner.js';
 
-      const results = [];
-      function check(name, actual, expected) {
-        const ok = JSON.stringify(actual) === JSON.stringify(expected);
-        results.push({ name, ok, actual, expected });
-      }
+      const s = createSuite('detect tests');
+      const { check } = s;
+      const DET = await s.load('../src/js/input/detect.js', ['detectController', 'parseVidPid', 'parseXInputSubtype', 'defaultInstrumentFor']);
+      const MAP = await s.load('../src/js/input/mappings.js', ['selectMapping', 'readLogical']);
+      const GM = await s.load('../src/js/input/gamepad-manager.js', ['Device']);
+      const ST = await s.load('../src/js/settings/store.js', ['deviceSettingsId', 'getDeviceSettings', 'setDeviceSetting', 'DEFAULTS']);
+      const { detectController, parseVidPid, parseXInputSubtype, defaultInstrumentFor } = DET;
+      const { selectMapping, readLogical } = MAP;
 
-      // Detection by id string (R2.5).
-      const cases = [
-        ['Chrome/Linux Xplorer', 'RedOctane Guitar Hero X-plorer (Vendor: 1430 Product: 4748)', 'guitar', 'vidpid'],
-        ['Chrome/Linux Xplorer standard', 'RedOctane Guitar Hero X-plorer (STANDARD GAMEPAD Vendor: 1430 Product: 4748)', 'guitar', 'vidpid'],
-        ['Firefox Xplorer', '1430-4748-RedOctane Guitar Hero X-plorer', 'guitar', 'vidpid'],
-        ['Chrome/Windows guitar', 'Xbox 360 Controller (XInput STANDARD GUITAR_ALTERNATE)', 'guitar', 'xinput'],
-        ['Chrome/Windows guitar (plain)', 'Xbox 360 Controller (XInput STANDARD GUITAR)', 'guitar', 'xinput'],
-        ['Chrome/Windows bass', 'Xbox 360 Controller (XInput STANDARD GUITAR_BASS)', 'guitar', 'xinput'],
-        ['Chrome/Windows drums', 'Xbox 360 Controller (XInput STANDARD DRUM_KIT)', 'drumKit', 'xinput'],
-        ['Chrome/Windows gamepad', 'Xbox 360 Controller (XInput STANDARD GAMEPAD)', 'gamepad', 'none'],
-        ['Rock Band drums VID:PID', 'Harmonix Drum Kit (Vendor: 1bad Product: 0003)', 'drumKit', 'vidpid'],
-        ['Rock Band guitar Firefox, unknown name', '1bad-0002-Some Controller', 'guitar', 'vidpid'],
-        ['Uppercase hex', 'Pad (Vendor: 1BAD Product: 0130)', 'drumKit', 'vidpid'],
-        ['Xbox 360 pad Linux', 'Microsoft X-Box 360 pad (STANDARD GAMEPAD Vendor: 045e Product: 028e)', 'gamepad', 'none'],
-        ['Firefox Xbox 360 pad', '45e-28e-Microsoft X-Box 360 pad', 'gamepad', 'none'],
-        ['Keyword guitar', 'Some Guitar Controller', 'guitar', 'keyword'],
-        ['Keyword xplorer', 'Generic Xplorer', 'guitar', 'keyword'],
-        ['Keyword drums beat guitar', 'Guitar Hero World Tour Drums', 'drumKit', 'keyword'],
-        ['Empty id', '', 'gamepad', 'none'],
-      ];
-      for (const [name, id, type, source] of cases) {
-        const d = detectController(id);
-        check(`${name}: type`, d.type, type);
-        check(`${name}: source`, d.source, source);
-      }
+      await s.section('detection by id string (R2.5)', () => {
+        const cases = [
+          ['Chrome/Linux Xplorer', 'RedOctane Guitar Hero X-plorer (Vendor: 1430 Product: 4748)', 'guitar', 'vidpid'],
+          ['Chrome/Linux Xplorer standard', 'RedOctane Guitar Hero X-plorer (STANDARD GAMEPAD Vendor: 1430 Product: 4748)', 'guitar', 'vidpid'],
+          ['Firefox Xplorer', '1430-4748-RedOctane Guitar Hero X-plorer', 'guitar', 'vidpid'],
+          ['Chrome/Windows guitar', 'Xbox 360 Controller (XInput STANDARD GUITAR_ALTERNATE)', 'guitar', 'xinput'],
+          ['Chrome/Windows guitar (plain)', 'Xbox 360 Controller (XInput STANDARD GUITAR)', 'guitar', 'xinput'],
+          ['Chrome/Windows bass', 'Xbox 360 Controller (XInput STANDARD GUITAR_BASS)', 'guitar', 'xinput'],
+          ['Chrome/Windows drums', 'Xbox 360 Controller (XInput STANDARD DRUM_KIT)', 'drumKit', 'xinput'],
+          ['Chrome/Windows gamepad', 'Xbox 360 Controller (XInput STANDARD GAMEPAD)', 'gamepad', 'none'],
+          ['Rock Band drums VID:PID', 'Harmonix Drum Kit (Vendor: 1bad Product: 0003)', 'drumKit', 'vidpid'],
+          ['Rock Band guitar Firefox, unknown name', '1bad-0002-Some Controller', 'guitar', 'vidpid'],
+          ['Uppercase hex', 'Pad (Vendor: 1BAD Product: 0130)', 'drumKit', 'vidpid'],
+          ['Xbox 360 pad Linux', 'Microsoft X-Box 360 pad (STANDARD GAMEPAD Vendor: 045e Product: 028e)', 'gamepad', 'none'],
+          ['Firefox Xbox 360 pad', '45e-28e-Microsoft X-Box 360 pad', 'gamepad', 'none'],
+          ['Keyword guitar', 'Some Guitar Controller', 'guitar', 'keyword'],
+          ['Keyword xplorer', 'Generic Xplorer', 'guitar', 'keyword'],
+          ['Keyword drums beat guitar', 'Guitar Hero World Tour Drums', 'drumKit', 'keyword'],
+          ['Empty id', '', 'gamepad', 'none'],
+        ];
+        for (const [name, id, type, source] of cases) {
+          const d = detectController(id);
+          check(`${name}: type`, d.type, type);
+          check(`${name}: source`, d.source, source);
+        }
+      });
 
-      check('parseVidPid Chrome', parseVidPid('X (Vendor: 1430 Product: 4748)'), { vendor: '1430', product: '4748' });
-      check('parseVidPid Firefox short', parseVidPid('45e-28e-Pad'), { vendor: '045e', product: '028e' });
-      check('parseVidPid none', parseVidPid('Xbox 360 Controller (XInput STANDARD GAMEPAD)'), null);
-      check('parseXInputSubtype', parseXInputSubtype('Xbox 360 Controller (XInput STANDARD GUITAR_ALTERNATE)'), 'GUITAR_ALTERNATE');
+      await s.section('id parsing and default instrument (R2.5, R2.6)', () => {
+        check('parseVidPid Chrome', parseVidPid('X (Vendor: 1430 Product: 4748)'), { vendor: '1430', product: '4748' });
+        check('parseVidPid Firefox short', parseVidPid('45e-28e-Pad'), { vendor: '045e', product: '028e' });
+        check('parseVidPid none', parseVidPid('Xbox 360 Controller (XInput STANDARD GAMEPAD)'), null);
+        check('parseXInputSubtype', parseXInputSubtype('Xbox 360 Controller (XInput STANDARD GUITAR_ALTERNATE)'), 'GUITAR_ALTERNATE');
 
-      check('default instrument guitar', defaultInstrumentFor(detectController('1430-4748-x')), 'guitar');
-      check('default instrument bass', defaultInstrumentFor(detectController('X (XInput STANDARD GUITAR_BASS)')), 'bass');
-      check('default instrument gamepad', defaultInstrumentFor(detectController('Pad')), 'drums');
-      check('default instrument drum kit', defaultInstrumentFor(detectController('1bad-0003-x')), 'drums');
+        check('default instrument guitar', defaultInstrumentFor(detectController('1430-4748-x')), 'guitar');
+        check('default instrument bass', defaultInstrumentFor(detectController('X (XInput STANDARD GUITAR_BASS)')), 'bass');
+        check('default instrument gamepad', defaultInstrumentFor(detectController('Pad')), 'drums');
+        check('default instrument drum kit', defaultInstrumentFor(detectController('1bad-0003-x')), 'drums');
+      });
 
-      // Mapping selection and logical reading.
-      check('mapping guitar standard', selectMapping('guitar', 'standard').name, 'guitar-standard');
-      check('mapping guitar raw', selectMapping('guitar', '').name, 'guitar-xpad');
-      check('mapping gamepad standard', selectMapping('gamepad', 'standard').name, 'gamepad-standard');
-      check('mapping drum kit raw', selectMapping('drumKit', '').name, 'gamepad-xpad');
+      await s.section('mapping selection and logical reading (3.1)', () => {
+        check('mapping guitar standard', selectMapping('guitar', 'standard').name, 'guitar-standard');
+        check('mapping guitar raw', selectMapping('guitar', '').name, 'guitar-xpad');
+        check('mapping gamepad standard', selectMapping('gamepad', 'standard').name, 'gamepad-standard');
+        check('mapping drum kit raw', selectMapping('drumKit', '').name, 'gamepad-xpad');
 
-      const btn = (pressed) => ({ pressed, value: pressed ? 1 : 0 });
-      const raw = {
-        buttons: [btn(false), btn(false), btn(false), btn(true), btn(false), btn(false), btn(false), btn(true)],
-        axes: [0, 0, -1, 1, -1, -1, 0, -1],
-      };
-      const logical = readLogical(selectMapping('guitar', ''), raw);
-      check('xpad yellow fret = B3', logical.fret3.pressed, true);
-      check('xpad green fret released', logical.fret1.pressed, false);
-      check('xpad start = B7', logical.start.pressed, true);
-      check('xpad strum up from hat -1', logical.strumUp.pressed, true);
-      check('xpad strum down not pressed', logical.strumDown.pressed, false);
-      check('xpad whammy full at +1', logical.whammy.value, 1);
-      check('xpad tilt rest at -1', logical.tilt.value, 0);
-      check('xpad D-pad left from hat axis 6 (unconfirmed)', readLogical(selectMapping('guitar', ''), { buttons: [], axes: [0, 0, 0, 0, 0, 0, -1, 0] }).dpadLeft.pressed, true);
-      check('standard guitar D-pad left/right = B14/B15 (confirmed)', [selectMapping('guitar', 'standard').controls.dpadLeft.button, selectMapping('guitar', 'standard').controls.dpadRight.button], [14, 15]);
+        const btn = (pressed) => ({ pressed, value: pressed ? 1 : 0 });
+        const raw = {
+          buttons: [btn(false), btn(false), btn(false), btn(true), btn(false), btn(false), btn(false), btn(true)],
+          axes: [0, 0, -1, 1, -1, -1, 0, -1],
+        };
+        const logical = readLogical(selectMapping('guitar', ''), raw);
+        check('xpad yellow fret = B3', logical.fret3.pressed, true);
+        check('xpad green fret released', logical.fret1.pressed, false);
+        check('xpad start = B7', logical.start.pressed, true);
+        check('xpad strum up from hat -1', logical.strumUp.pressed, true);
+        check('xpad strum down not pressed', logical.strumDown.pressed, false);
+        check('xpad whammy full at +1', logical.whammy.value, 1);
+        check('xpad tilt rest at -1', logical.tilt.value, 0);
+        check('xpad D-pad left from hat axis 6 (unconfirmed)', readLogical(selectMapping('guitar', ''), { buttons: [], axes: [0, 0, 0, 0, 0, 0, -1, 0] }).dpadLeft.pressed, true);
+        check('standard guitar D-pad left/right = B14/B15 (confirmed)', [selectMapping('guitar', 'standard').controls.dpadLeft.button, selectMapping('guitar', 'standard').controls.dpadRight.button], [14, 15]);
+      });
 
-      const failed = results.filter((r) => !r.ok);
-      const list = document.getElementById('results');
-      for (const r of results) {
-        const li = document.createElement('li');
-        li.className = r.ok ? 'pass' : 'fail';
-        li.textContent = r.ok ? `PASS ${r.name}` : `FAIL ${r.name}: got ${JSON.stringify(r.actual)}, expected ${JSON.stringify(r.expected)}`;
-        list.append(li);
-        if (!r.ok) console.error(li.textContent);
-      }
-      const summary = `${results.length - failed.length}/${results.length} passed`;
-      document.getElementById('summary').textContent = summary;
-      document.getElementById('summary').className = failed.length ? 'fail' : 'pass';
-      document.title = failed.length ? `FAIL ${summary}` : `PASS ${summary}`;
-      console.log(`detect tests: ${summary}`);
+      await s.section('settings key per type and slot (R2.7, R2.7.1)', () => s.withCleanStorage(() => {
+        const XPLORER = 'RedOctane Inc(c)2006  Guitar Hero X-plorer   (STANDARD GAMEPAD Vendor: 1430 Product: 4748)';
+        const PAD = 'Xbox 360 Controller (XInput STANDARD GAMEPAD)';
+        const DRUMS = 'Xbox 360 Controller (XInput STANDARD DRUM_KIT)';
+        const gamepad = (index, id) => ({ index, id, mapping: 'standard', connected: true, buttons: [], axes: [], timestamp: 0 });
+        check('deviceSettingsId(type, index) = device:<type>:<index + 1>', () => [ST.deviceSettingsId('guitar', 0), ST.deviceSettingsId('gamepad', 1), ST.deviceSettingsId('drumKit', 2)], ['device:guitar:1', 'device:gamepad:2', 'device:drumKit:3']);
+        check('a connected Xplorer in slot 1 uses device:guitar:1', () => new GM.Device(gamepad(0, XPLORER)).settingsId, 'device:guitar:1');
+        check('a gamepad in slot 2 uses device:gamepad:2', () => new GM.Device(gamepad(1, PAD)).settingsId, 'device:gamepad:2');
+        check('a drum kit in slot 3 uses device:drumKit:3', () => new GM.Device(gamepad(2, DRUMS)).settingsId, 'device:drumKit:3');
+        check('different types on the same slot keep separate settings', () => {
+          ST.setDeviceSetting('device:guitar:1', 'root', 2);
+          return [ST.getDeviceSettings('device:guitar:1').root, ST.getDeviceSettings('device:gamepad:1').root === ST.DEFAULTS.device.root];
+        }, [2, true]);
+        check('the setting is saved under that key in localStorage', () => Object.keys(localStorage).some((k) => k.includes('device:guitar:1') || (localStorage.getItem(k) || '').includes('"device:guitar:1"')), true);
+      }));
+
+      s.finish();
     </script>
   </body>
 </html>

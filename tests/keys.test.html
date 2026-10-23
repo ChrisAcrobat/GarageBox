@@ -12,110 +12,186 @@
   </head>
   <body>
     <h1>Keys (computer keyboard) logic tests</h1>
-    <p>Open via a local server (e.g. <code>python3 -m http.server</code>) at <code>/tests/keys.test.html</code>.</p>
+    <p>Keyboard instrument logic (design 3.2, 4.4, 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
     <p id="summary"></p>
     <ul id="results"></ul>
     <script type="module">
       import { createSuite, edge, summarize } from './test-runner.js';
-      import { Keys, KEY_OFFSETS } from '../src/js/instruments/keys.js';
-      import { KeyboardDevice, KEY_CONTROLS } from '../src/js/input/keyboard-input.js';
-      import { noteName } from '../src/js/audio/theory.js';
 
       const s = createSuite('keys tests');
       const { check } = s;
+      const KEYS = await s.load('../src/js/instruments/keys.js', ['Keys', 'KEY_OFFSETS', 'DEFAULT_KEYS_DRUM_MAP', 'DEFAULT_NUMPAD_DRUM_MAP']);
+      const KBI = await s.load('../src/js/input/keyboard-input.js', ['KeyboardDevice', 'KEY_CONTROLS']);
+      const TH = await s.load('../src/js/audio/theory.js', ['noteName']);
+      const ST = await s.load('../src/js/settings/store.js', ['DEFAULTS', 'getDeviceSettings', 'setDeviceSetting', 'resetDeviceSettings']);
+      const { Keys, KEY_OFFSETS } = KEYS;
+      const { KeyboardDevice, KEY_CONTROLS } = KBI;
+      const { noteName } = TH;
       const notes = (events) => summarize(events).filter((e) => !e.startsWith('bend') && !e.startsWith('volume'));
       const play = (k, edges) => notes(k.handle(edges, {}, 0));
       const down = (code) => edge(`note:${code}`, 'pressed');
       const up = (code) => edge(`note:${code}`, 'released');
+      const pad = (code, type = 'pressed') => edge(`pad:${code}`, type);
+      let k;
 
-      s.group('musical typing layout (R4c.4)');
-      const k0 = new Keys();
-      check('home row A..L = C4..D5', ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL'].map((c) => noteName(k0.noteFor(c))), ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5', 'D5']);
-      check('row above W E T Y U O P = black keys', ['KeyW', 'KeyE', 'KeyT', 'KeyY', 'KeyU', 'KeyO', 'KeyP'].map((c) => noteName(k0.noteFor(c))), ['C#4', 'D#4', 'F#4', 'G#4', 'A#4', 'C#5', 'D#5']);
-      check('bottom row Z..M = C3..B3, one octave lower', ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM'].map((c) => noteName(k0.noteFor(c))), ['C3', 'D3', 'E3', 'F3', 'G3', 'A3', 'B3']);
-      check('Q, R and I play nothing', ['KeyQ', 'KeyR', 'KeyI'].map((c) => k0.noteFor(c)), [null, null, null]);
+      await s.section('musical typing layout (R4c.4)', () => {
+        const k0 = new Keys();
+        check('home row A..L = C4..D5', ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL'].map((c) => noteName(k0.noteFor(c))), ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5', 'D5']);
+        check('row above W E T Y U O P = black keys', ['KeyW', 'KeyE', 'KeyT', 'KeyY', 'KeyU', 'KeyO', 'KeyP'].map((c) => noteName(k0.noteFor(c))), ['C#4', 'D#4', 'F#4', 'G#4', 'A#4', 'C#5', 'D#5']);
+        check('bottom row Z..M = C3..B3, one octave lower', ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM'].map((c) => noteName(k0.noteFor(c))), ['C3', 'D3', 'E3', 'F3', 'G3', 'A3', 'B3']);
+        check('Q, R and I play nothing', ['KeyQ', 'KeyR', 'KeyI'].map((c) => k0.noteFor(c)), [null, null, null]);
+      });
 
-      s.group('piano behavior (R4c.9)');
-      let k = new Keys();
-      check('key down plays C4', play(k, [down('KeyA')]), ['on:60@60']);
-      const off = k.handle([up('KeyA')], {}, 0);
-      check('key up stops it', notes(off), ['off']);
-      check('with a short soft release (0.15 s)', off[0].fade, 0.15);
-      check('two keys at once: two notes', play(k, [down('KeyA'), down('KeyD')]), ['on:60@60', 'on:64@64']);
-      check('releasing one stops only that one', play(k, [up('KeyA')]), ['off']);
-      check('unknown keys are ignored', play(k, [down('KeyQ'), edge('note:Foo')]), []);
+      await s.section('piano behavior (R4c.9)', () => {
+        k = new Keys();
+        check('key down plays C4', play(k, [down('KeyA')]), ['on:60@60']);
+        const off = k.handle([up('KeyA')], {}, 0);
+        check('key up stops it', notes(off), ['off']);
+        check('with a short soft release (0.15 s)', off[0].fade, 0.15);
+        check('two keys at once: two notes', play(k, [down('KeyA'), down('KeyD')]), ['on:60@60', 'on:64@64']);
+        check('releasing one stops only that one', play(k, [up('KeyA')]), ['off']);
+        check('unknown keys are ignored', play(k, [down('KeyQ'), edge('note:Foo')]), []);
+      });
 
-      s.group('octave shift (R4c.8)');
-      k = new Keys();
-      check('Shift held: one octave up', play(k, [edge('octaveUp'), down('KeyA')]), ['on:72@72']);
-      check('releasing Shift keeps the ringing note', play(k, [edge('octaveUp', 'released')]), []);
-      check('the next note is back in the normal octave', play(k, [down('KeyS')]), ['on:62@62']);
-      check('Alt held: one octave down', play(k, [edge('octaveDown'), down('KeyD')]), ['on:52@52']);
-      check('Shift and Alt together cancel out', play(k, [edge('octaveUp'), down('KeyF')]), ['on:65@65']);
-      check('modifier pressed in the same frame as the key applies', play(new Keys(), [down('KeyA'), edge('octaveUp')]), ['on:72@72']);
+      await s.section('octave shift (R4c.8)', () => {
+        k = new Keys();
+        check('Shift held: one octave up', play(k, [edge('octaveUp'), down('KeyA')]), ['on:72@72']);
+        check('releasing Shift keeps the ringing note', play(k, [edge('octaveUp', 'released')]), []);
+        check('the next note is back in the normal octave', play(k, [down('KeyS')]), ['on:62@62']);
+        check('Alt held: one octave down', play(k, [edge('octaveDown'), down('KeyD')]), ['on:52@52']);
+        check('Shift and Alt together cancel out', play(k, [edge('octaveUp'), down('KeyF')]), ['on:65@65']);
+        check('modifier pressed in the same frame as the key applies', play(new Keys(), [down('KeyA'), edge('octaveUp')]), ['on:72@72']);
+      });
 
-      s.group('sustain pedal (R4c.10)');
-      k = new Keys();
-      play(k, [edge('sustain')]);
-      play(k, [down('KeyA')]);
-      check('released key keeps ringing while Space is held', play(k, [up('KeyA')]), []);
-      play(k, [down('KeyD')]);
-      check('pedal up stops released keys only', play(k, [edge('sustain', 'released')]), ['off']);
-      check('the held key still rings and stops on key up', play(k, [up('KeyD')]), ['off']);
-      k = new Keys();
-      play(k, [edge('sustain'), down('KeyA')]);
-      play(k, [up('KeyA')]);
-      check('pressing a sustained key again restarts it', play(k, [down('KeyA')]), ['off', 'on:60@60']);
-      check('it is held now, so it survives the pedal coming up', play(k, [edge('sustain', 'released')]), []);
+      await s.section('sustain pedal (R4c.10)', () => {
+        k = new Keys();
+        play(k, [edge('sustain')]);
+        play(k, [down('KeyA')]);
+        check('released key keeps ringing while Space is held', play(k, [up('KeyA')]), []);
+        play(k, [down('KeyD')]);
+        check('pedal up stops released keys only', play(k, [edge('sustain', 'released')]), ['off']);
+        check('the held key still rings and stops on key up', play(k, [up('KeyD')]), ['off']);
+        k = new Keys();
+        play(k, [edge('sustain'), down('KeyA')]);
+        play(k, [up('KeyA')]);
+        check('pressing a sustained key again restarts it', play(k, [down('KeyA')]), ['off', 'on:60@60']);
+        check('it is held now, so it survives the pedal coming up', play(k, [edge('sustain', 'released')]), []);
+      });
 
-      s.group('guitar on keys 1-5 and Backspace (R4c.3)');
-      k = new Keys();
-      check('1 + Backspace plays green (E3) on the guitar part', play(k, [edge('fret1'), edge('strum')]), ['on:52@0/guitar']);
-      check('strum again restarts it (R4.4)', play(k, [edge('strum', 'released'), edge('strum')]), ['off/guitar', 'on:52@0/guitar']);
-      check('pressing 1 again mutes it (R4.3)', play(k, [edge('fret1', 'released'), edge('fret1')]), ['off/guitar']);
-      check('piano and guitar play at the same time', play(k, [edge('fret1', 'released'), edge('fret3'), edge('strum', 'released'), edge('strum'), down('KeyA')]), ['on:60@60', 'on:57@2/guitar']);
-      k.configure({ guitar: { notes: [57, 60, 62, 64, 67] } });
-      check('guitar key follows the settings', k.guitar.noteFor(0), 57);
-      check('stopAll stops piano and guitar', notes(k.stopAll()), ['off', 'off/guitar']);
-      check('after stopAll nothing rings', notes(k.stopAll()), []);
+      await s.section('guitar on keys 1-5 and Backspace (R4c.3)', () => {
+        k = new Keys();
+        check('1 + Backspace plays green (E3) on the guitar part', play(k, [edge('fret1'), edge('strum')]), ['on:52@0/guitar']);
+        check('strum again restarts it (R4.4)', play(k, [edge('strum', 'released'), edge('strum')]), ['off/guitar', 'on:52@0/guitar']);
+        check('pressing 1 again mutes it (R4.3)', play(k, [edge('fret1', 'released'), edge('fret1')]), ['off/guitar']);
+        check('piano and guitar play at the same time', play(k, [edge('fret1', 'released'), edge('fret3'), edge('strum', 'released'), edge('strum'), down('KeyA')]), ['on:60@60', 'on:57@2/guitar']);
+        k.configure({ guitar: { notes: [57, 60, 62, 64, 67] } });
+        check('guitar key follows the settings', k.guitar.noteFor(0), 57);
+        check('stopAll stops piano and guitar', notes(k.stopAll()), ['off', 'off/guitar']);
+        check('after stopAll nothing rings', notes(k.stopAll()), []);
+      });
 
-      s.group('keyboard input (design 3.2, R4c.7)');
-      const kb = new KeyboardDevice();
-      const ev = (code, opts = {}) => ({ code, repeat: false, ctrlKey: false, metaKey: false, target: document.body, prevented: false, preventDefault() { this.prevented = true; }, ...opts });
-      let e = ev('KeyA');
-      kb._key(e, true);
-      kb.poll();
-      check('KeyA down -> note:KeyA pressed', kb.controlEdges.map((x) => `${x.name}:${x.type}`), ['note:KeyA:pressed']);
-      check('default action is prevented', e.prevented, true);
-      kb._key(ev('KeyA', { repeat: true }), true);
-      kb.poll();
-      check('auto-repeat is ignored', kb.controlEdges, []);
-      kb._key(ev('KeyA'), false);
-      kb._key(ev('Space'), true);
-      kb._key(ev('Backspace'), true);
-      kb._key(ev('Digit3'), true);
-      kb.poll();
-      check('several keys in one frame keep their order', kb.controlEdges.map((x) => `${x.name}:${x.type}`), ['note:KeyA:released', 'sustain:pressed', 'strum:pressed', 'fret3:pressed']);
-      kb._key(ev('ShiftLeft'), true);
-      kb._key(ev('ShiftRight'), true);
-      kb._key(ev('ShiftLeft'), false);
-      kb.poll();
-      check('octaveUp stays on while either Shift is down', kb.controlEdges.map((x) => `${x.name}:${x.type}`), ['octaveUp:pressed']);
-      e = ev('KeyW', { ctrlKey: true });
-      kb._key(e, true);
-      kb.poll();
-      check('Ctrl+W is left to the browser', [kb.controlEdges.length, e.prevented], [0, false]);
-      const select = document.createElement('select');
-      document.body.append(select);
-      e = ev('KeyS', { target: select });
-      kb._key(e, true);
-      kb.poll();
-      check('keys typed into a form field are ignored', [kb.controlEdges.length, e.prevented], [0, false]);
-      kb.releaseAll();
-      kb.poll();
-      check('releaseAll releases everything that is down', kb.controlEdges.map((x) => x.name).sort(), ['fret3', 'octaveUp', 'strum', 'sustain']);
-      check('Alt keys are octave down', [KEY_CONTROLS.AltLeft, KEY_CONTROLS.AltRight], ['octaveDown', 'octaveDown']);
-      check('every musical typing key has a control', Object.keys(KEY_OFFSETS).every((c) => KEY_CONTROLS[c] === `note:${c}`), true);
+      await s.section('keyboard input (design 3.2, R4c.7)', () => {
+        const kb = new KeyboardDevice();
+        const ev = (code, opts = {}) => ({ code, repeat: false, ctrlKey: false, metaKey: false, target: document.body, prevented: false, preventDefault() { this.prevented = true; }, ...opts });
+        let e = ev('KeyA');
+        kb._key(e, true);
+        kb.poll();
+        check('KeyA down -> note:KeyA pressed', kb.controlEdges.map((x) => `${x.name}:${x.type}`), ['note:KeyA:pressed']);
+        check('default action is prevented', e.prevented, true);
+        kb._key(ev('KeyA', { repeat: true }), true);
+        kb.poll();
+        check('auto-repeat is ignored', kb.controlEdges, []);
+        kb._key(ev('KeyA'), false);
+        kb._key(ev('Space'), true);
+        kb._key(ev('Backspace'), true);
+        kb._key(ev('Digit3'), true);
+        kb.poll();
+        check('several keys in one frame keep their order', kb.controlEdges.map((x) => `${x.name}:${x.type}`), ['note:KeyA:released', 'sustain:pressed', 'strum:pressed', 'fret3:pressed']);
+        kb._key(ev('ShiftLeft'), true);
+        kb._key(ev('ShiftRight'), true);
+        kb._key(ev('ShiftLeft'), false);
+        kb.poll();
+        check('octaveUp stays on while either Shift is down', kb.controlEdges.map((x) => `${x.name}:${x.type}`), ['octaveUp:pressed']);
+        e = ev('KeyW', { ctrlKey: true });
+        kb._key(e, true);
+        kb.poll();
+        check('Ctrl+W is left to the browser', [kb.controlEdges.length, e.prevented], [0, false]);
+        const select = document.createElement('select');
+        document.body.append(select);
+        e = ev('KeyS', { target: select });
+        kb._key(e, true);
+        kb.poll();
+        check('keys typed into a form field are ignored', [kb.controlEdges.length, e.prevented], [0, false]);
+        kb.releaseAll();
+        kb.poll();
+        check('releaseAll releases everything that is down', kb.controlEdges.map((x) => x.name).sort(), ['fret3', 'octaveUp', 'strum', 'sustain']);
+        check('Alt keys are octave down', [KEY_CONTROLS.AltLeft, KEY_CONTROLS.AltRight], ['octaveDown', 'octaveDown']);
+        check('every musical typing key has a control', Object.keys(KEY_OFFSETS).every((c) => KEY_CONTROLS[c] === `note:${c}`), true);
+      });
+
+      // ---- keyboard drums and numpad kit (R4c.12 – R4c.15, design 4.4) -----
+      const KB_ID = 'computer-keyboard';
+      const hits = (events) => (events || []).filter((e) => e.type === 'noteOn').map((e) => `${e.midi}/${e.velocity}/${e.part}`);
+      const drumKeys = (extra = {}) => { const k = new Keys(); k.configure({ keysMode: 'drums', ...extra }); return k; };
+      const EXPECTED_KEYS_MAP = { KeyA: 36, KeyS: 38, KeyD: 42, KeyF: 46, KeyG: 44, KeyH: 50, KeyJ: 48, KeyK: 45, KeyL: 41, KeyW: 49, KeyE: 51, KeyT: 53, KeyY: 52, KeyU: 55, KeyO: 57, KeyP: 59, KeyZ: 36, KeyX: 37, KeyC: 39, KeyV: 40, KeyB: 43, KeyN: 54, KeyM: 56 };
+      const EXPECTED_NUMPAD_MAP = { Numpad7: 49, Numpad8: 46, Numpad9: 51, Numpad4: 50, Numpad5: 38, Numpad6: 45, Numpad1: 42, Numpad2: 36, Numpad3: 41, Numpad0: 36 };
+
+      await s.section('keysMode setting (R4c.12)', () => s.withCleanStorage(() => {
+        check('keysMode defaults to piano', () => ST.getDeviceSettings(KB_ID).keysMode, 'piano');
+        check('an invalid keysMode falls back to piano', () => { try { ST.setDeviceSetting(KB_ID, 'keysMode', 'banjo'); } catch { /* rejecting it is fine too */ } return ST.getDeviceSettings(KB_ID).keysMode; }, 'piano');
+        check('Reset to defaults keeps keysMode and clears the drum maps', () => {
+          ST.setDeviceSetting(KB_ID, 'keysMode', 'drums');
+          ST.setDeviceSetting(KB_ID, 'keysDrumMap', { KeyA: 35 });
+          ST.setDeviceSetting(KB_ID, 'numpadDrumMap', { Numpad5: 40 });
+          ST.resetDeviceSettings(KB_ID, { keepInstrument: true });
+          const st = ST.getDeviceSettings(KB_ID);
+          return [st.keysMode, st.keysDrumMap?.KeyA ?? 36, st.numpadDrumMap?.Numpad5 ?? 38];
+        }, ['drums', 36, 38]);
+      }));
+
+      await s.section('Drums mode (R4c.13)', () => {
+        check('the default letter map matches the design table', () => ({ ...KEYS.DEFAULT_KEYS_DRUM_MAP }), EXPECTED_KEYS_MAP);
+        let k = drumKeys();
+        check('KeyA: one-shot noteOn midi 36, velocity 100, part drums', () => hits(k.handle([down('KeyA')], {}, 0)), ['36/100/drums']);
+        check('releasing KeyA sends nothing', () => k.handle([up('KeyA')], {}, 0.1), []);
+        check('every letter key plays its default sound', () => Object.keys(EXPECTED_KEYS_MAP).map((c) => hits(drumKeys().handle([down(c)], {}, 0))[0]), Object.values(EXPECTED_KEYS_MAP).map((m) => `${m}/100/drums`));
+        k = drumKeys();
+        check('Shift/Alt do not change the drum note', () => [hits(k.handle([edge('octaveUp'), down('KeyS')], {}, 0)), hits(k.handle([edge('octaveDown'), down('KeyD')], {}, 0.1))], [['38/100/drums'], ['42/100/drums']]);
+        k = drumKeys();
+        check('Space, 1-5 and Backspace emit nothing', () => k.handle([edge('sustain'), edge('fret1'), edge('fret3'), edge('strum'), edge('strum', 'released'), edge('strum')], {}, 0), []);
+        check('a custom map entry is used (KeyA -> 35) and 0 plays nothing', () => { const c = drumKeys({ keysDrumMap: { KeyA: 35, KeyS: 0 } }); return [hits(c.handle([down('KeyA')], {}, 0)), c.handle([down('KeyS')], {}, 0)]; }, [['35/100/drums'], []]);
+        check('switching from Piano to Drums with ringing notes sends their noteOff', () => {
+          const p = new Keys();
+          p.handle([down('KeyA'), edge('fret1'), edge('strum')], {}, 0);
+          const fromConfigure = p.configure({ keysMode: 'drums' });
+          const events = [...(Array.isArray(fromConfigure) ? fromConfigure : []), ...p.handle([], {}, 0.1)];
+          return events.filter((e) => e.type === 'noteOff').length;
+        }, 2);
+      });
+
+      await s.section('numpad kit (R4c.14, R4c.15)', () => {
+        check('the default numpad map matches the design', () => ({ ...KEYS.DEFAULT_NUMPAD_DRUM_MAP }), EXPECTED_NUMPAD_MAP);
+        check('Piano mode: Numpad5 -> 38, Numpad0 -> 36 (part drums)', () => { const k = new Keys(); return [hits(k.handle([pad('Numpad5')], {}, 0)), hits(k.handle([pad('Numpad0')], {}, 0.1))]; }, [['38/100/drums'], ['36/100/drums']]);
+        check('Drums mode: Numpad5 -> 38, Numpad0 -> 36', () => { const k = drumKeys(); return [hits(k.handle([pad('Numpad5')], {}, 0)), hits(k.handle([pad('Numpad0')], {}, 0.1))]; }, [['38/100/drums'], ['36/100/drums']]);
+        check('a numpad hit while a piano note is held does not stop the note', () => { const k = new Keys(); k.handle([down('KeyA')], {}, 0); const ev = k.handle([pad('Numpad5')], {}, 0.1); return [hits(ev), ev.filter((e) => e.type === 'noteOff').length]; }, [['38/100/drums'], 0]);
+        check('releasing a numpad key sends nothing', () => { const k = new Keys(); k.handle([pad('Numpad5')], {}, 0); return k.handle([pad('Numpad5', 'released')], {}, 0.1); }, []);
+        check('a custom numpad entry is used and 0 plays nothing', () => { const k = new Keys(); k.configure({ numpadDrumMap: { Numpad5: 40, Numpad0: 0 } }); return [hits(k.handle([pad('Numpad5')], {}, 0)), k.handle([pad('Numpad0')], {}, 0)]; }, [['40/100/drums'], []]);
+        check('Numpad0..9 have pad:<code> controls', () => Array.from({ length: 10 }, (_, i) => KEY_CONTROLS[`Numpad${i}`]), Array.from({ length: 10 }, (_, i) => `pad:Numpad${i}`));
+        const kb = new KeyboardDevice();
+        const ev = (code, key) => ({ code, key, repeat: false, ctrlKey: false, metaKey: false, target: document.body, prevented: false, preventDefault() { this.prevented = true; } });
+        check('the code is reported whatever the key value (NumLock on "5", off "Clear")', () => {
+          kb._key(ev('Numpad5', '5'), true);
+          kb._key(ev('Numpad5', '5'), false);
+          kb._key(ev('Numpad5', 'Clear'), true);
+          kb.poll();
+          return kb.controlEdges.map((x) => `${x.name}:${x.type}`);
+        }, ['pad:Numpad5:pressed', 'pad:Numpad5:released', 'pad:Numpad5:pressed']);
+        kb.releaseAll();
+        const dispatch = () => { const e = new KeyboardEvent('keydown', { code: 'Numpad5', key: '5', cancelable: true, bubbles: true }); document.body.dispatchEvent(e); const up2 = new KeyboardEvent('keyup', { code: 'Numpad5', key: '5', cancelable: true, bubbles: true }); document.body.dispatchEvent(up2); return e.defaultPrevented; };
+        const real = new KeyboardDevice();
+        check('preventDefault for numpad keys while the keyboard instrument is on', () => { real.enable(); try { return dispatch(); } finally { real.disable(); } }, true);
+        check('no preventDefault for numpad keys while it is off', () => dispatch(), false);
+      });
 
       s.finish();
     </script>

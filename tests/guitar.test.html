@@ -8,172 +8,763 @@
       body { background: #0e0f12; color: #e8eaed; font: 14px/1.5 ui-monospace, monospace; padding: 16px; }
       .pass { color: #3dd68c; }
       .fail { color: #ff6369; }
+      #sandbox { position: relative; width: 420px; }
     </style>
   </head>
   <body>
     <h1>Guitar logic tests</h1>
-    <p>Open via a local server (e.g. <code>python3 -m http.server</code>) at <code>/tests/guitar.test.html</code>.</p>
+    <p>Pure guitar logic plus the settings and level-estimate code it depends on (design 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
     <p id="summary"></p>
     <ul id="results"></ul>
+    <div id="sandbox"></div>
     <script type="module">
       import { createSuite, edge, summarize } from './test-runner.js';
-      import { Guitar, GAMEPAD_GUITAR_CONTROLS, deflection, TILT_REST } from '../src/js/instruments/guitar.js';
-      import { guitarOptions } from '../src/js/instruments/setup.js';
-      import { guitarRootMidi, scaleNotes, noteName } from '../src/js/audio/theory.js';
-      import { DEFAULTS } from '../src/js/settings/store.js';
 
-      const s = createSuite('guitar tests');
+      const s = createSuite('guitar tests', { timeoutMs: 50000 });
       const { check } = s;
 
-      // Plays one frame; only note events are returned (bend/volume filtered unless asked).
-      function play(g, edges, controls = {}, { all = false } = {}) {
-        const ev = summarize(g.handle(edges, controls, 0));
-        return all ? ev : ev.filter((e) => !e.startsWith('bend') && !e.startsWith('volume'));
-      }
+      // Every module is loaded dynamically: a missing module or export is a FAIL, not a hang.
+      const G = await s.load('../src/js/instruments/guitar.js', ['Guitar', 'GAMEPAD_GUITAR_CONTROLS', 'deflection', 'stepDelta', 'shiftInScale', 'displayOffset', 'splitOffset', 'glidePitch', 'TILT_STEP_SIZE', 'TILT_STEP_HYSTERESIS', 'STEP_LIMIT_OCTAVES', 'TILT_STARTS_ENABLED']);
+      const SETUP = await s.load('../src/js/instruments/setup.js', ['guitarOptions', 'guitarSound', 'createInstrument', 'soundCycle', 'DEFAULT_SOURCES', 'DEFAULT_PROGRAMS', 'drumOptions']);
+      const TH = await s.load('../src/js/audio/theory.js', ['SCALES', 'guitarRootMidi', 'scaleNotes', 'noteName']);
+      const ST = await s.load('../src/js/settings/store.js', ['DEFAULTS', 'getDeviceSettings', 'setDeviceSetting', 'resetDeviceSettings', 'getGlobalSettings', 'setGlobalSetting']);
+      const BH = await s.load('../src/js/input/back-hold.js', ['BackHold', 'BACK_HOLD_SECONDS', 'BACK_FULL_RESET_SECONDS']);
+      const SV = await s.load('../src/js/visual/simple-view.js', ['guitarLabelStrip', 'orientationBars', 'ORIENTATION_COLOR', 'FRET_COLORS']);
+      const AE = await s.load('../src/js/audio/audio-engine.js', ['VoiceTracker', 'trackerConfig']);
+      const HV = await s.load('../src/js/visual/highway-view.js', ['HighwayState']);
+      const MS = await s.load('../src/js/audio/midi-source.js', ['MidiSource']);
+      const MAP = await s.load('../src/js/input/mappings.js', ['MAPPINGS', 'selectMapping']);
+      const DET = await s.load('../src/js/input/detect.js', ['detectController']);
+      const PANEL = await s.load('../src/js/ui/settings-panel.js', ['SettingsPanel']);
+      const NAV = await s.load('../src/js/ui/menu-nav.js', ['MENU_CONTROLS', 'intentFor']);
+      const KEYS = await s.load('../src/js/instruments/keys.js', ['Keys']);
+      const DR = await s.load('../src/js/instruments/drums.js', ['Drums']);
+      const I18N = await s.load('../src/js/i18n/i18n.js', ['setLanguage', 't']);
+      const LA = await s.load('../src/js/ui/lane-actions.js', ['rangeShiftedChange', 'dpadChange']);
+      const { Guitar, GAMEPAD_GUITAR_CONTROLS } = G;
+      const { guitarOptions, guitarSound } = SETUP;
+      const { noteName, scaleNotes, SCALES } = TH;
+      const DEFAULTS = ST.DEFAULTS || { device: {}, global: {} };
+
+      // ---- helpers ----------------------------------------------------------
       const press = (n) => edge(n, 'pressed');
       const release = (n) => edge(n, 'released');
       const strum = press('strumDown');
+      // Plays one frame; only note events and actions (bend/volume/holdEnd/glide/starPower filtered unless asked).
+      function play(g, edges, controls = {}, { all = false, t = 0 } = {}) {
+        const ev = summarize(g.handle(edges, controls, t));
+        return ev.filter((e) => !(all ? /^starPower/ : /^(bend|volume|holdEnd|glide|starPower)/).test(e));
+      }
+      const ev = (out, type) => out.filter((e) => e.type === type);
+      const actions = (out) => out.filter((e) => e.type === 'action');
+      const ctl = (whammy, tilt) => ({ whammy: { value: whammy, pressed: whammy > 0.5 }, tilt: { value: tilt, pressed: tilt > 0.9 } });
+      // Tilt values with tiltSmoothing 0, so each reading is taken as is.
+      const tg = (extra = {}) => new Guitar({ tiltSmoothing: 0, ...extra });
+      const tilt = (h, v, t = 0) => h.handle([], ctl(0, v), t);
+      const tapBack = (h, v, t = 0) => { h.handle([press('back')], ctl(0, v), t); return h.handle([release('back')], ctl(0, v), t); };
+      const notes = (h) => [0, 1, 2, 3, 4].map((i) => noteName(h.noteFor(i)));
+      const noBendVol = (list) => list.filter((e) => !e.startsWith('bend') && !e.startsWith('volume'));
+      // Back held from t0 to t1 (frames every 0.5 s), released 0.1 s later. Raw events.
+      function hold(h, t0, t1, v = 0.44) {
+        const held = [...h.handle([press('back')], ctl(0, v), t0)];
+        for (let t = t0 + 0.5; t < t1 - 1e-9; t += 0.5) held.push(...h.handle([], ctl(0, v), t));
+        held.push(...h.handle([], ctl(0, v), t1));
+        const rel = h.handle([release('back')], ctl(0, v), t1 + 0.1);
+        const f = (list) => noBendVol(summarize(list));
+        return { held: f(held), release: f(rel), heldRaw: held, releaseRaw: rel };
+      }
+      const resets = (list) => list.filter((e) => e.type === 'action' && e.action === 'resetSettings').map((e) => e.full);
+      // Settings ids used here; withCleanStorage restores the real localStorage afterwards.
+      const sandbox = document.getElementById('sandbox');
+      const fakeDevice = (id, name, extra = {}) => {
+        const detection = DET.detectController ? DET.detectController(name) : { type: 'gamepad', mapping: 'gamepad-standard' };
+        return { id, settingsId: id, index: 0, detection, mapping: MAP.selectMapping?.(detection.type, 'standard'), ...extra };
+      };
+      const XPLORER = 'RedOctane Inc(c)2006  Guitar Hero X-plorer   (STANDARD GAMEPAD Vendor: 1430 Product: 4748)';
+      const PAD = 'Xbox 360 Controller (XInput STANDARD GAMEPAD)';
+      function openPanel(device, kind, instrument, extra = {}) {
+        return new PANEL.SettingsPanel({ container: sandbox, device, getInstrument: () => ({ kind, instrument }), onClose: () => {}, onOpenDebug: () => {}, focus: false, ...extra });
+      }
+      const storedAnywhere = (id) => Object.keys(localStorage).some((k) => (localStorage.getItem(k) || '').includes(JSON.stringify(id)));
 
-      s.group('basics (R4.1, R4.9)');
-      let g = new Guitar();
-      check('strum with no fret held plays nothing', play(g, [strum]), []);
-      check('fret press alone plays nothing', play(g, [press('fret1')]), []);
-      check('hold green + strum plays E3 (52)', play(g, [strum]), ['on:52@0']);
-      check('strum up also plays', play(new Guitar(), [press('fret2'), press('strumUp')]), ['on:55@1']);
-      check('default notes are E minor pentatonic E3 G3 A3 B3 D4', g.options.notes.map(noteName), ['E3', 'G3', 'A3', 'B3', 'D4']);
+      // ---- basics -----------------------------------------------------------
+      await s.section('basics (R4.1, R4.9)', () => {
+        const g = new Guitar();
+        check('strum with no fret held plays nothing', play(g, [strum]), []);
+        check('fret press alone plays nothing', play(g, [press('fret1')]), []);
+        check('hold green + strum plays E3 (52)', play(g, [strum]), ['on:52@0']);
+        check('strum up also plays', play(new Guitar(), [press('fret2'), press('strumUp')]), ['on:55@1']);
+        check('default notes are E minor pentatonic E3 G3 A3 B3 D4', g.options.notes.map(noteName), ['E3', 'G3', 'A3', 'B3', 'D4']);
+      });
 
-      s.group('restrum (R4.4)');
-      g = new Guitar();
-      play(g, [press('fret1')]);
-      const twice = [...play(g, [strum]), ...play(g, [release('strumDown')]), ...play(g, [strum])];
-      check('strum twice without release gives two noteOn and one noteOff', twice, ['on:52@0', 'off', 'on:52@0']);
-      check('the noteOff stops the first voice', (() => {
-        const h = new Guitar();
-        h.handle([press('fret1')], {}, 0);
-        const first = h.handle([strum], {}, 0).find((e) => e.type === 'noteOn');
-        const second = h.handle([strum], {}, 0);
-        return second.find((e) => e.type === 'noteOff').voiceId === first.voiceId && second.find((e) => e.type === 'noteOn').voiceId !== first.voiceId;
-      })(), true);
+      await s.section('restrum (R4.4)', () => {
+        const g = new Guitar();
+        play(g, [press('fret1')]);
+        const twice = [...play(g, [strum]), ...play(g, [release('strumDown')]), ...play(g, [strum])];
+        check('strum twice without release gives two noteOn and one noteOff', twice, ['on:52@0', 'off', 'on:52@0']);
+        check('the noteOff stops the first voice', () => {
+          const h = new Guitar();
+          h.handle([press('fret1')], {}, 0);
+          const first = h.handle([strum], {}, 0).find((e) => e.type === 'noteOn');
+          h.handle([release('strumDown')], {}, 0);
+          const second = h.handle([strum], {}, 0);
+          return second.find((e) => e.type === 'noteOff').voiceId === first.voiceId && second.find((e) => e.type === 'noteOn').voiceId !== first.voiceId;
+        }, true);
+      });
 
-      s.group('release keeps ringing (R4.2, R4.7)');
-      g = new Guitar();
-      play(g, [press('fret1')]);
-      play(g, [strum]);
-      check('releasing the fret sends nothing', play(g, [release('fret1')]), []);
-      check('the voice is still tracked as ringing', g.ringingVoices()[0] !== null, true);
+      await s.section('release keeps ringing, mute on press-down (R4.2, R4.3, R4.3.1, R4.7)', () => {
+        const g = new Guitar();
+        play(g, [press('fret1')]);
+        play(g, [strum]);
+        check('releasing the fret sends nothing', play(g, [release('fret1')]), []);
+        check('the voice is still tracked as ringing', g.ringingVoices()[0] !== null, true);
+        const offs = ev(g.handle([press('fret1')], {}, 0), 'noteOff');
+        check('pressing the fret of a ringing note sends one noteOff', offs.length, 1);
+        check('the noteOff uses the mute fade-out of the options', offs[0]?.fade, g.options.fade);
+        check('pressing again does not start a new note', play(g, [release('fret1'), press('fret1')]), []);
+        check('fade time follows the setting', new Guitar({ fade: 0.3 }).options.fade, 0.3);
+        check('default settings: mute fade-out 1000 ms -> fade 1 s (R4.3.1)', () => guitarOptions(DEFAULTS.device, 'guitar').fade, 1);
+      });
 
-      s.group('mute on press-down (R4.3, R4.3.1)');
-      const events = g.handle([press('fret1')], {}, 0).filter((e) => e.type === 'noteOff');
-      check('pressing the fret of a ringing note sends one noteOff', events.length, 1);
-      check('the noteOff uses the short fade (80 ms default)', events[0].fade, 0.08);
-      check('pressing again does not start a new note', play(g, [release('fret1'), press('fret1')]), []);
-      check('fade time follows the setting', new Guitar({ fade: 0.3 }).options.fade, 0.3);
+      await s.section('independent frets, chords, same frame (R4.6, R4.8)', () => {
+        let g = new Guitar();
+        play(g, [press('fret1')]);
+        play(g, [strum]);
+        play(g, [release('fret1'), press('fret2'), release('strumDown')]);
+        check('strum only retriggers held frets; green keeps ringing', play(g, [strum]), ['on:55@1']);
+        check('both frets have a ringing voice', g.ringingVoices().slice(0, 2).every((v) => v !== null), true);
+        g = new Guitar();
+        check('three held frets play together', play(g, [press('fret1'), press('fret3'), press('fret5'), strum]), ['on:52@0', 'on:57@2', 'on:62@4']);
+        g = new Guitar();
+        check('strum up and down in one frame = one strum', play(g, [press('fret1'), press('strumUp'), press('strumDown')]), ['on:52@0']);
+        check('fret press + strum in one frame: mute old, play new', play(g, [release('fret1'), release('strumUp'), release('strumDown')]).concat(play(g, [press('fret1'), strum])), ['off', 'on:52@0']);
+      });
 
-      s.group('independent frets (R4.6)');
-      g = new Guitar();
-      play(g, [press('fret1')]);
-      play(g, [strum]);
-      play(g, [release('fret1'), press('fret2')]);
-      check('strum only retriggers held frets; green keeps ringing', play(g, [strum]), ['on:55@1']);
-      check('both frets have a ringing voice', g.ringingVoices().slice(0, 2).every((v) => v !== null), true);
+      await s.section('Back and Start (R4.10, R4.11, R4.5.3)', () => {
+        let g = new Guitar();
+        play(g, [press('fret1'), press('fret2'), strum]);
+        check('Back does not mute (press and release send no noteOff)', [...play(g, [press('back')]), ...play(g, [release('back')])].filter((e) => e === 'off'), []);
+        check('ringing notes keep ringing after Back', g.ringingVoices().slice(0, 2).every((v) => v !== null), true);
+        g = tg();
+        tilt(g, 0.44);
+        check('Back toggles tilt on release, not on press', [actions(g.handle([press('back')], ctl(0, 0.44), 0)).length, actions(g.handle([release('back')], ctl(0, 0.44), 0)).map((a) => [a.action, a.enabled])], [0, [['tiltToggled', true]]]);
+        check('the next press/release toggles it off again', [actions(g.handle([press('back')], ctl(0, 0.44), 0)).length, actions(g.handle([release('back')], ctl(0, 0.44), 0)).map((a) => [a.action, a.enabled])], [0, [['tiltToggled', false]]]);
+        g = new Guitar();
+        g.setTapToPlay(false); // mouse-opened panel: tap mode stays off
+        check('tap mode off (mouse-opened panel): Back toggles tilt, no mute', [...play(g, [press('back')]), ...play(g, [release('back')])], ['action:tiltToggled']);
+        check('Start asks to open the settings', play(new Guitar(), [press('start')]), ['action:openSettings']);
+      });
 
-      s.group('chords (R4.8)');
-      g = new Guitar();
-      check('three held frets play together', play(g, [press('fret1'), press('fret3'), press('fret5'), strum]), ['on:52@0', 'on:57@2', 'on:62@4']);
+      await s.section('key and scale, bass octave (R4.9, R2.10)', () => {
+        check('E root = E3 (52)', TH.guitarRootMidi(4), 52);
+        check('A root = A3 (57)', TH.guitarRootMidi(9), 57);
+        check('B root = B2 (47), within half an octave of E3', TH.guitarRootMidi(11), 47);
+        check('A# root = A#3 (58), the highest root', TH.guitarRootMidi(10), 58);
+        check('G root = G3 (55)', TH.guitarRootMidi(7), 55);
+        check('A minor pentatonic', scaleNotes(57, 'minorPentatonic').map(noteName), ['A3', 'C4', 'D4', 'E4', 'G4']);
+        check('E major pentatonic', scaleNotes(52, 'majorPentatonic').map(noteName), ['E3', 'F#3', 'G#3', 'B3', 'C#4']);
+        check('C major plays its first five notes', scaleNotes(48, 'major').map(noteName), ['C3', 'D3', 'E3', 'F3', 'G3']);
+        check('blues plays its first five notes', scaleNotes(52, 'blues').map(noteName), ['E3', 'G3', 'A3', 'A#3', 'B3']);
+        check('options from default settings', () => guitarOptions({ ...DEFAULTS.device }, 'guitar').notes, [52, 55, 57, 59, 62]);
+        check('bass is one octave lower (R2.10)', () => guitarOptions({ ...DEFAULTS.device }, 'bass').notes, [40, 43, 45, 47, 50]);
+        const g = new Guitar();
+        play(g, [press('fret1'), strum]);
+        g.configure({ notes: scaleNotes(57, 'minorPentatonic'), rootMidi: 57 });
+        check('changing the key keeps ringing notes and plays the new notes', play(g, [release('strumDown'), strum]), ['off', 'on:57@0']);
+      });
 
-      s.group('same frame');
-      g = new Guitar();
-      check('strum up and down in one frame = one strum', play(g, [press('fret1'), press('strumUp'), press('strumDown')]), ['on:52@0']);
-      check('fret press + strum in one frame: mute old, play new', play(g, [release('fret1'), release('strumUp'), release('strumDown')]).concat(play(g, [press('fret1'), strum])), ['off', 'on:52@0']);
+      await s.section('octave setting (R4.13)', () => {
+        check('octave default 0', DEFAULTS.device.octave, 0);
+        check('octave +1 moves the guitar notes up 12', () => guitarOptions({ ...DEFAULTS.device, octave: 1 }, 'guitar').notes, [64, 67, 69, 71, 74]);
+        check('octave -1 on the bass: E1 ..', () => guitarOptions({ ...DEFAULTS.device, octave: -1 }, 'bass').notes, [28, 31, 33, 35, 38]);
+        check('a guitar built with octave +1 plays E4 on green', () => play(new Guitar(guitarOptions({ ...DEFAULTS.device, octave: 1 }, 'guitar')), [press('fret1'), strum]), ['on:64@0']);
+      });
 
-      s.group('Back and Start (R4.10, R4.11)');
-      g = new Guitar();
-      play(g, [press('fret1'), press('fret2'), strum]);
-      const back = g.handle([press('back')], {}, 0).filter((e) => e.type === 'noteOff');
-      check('Back mutes all ringing notes', back.length, 2);
-      check('Back uses the soft fade', back.every((e) => e.fade === 0.08), true);
-      check('Back again has nothing to mute', play(g, [release('back'), press('back')]), []);
-      check('Start asks to open the settings', play(g, [press('start')]), ['action:openSettings']);
+      await s.section('gamepad guitar mode (R2.10)', () => {
+        let g = new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS });
+        check('A + D-pad down plays green', play(g, [press('faceA'), press('dpadDown')]), ['on:52@0']);
+        check('B, Y, X, LB are red, yellow, blue, orange', play(g, [release('dpadDown'), press('faceB'), press('faceY'), press('faceX'), press('shoulderL'), press('dpadUp')]).filter((e) => e.startsWith('on')), ['on:52@0', 'on:55@1', 'on:57@2', 'on:59@3', 'on:62@4']);
+        check('the raw guitar names do nothing on a gamepad', play(new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS }), [press('fret1'), press('strumDown')]), []);
+        check('no whammy/tilt control: no bend, full volume', summarize(new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS }).handle([], {}, 0)), ['bend:0.00', 'volume:1.00']);
+        check('D-pad left/right are part of the gamepad guitar controls (R4.15)', [GAMEPAD_GUITAR_CONTROLS.dpadLeft, GAMEPAD_GUITAR_CONTROLS.dpadRight], ['dpadLeft', 'dpadRight']);
+      });
 
-      s.group('key and scale (R4.9)');
-      check('E root = E3 (52)', guitarRootMidi(4), 52);
-      check('A root = A3 (57)', guitarRootMidi(9), 57);
-      check('B root = B2 (47), within half an octave of E3', guitarRootMidi(11), 47);
-      check('A# root = A#3 (58), the highest root', guitarRootMidi(10), 58);
-      check('G root = G3 (55)', guitarRootMidi(7), 55);
-      check('A minor pentatonic', scaleNotes(57, 'minorPentatonic').map(noteName), ['A3', 'C4', 'D4', 'E4', 'G4']);
-      check('E major pentatonic', scaleNotes(52, 'majorPentatonic').map(noteName), ['E3', 'F#3', 'G#3', 'B3', 'C#4']);
-      check('C major plays its first five notes', scaleNotes(48, 'major').map(noteName), ['C3', 'D3', 'E3', 'F3', 'G3']);
-      check('blues plays its first five notes', scaleNotes(52, 'blues').map(noteName), ['E3', 'G3', 'A3', 'A#3', 'B3']);
-      const settings = { ...DEFAULTS.device };
-      check('options from default settings', guitarOptions(settings, 'guitar').notes, [52, 55, 57, 59, 62]);
-      check('bass is one octave lower (R2.10)', guitarOptions(settings, 'bass').notes, [40, 43, 45, 47, 50]);
-      g = new Guitar();
-      play(g, [press('fret1'), strum]);
-      g.configure({ notes: scaleNotes(57, 'minorPentatonic') });
-      check('changing the key keeps ringing notes and plays the new notes', play(g, [strum]), ['off', 'on:57@0']);
+      await s.section('whammy assignment; the tilt has no sound effect (R4.5, R4.5.2)', () => {
+        let g = new Guitar();
+        check('at rest (whammy 0, tilt flat 0.44): no bend, full volume', play(g, [], ctl(0, 0.44), { all: true }), ['bend:0.00', 'volume:1.00']);
+        check('unchanged values send nothing', play(g, [], ctl(0, 0.44), { all: true }), []);
+        check('full whammy bends down 2 semitones (default)', play(g, [], ctl(1, 0.44), { all: true }), ['bend:-2.00']);
+        check('half whammy bends 1 semitone', play(g, [], ctl(0.5, 0.44), { all: true }), ['bend:-1.00']);
+        check('neck straight up changes nothing (no bend/volume)', play(g, [], ctl(0.5, 1), { all: true }), []);
+        check('tilt deflection: flat -> 0', G.deflection('tilt', 0.44), 0);
+        g = new Guitar({ whammy: 'volume', bendRange: 12 });
+        check('whammy volume: at rest half volume, full whammy full volume', [play(g, [], ctl(0, 0.44), { all: true }), play(g, [], ctl(1, 0.44), { all: true })], [['bend:0.00', 'volume:0.50'], ['volume:1.00']]);
+        g = new Guitar({ whammy: 'off' });
+        check('whammy off: no bend, full volume', play(g, [], ctl(1, 1), { all: true }), ['bend:0.00', 'volume:1.00']);
+        g = new Guitar();
+        play(g, [], ctl(1, 0.44));
+        g.configure({ whammy: 'off' });
+        check('changing the assignment re-sends bend and volume', play(g, [], ctl(1, 0.44), { all: true }), ['bend:0.00', 'volume:1.00']);
+        check('defaults have no tilt assignment', 'tilt' in DEFAULTS.device, false);
+        check('an old stored tilt assignment is ignored (tilt "volume" / "bend": flat vs neck up sends nothing)', () => ['volume', 'bend'].map((tiltSetting) => {
+          const h = new Guitar({ ...guitarOptions({ ...DEFAULTS.device, tilt: tiltSetting }, 'guitar'), tiltSmoothing: 0 });
+          play(h, [], ctl(0, 0.44));
+          return play(h, [], ctl(0, 1), { all: true });
+        }), [[], []]);
+      });
 
-      s.group('gamepad guitar mode (R2.10)');
-      g = new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS });
-      check('A + D-pad down plays green', play(g, [press('faceA'), press('dpadDown')]), ['on:52@0']);
-      check('B, Y, X, LB are red, yellow, blue, orange', play(g, [release('dpadDown'), press('faceB'), press('faceY'), press('faceX'), press('shoulderL'), press('dpadUp')]).filter((e) => e.startsWith('on')), ['on:52@0', 'on:55@1', 'on:57@2', 'on:59@3', 'on:62@4']);
-      check('the raw guitar names do nothing on a gamepad', play(new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS }), [press('fret1'), press('strumDown')]), []);
-      check('no whammy/tilt control: no bend, full volume', summarize(new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS }).handle([], {}, 0)), ['bend:0.00', 'volume:1.00']);
+      await s.section('tilt smoothing (R4.5.1)', () => {
+        check('tiltSmoothing default 80 ms', DEFAULTS.device.tiltSmoothing, 80);
+        // Tilt on at 0.44, then a jump to 0.64 (+2 steps raw). With tau = 80 ms the
+        // display offset after one 80 ms frame is 2 x (1 - e^-1) = 1.264.
+        const after = (frames) => {
+          const g = new Guitar(guitarOptions({ ...DEFAULTS.device }, 'guitar'));
+          for (let t = 0; t < 1; t += 0.05) tilt(g, 0.44, t);
+          tapBack(g, 0.44, 1);
+          let t = 1;
+          for (const dt of frames) { t += dt; tilt(g, 0.64, t); }
+          return +g.displaySteps().toFixed(3);
+        };
+        check('one 80 ms frame after a jump of +2 steps: display 1.264 (EMA)', () => after([0.08]), 1.264);
+        check('frame-rate independent: two 40 ms frames give the same', () => after([0.04, 0.04]), 1.264);
+        check('tiltSmoothing 0 = off: the reading is taken as is (+2)', () => { const g = tg(); tilt(g, 0.44); tapBack(g, 0.44); tilt(g, 0.64, 0.016); return +g.displaySteps().toFixed(3); }, 2);
+      });
 
-      s.group('whammy and tilt (R4.5)');
-      const ctl = (whammy, tilt) => ({ whammy: { value: whammy, pressed: whammy > 0.5 }, tilt: { value: tilt, pressed: tilt > 0.5 } });
-      g = new Guitar();
-      check('at rest (whammy 0, tilt flat 0.44): no bend, half volume', play(g, [], ctl(0, 0.44), { all: true }), ['bend:0.00', 'volume:0.50']);
-      check('unchanged values send nothing', play(g, [], ctl(0, 0.44), { all: true }), []);
-      check('full whammy bends down 2 semitones (default)', play(g, [], ctl(1, 0.44), { all: true }), ['bend:-2.00']);
-      check('half whammy bends 1 semitone', play(g, [], ctl(0.5, 0.44), { all: true }), ['bend:-1.00']);
-      check('neck straight up = full volume', play(g, [], ctl(0.5, 1), { all: true }), ['volume:1.00']);
-      check('tilt deflection: flat 0.44 -> 0', deflection('tilt', 0.44), 0);
-      check(`tilt deflection: halfway between rest ${TILT_REST} and 1 -> 0.5`, deflection('tilt', 0.75), 0.5);
-      g = new Guitar({ whammy: 'volume', tilt: 'bend', bendRange: 12 });
-      check('swapped: whammy volume, tilt bend +12', play(g, [], ctl(1, 1), { all: true }), ['bend:12.00', 'volume:1.00']);
-      g = new Guitar({ whammy: 'off', tilt: 'off' });
-      check('both off: no bend, full volume', play(g, [], ctl(1, 1), { all: true }), ['bend:0.00', 'volume:1.00']);
-      g = new Guitar({ whammy: 'bend', tilt: 'bend', bendRange: -2 });
-      check('both on bend: bends add up', play(g, [], ctl(1, 1), { all: true }), ['bend:-4.00', 'volume:1.00']);
-      g = new Guitar();
-      play(g, [], ctl(1, 1));
-      g.configure({ whammy: 'off' });
-      check('changing the assignment re-sends bend and volume', play(g, [], ctl(1, 1), { all: true }), ['bend:0.00', 'volume:1.00']);
+      await s.section('number-field settings (R2.9.1)', () => s.withCleanStorage(() => {
+        check('defaults: fade 1000 ms, ring time 10 s, smoothing 80 ms, bend -2', [DEFAULTS.device.fadeMs, DEFAULTS.device.decay, DEFAULTS.device.tiltSmoothing, DEFAULTS.device.bendRange], [1000, 10, 80, -2]);
+        const device = fakeDevice('device:guitar:1', XPLORER);
+        const panel = openPanel(device, 'guitar', 'guitar');
+        try {
+          const field = (key) => panel.el.querySelector(`[data-key="${key}"]`);
+          const attrs = (key) => { const f = field(key); return f ? [f.tagName, f.type, f.min, f.max, f.step] : null; };
+          check('fade-out field: number input 10..10000 step 50', attrs('fadeMs'), ['INPUT', 'number', '10', '10000', '50']);
+          check('ring time field: number input 0.5..30 step 0.5', attrs('decay'), ['INPUT', 'number', '0.5', '30', '0.5']);
+          check('tilt smoothing field: number input 0..1000 step 10', attrs('tiltSmoothing'), ['INPUT', 'number', '0', '1000', '10']);
+          check('bend range field: number input -24..24 step 1', attrs('bendRange'), ['INPUT', 'number', '-24', '24', '1']);
+          const enter = (key, value) => { const f = field(key); f.value = value; f.dispatchEvent(new Event('change', { bubbles: true })); panel.refresh(); return [ST.getDeviceSettings(device.id)[key], Number(field(key).value)]; };
+          check('fade 300 is saved', () => enter('fadeMs', '300'), [300, 300]);
+          check('fade 20000 is clamped to 10000', () => enter('fadeMs', '20000'), [10000, 10000]);
+          check('fade 5 is clamped to 10', () => enter('fadeMs', '5'), [10, 10]);
+          check('an empty (invalid) entry restores the previous value', () => enter('fadeMs', ''), [10, 10]);
+          check('ring time 40 is clamped to 30', () => enter('decay', '40'), [30, 30]);
+          check('bend range -30 is clamped to -24', () => enter('bendRange', '-30'), [-24, -24]);
+          check('an invalid stored fade falls back to the default', () => { localStorage.setItem('musicSandbox.devices', JSON.stringify({ [device.id]: { fadeMs: 'x' } })); return ST.getDeviceSettings(device.id).fadeMs; }, 1000);
+        } finally {
+          panel.destroy();
+        }
+      }));
 
-      s.group('tap-to-play in the settings menu (design 7.4)');
-      g = new Guitar();
-      g.setTapToPlay(true);
-      check('fret press plays at once without strum', play(g, [press('fret1')]), ['on:52@0']);
-      check('second fret adds its note (chord by tapping)', play(g, [press('fret3')]), ['on:57@2']);
-      check('releasing a tapped fret stops its note', play(g, [release('fret1')]), ['off']);
-      check('the release uses the mute fade', g.handle([release('fret3')], {}, 0).find((e) => e.type === 'noteOff').fade, 0.08);
-      check('no voices left after releasing', g.ringingVoices().every((v) => v === null), true);
-      play(g, [press('fret2')]);
-      check('pressing the same fret again restarts it: off, then on', play(g, [release('fret2'), press('fret2')]), ['off', 'on:55@1']);
-      play(g, [release('fret2')]);
-      g = new Guitar();
-      play(g, [press('fret1')]);
-      play(g, [strum]);
-      play(g, [release('fret1')]);
-      g.setTapToPlay(true);
-      check('a strummed note keeps ringing when tap mode starts', g.ringingVoices()[0] !== null, true);
-      check('pressing its fret in tap mode mutes it and plays the tapped note', play(g, [press('fret1')]), ['off', 'on:52@0']);
-      g.setTapToPlay(false);
-      check('after leaving tap mode, releasing the fret keeps the note ringing (R4.2)', play(g, [release('fret1')]), []);
-      check('after leaving tap mode a fret press only mutes (R4.3)', play(g, [press('fret1')]), ['off']);
-      check('and strum plays again', play(g, [strum]), ['on:52@0']);
-      g = new Guitar(guitarOptions(DEFAULTS.device, 'bass', { gamepad: true }));
-      g.setTapToPlay(true);
-      check('gamepad bass mode: A taps E2', play(g, [press('faceA')]), ['on:40@0']);
-      check('gamepad bass mode: releasing A stops it', play(g, [release('faceA')]), ['off']);
-      check('tap mode is off by default', new Guitar().tapToPlay, false);
-      g = new Guitar();
-      g.setTapToPlay(false); // panel opened with the mouse: tap mode stays off
-      check('tap mode off (mouse-opened panel): fret press alone plays nothing', play(g, [press('fret1')]), []);
-      check('tap mode off: strum plays as usual', play(g, [strum]), ['on:52@0']);
-      check('tap mode off: release keeps ringing (R4.2)', play(g, [release('fret1')]), []);
-      check('tap mode off: Back mutes (R4.11)', play(g, [press('back')]), ['off']);
+      await s.section('tap-to-play in the settings menu (design 7.4)', () => {
+        let g = new Guitar();
+        g.setTapToPlay(true);
+        check('fret press plays at once without strum', play(g, [press('fret1')]), ['on:52@0']);
+        check('second fret adds its note (chord by tapping)', play(g, [press('fret3')]), ['on:57@2']);
+        check('releasing a tapped fret stops its note', play(g, [release('fret1')]), ['off']);
+        check('the release uses the mute fade', g.handle([release('fret3')], {}, 0).find((e) => e.type === 'noteOff')?.fade, g.options.fade);
+        check('no voices left after releasing', g.ringingVoices().every((v) => v === null), true);
+        play(g, [press('fret2')]);
+        check('pressing the same fret again restarts it: off, then on', play(g, [release('fret2'), press('fret2')]), ['off', 'on:55@1']);
+        g = new Guitar();
+        play(g, [press('fret1')]);
+        play(g, [strum]);
+        play(g, [release('fret1'), release('strumDown')]);
+        g.setTapToPlay(true);
+        check('a strummed note keeps ringing when tap mode starts', g.ringingVoices()[0] !== null, true);
+        check('pressing its fret in tap mode mutes it and plays the tapped note', play(g, [press('fret1')]), ['off', 'on:52@0']);
+        g.setTapToPlay(false);
+        check('after leaving tap mode, releasing the fret keeps the note ringing (R4.2)', play(g, [release('fret1')]), []);
+        check('after leaving tap mode a fret press only mutes (R4.3)', play(g, [press('fret1')]), ['off']);
+        check('and strum plays again', play(g, [strum]), ['on:52@0']);
+        g = new Guitar(guitarOptions(DEFAULTS.device, 'bass', { gamepad: true }));
+        g.setTapToPlay(true);
+        check('gamepad bass mode: A taps E2', play(g, [press('faceA')]), ['on:40@0']);
+        check('gamepad bass mode: releasing A stops it', play(g, [release('faceA')]), ['off']);
+        check('tap mode is off by default', new Guitar().tapToPlay, false);
+        g = new Guitar();
+        g.setTapToPlay(false);
+        check('tap mode off (mouse-opened panel): fret press alone plays nothing', play(g, [press('fret1')]), []);
+        check('tap mode off: strum plays as usual', play(g, [strum]), ['on:52@0']);
+        check('tap mode off: release keeps ringing (R4.2)', play(g, [release('fret1')]), []);
+      });
+
+      // ---- tilt range shifting (R4.5.2 - R4.5.7) ------------------------------
+      await s.section('tilt shifts the fret range by scale steps (R4.5.2 - R4.5.7)', () => {
+        check('constants: step size 0.1, hysteresis 0.2, limit 3 octaves, tilt starts off', [G.TILT_STEP_SIZE, G.TILT_STEP_HYSTERESIS, G.STEP_LIMIT_OCTAVES, G.TILT_STARTS_ENABLED], [0.1, 0.2, 3, false]);
+        check('stepDelta rounds with hysteresis', () => [G.stepDelta(0.6, 0), G.stepDelta(0.75, 0), G.stepDelta(1.3, 1), G.stepDelta(0.35, 1), G.stepDelta(0.25, 1), G.stepDelta(-0.8, 0), G.stepDelta(2.9, 0)], [0, 1, 1, 1, 0, -1, 3]);
+        check('shiftInScale from E3 in E minor pentatonic (+1 G3, +2 A3, +5 E4, -1 D3, -5 E2)', () => [1, 2, 5, -1, -5].map((n) => noteName(G.shiftInScale(52, SCALES.minorPentatonic, 0, n))), ['G3', 'A3', 'E4', 'D3', 'E2']);
+        let g = tg();
+        tilt(g, 0.44);
+        check('tilt starts off: tilting does not move the range', (tilt(g, 0.95), notes(g)), ['E3', 'G3', 'A3', 'B3', 'D4']);
+        tilt(g, 0.44);
+        g.handle([press('back')], ctl(0, 0.44), 0);
+        check('Back turns tilt on (on release) and reports 0 steps', actions(g.handle([release('back')], ctl(0, 0.44), 0)).map((e) => [e.action, e.enabled, e.steps]), [['tiltToggled', true, 0]]);
+        tilt(g, 0.64);
+        check('+0.2 tilt from the reference = +2 steps', [g.rangeSteps(), notes(g)], [2, ['A3', 'B3', 'D4', 'E4', 'G4']]);
+        tilt(g, 0.34);
+        check('-0.1 tilt = -1 step (neck down = lower)', [g.rangeSteps(), notes(g)], [-1, ['D3', 'E3', 'G3', 'A3', 'B3']]);
+        tilt(g, 0.645);
+        play(g, [press('fret1'), strum]);
+        check('a ringing note is not retuned when the range moves', play(g, [], ctl(0, 0.85), { all: true }).filter((e) => !e.startsWith('action')), []);
+        check('new notes use the new range (+4 steps: green = D4)', play(g, [release('strumDown'), strum], ctl(0, 0.85)), ['off', 'on:62@0']);
+        tilt(g, 0.64);
+        g.handle([press('back')], ctl(0, 0.64), 0);
+        const off = actions(g.handle([release('back')], ctl(0, 0.64), 0))[0] || {};
+        check('Back turns tilt off and locks +2 as stepBase', [off.enabled, off.steps, g.stepBase], [false, 2, 2]);
+        tilt(g, 0.1);
+        check('while off, tilt does not move the locked range', g.rangeSteps(), 2);
+        tapBack(g, 0.1);
+        check('turning on again starts from the base with a new reference', g.rangeSteps(), 2);
+        tilt(g, 0.3);
+        check('total = base + new delta (+2 + 2 = +4)', g.rangeSteps(), 4);
+        g = new Guitar({ tiltSmoothing: 0, notes: scaleNotes(48, 'major'), rootMidi: 48, scale: [...SCALES.major] });
+        tilt(g, 0.5);
+        tapBack(g, 0.5);
+        tilt(g, 0.7);
+        check('steps follow the key/scale (C major +2: E3 F3 G3 A3 B3)', notes(g), ['E3', 'F3', 'G3', 'A3', 'B3']);
+        g = tg();
+        tilt(g, 0);
+        for (let i = 0; i < 4; i++) { tapBack(g, 0); tilt(g, 1); tapBack(g, 1); tilt(g, 0); }
+        tapBack(g, 0);
+        tilt(g, 1);
+        check('the range is limited to 3 octaves of the scale (15 steps for pentatonic)', g.rangeSteps(), 15);
+        check('gamepad guitar mode (no tilt control): Back toggles, range stays 0', () => { const h = new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS }); h.handle([press('back')], {}, 0); const a = actions(h.handle([release('back')], {}, 0)).map((e) => e.action); return [a, h.rangeSteps()]; }, [['tiltToggled'], 0]);
+      });
+
+      await s.section('saved range offset (settings store, R4.5.6)', () => s.withCleanStorage(() => {
+        const id = 'device:guitar:3';
+        check('rangeOffset default is 0 and part of the device settings', [DEFAULTS.device.rangeOffset, ST.getDeviceSettings(id).rangeOffset], [0, 0]);
+        check('invalid stored rangeOffset (2.5) falls back to 0', () => (localStorage.setItem('musicSandbox.devices', JSON.stringify({ [id]: { rangeOffset: 2.5 } })), ST.getDeviceSettings(id).rangeOffset), 0);
+        check('a stored rangeOffset outside -36..36 falls back to 0', () => (localStorage.setItem('musicSandbox.devices', JSON.stringify({ [id]: { rangeOffset: 40 } })), ST.getDeviceSettings(id).rangeOffset), 0);
+        localStorage.removeItem('musicSandbox.devices');
+        const lockG = new Guitar({ ...guitarOptions(ST.getDeviceSettings(id), 'guitar'), tiltSmoothing: 0 });
+        tilt(lockG, 0.44); tapBack(lockG, 0.44); tilt(lockG, 0.64);
+        lockG.handle([press('back')], ctl(0, 0.64), 0);
+        const lockEv = actions(lockG.handle([release('back')], ctl(0, 0.64), 0))[0] || {};
+        ST.setDeviceSetting(id, 'rangeOffset', lockEv.base);
+        check('locking with Back saves the base (+2) in the device settings', [lockEv.enabled, ST.getDeviceSettings(id).rangeOffset], [false, 2]);
+        check('a settings change keeps the locked base', () => (lockG.configure(guitarOptions({ ...ST.getDeviceSettings(id), whammy: 'volume' }, 'guitar')), lockG.rangeSteps()), 2);
+        const reloaded = new Guitar(guitarOptions(ST.getDeviceSettings(id), 'guitar'));
+        check('after a reload: base +2 restored, tilt off, notes start at A3', [reloaded.stepBase, reloaded.rangeSteps(), reloaded.tiltEnabled, noteName(reloaded.noteFor(0))], [2, 2, false, 'A3']);
+        ST.resetDeviceSettings(id, { keepInstrument: true });
+        reloaded.configure(guitarOptions(ST.getDeviceSettings(id), 'guitar'));
+        check('reset (resetDeviceSettings): saved offset back to 0 and the live guitar follows', [ST.getDeviceSettings(id).rangeOffset, reloaded.stepBase, reloaded.rangeSteps()], [0, 0, 0]);
+        ST.setDeviceSetting(id, 'rangeOffset', 3);
+        const onG = new Guitar({ ...guitarOptions(ST.getDeviceSettings(id), 'guitar'), tiltSmoothing: 0 });
+        tilt(onG, 0.44); tapBack(onG, 0.44); tilt(onG, 0.64);
+        ST.resetDeviceSettings(id, { keepInstrument: true });
+        onG.configure({ ...guitarOptions(ST.getDeviceSettings(id), 'guitar'), tiltSmoothing: 0 });
+        check('reset while tilt is on: range 0, tilt stays on', [onG.rangeSteps(), onG.tiltEnabled], [0, true]);
+      }));
+
+      // ---- D-pad action (R4.15) ---------------------------------------------
+      await s.section('D-pad action: octave (R4.15)', () => {
+        check('dpadAction default octave', DEFAULTS.device.dpadAction, 'octave');
+        const rs = (out) => actions(out).filter((a) => a.action === 'rangeShifted').map((a) => [a.base, a.steps]);
+        let g = new Guitar(guitarOptions({ ...DEFAULTS.device }, 'guitar'));
+        check('right from 0: rangeShifted base +5 (pentatonic)', rs(g.handle([press('dpadRight')], {}, 0)), [[5, 5]]);
+        check('the release emits nothing', play(g, [release('dpadRight')]), []);
+        check('new strums play an octave higher (E4)', play(g, [press('fret1'), strum]), ['on:64@0']);
+        g = new Guitar(guitarOptions({ ...DEFAULTS.device }, 'guitar'));
+        g.handle([press('dpadLeft')], {}, 0); g.handle([release('dpadLeft')], {}, 0);
+        check('left twice from 0 gives -10', rs(g.handle([press('dpadLeft')], {}, 0)), [[-10, -10]]);
+        g = new Guitar({ ...guitarOptions({ ...DEFAULTS.device, rangeOffset: 15 }, 'guitar') });
+        check('at +15 a right press stays +15 (still emits)', rs(g.handle([press('dpadRight')], {}, 0)), [[15, 15]]);
+        g = new Guitar(guitarOptions({ ...DEFAULTS.device, root: 0, scale: 'major' }, 'guitar'));
+        check('a seven-note scale moves by 7', rs(g.handle([press('dpadRight')], {}, 0)), [[7, 7]]);
+        g = new Guitar({ ...guitarOptions({ ...DEFAULTS.device }, 'guitar'), tiltSmoothing: 0 });
+        tilt(g, 0.44); tapBack(g, 0.44); tilt(g, 0.64);
+        const shifted = rs(g.handle([press('dpadRight')], ctl(0, 0.64), 0));
+        check('with tilt on (+2): the shift re-measures, base 7, range = new base, tilt stays on', [shifted, g.rangeSteps(), g.tiltEnabled], [[[7, 7]], 7, true]);
+        g.handle([release('dpadRight')], ctl(0, 0.64), 0);
+        tilt(g, 0.74);
+        check('... and tilting from there adds to the new base (+1 -> 8)', g.rangeSteps(), 8);
+        g = new Guitar(guitarOptions({ ...DEFAULTS.device }, 'guitar'));
+        play(g, [press('fret1'), strum]);
+        check('ringing notes keep their pitch (glide off: no noteOff/glide)', summarize(g.handle([press('dpadRight')], {}, 0)).filter((e) => e === 'off' || e.startsWith('glide')), []);
+        g = new Guitar(guitarOptions({ ...DEFAULTS.device }, 'guitar', { gamepad: true }));
+        check('gamepad guitar mode reacts to D-pad right', rs(g.handle([press('dpadRight')], {}, 0)), [[5, 5]]);
+      });
+
+      await s.section('D-pad action: effect, key, sound, off (R4.15)', () => {
+        const dp = (action, gamepad = false) => { const g = new Guitar(guitarOptions({ ...DEFAULTS.device, dpadAction: action }, 'guitar', { gamepad })); return [actions(g.handle([press('dpadRight')], {}, 0)).map((a) => [a.action, a.dir]), actions(g.handle([release('dpadRight'), press('dpadLeft')], {}, 0)).map((a) => [a.action, a.dir]), play(g, [release('dpadLeft')])]; };
+        check('effect: right/left emit dpad +1/-1, releases nothing', () => dp('effect'), [[['dpad', 1]], [['dpad', -1]], []]);
+        check('key: emits dpad', () => dp('key')[0], [['dpad', 1]]);
+        check('sound: emits dpad (gamepad guitar mode too)', () => dp('sound', true)[0], [['dpad', 1]]);
+        check('off emits nothing', () => dp('off'), [[], [], []]);
+      });
+
+      await s.section('D-pad action: main.js helpers (lane-actions.js) and soundCycle', async () => {
+        const norm = (list) => list.map((e) => (e.source === 'midi' ? `midi:${e.program}` : e.source));
+        check('soundCycle(guitar): pluck, midi -1, 24 25 26 28 29 30 31', () => norm(SETUP.soundCycle('guitar')), ['pluck', 'midi:-1', 'midi:24', 'midi:25', 'midi:26', 'midi:28', 'midi:29', 'midi:30', 'midi:31']);
+        check('soundCycle(bass): bass, pluck, midi -1, 32 34 35 36 37 38 39', () => norm(SETUP.soundCycle('bass')), ['bass', 'pluck', 'midi:-1', 'midi:32', 'midi:34', 'midi:35', 'midi:36', 'midi:37', 'midi:38', 'midi:39']);
+        check('default programs: guitar 27, bass 33', [SETUP.DEFAULT_PROGRAMS?.guitar, SETUP.DEFAULT_PROGRAMS?.bass], [27, 33]);
+        await I18N.setLanguage('en');
+        const rsc = LA.rangeShiftedChange;
+        check('octave toast "Octave +1" and rangeOffset saved', () => rsc(5, 5, 0), { changes: { rangeOffset: 5 }, toast: 'Octave +1' });
+        check('octave toast "Octave 0"', () => rsc(0, 5, 5), { changes: { rangeOffset: 0 }, toast: 'Octave 0' });
+        check('octave toast "Octave −2" (U+2212)', () => rsc(-10, 5, 0).toast, 'Octave \u22122');
+        check('not a whole octave: "Range +7 steps"', () => rsc(7, 5, 0).toast, 'Range +7 steps');
+        check('unchanged base saves nothing', () => rsc(15, 5, 15).changes, {});
+        const dc = (action, dir, settings, instrument = 'guitar') => LA.dpadChange(action, dir, { ...DEFAULTS.device, ...settings }, instrument);
+        check('effect cycles clean -> crunch -> epic -> clean', () => [dc('effect', 1, { effect: 'clean' }), dc('effect', 1, { effect: 'crunch' }), dc('effect', 1, { effect: 'epic' })].map((r) => [r.changes.effect, r.toast]), [['crunch', 'Crunch'], ['epic', 'Epic'], ['clean', 'Clean']]);
+        check('effect back: clean -> epic', () => dc('effect', -1, { effect: 'clean' }).changes, { effect: 'epic' });
+        check('key: E -> F with right, C -> B with left, B -> C with right', () => [dc('key', 1, { root: 4 }).changes.root, dc('key', -1, { root: 0 }).changes.root, dc('key', 1, { root: 11 }).changes.root], [5, 11, 0]);
+        check('key toast "Key: D"', () => dc('key', 1, { root: 1 }).toast, 'Key: D');
+        check('sound: stored auto is found as the default source (pluck) -> midi -1, toast = default program name', () => { const r = dc('sound', 1, { source: 'auto', program: -1 }); return [r.changes.source, r.changes.program, r.toast]; }, ['midi', -1, 'Electric Guitar (clean)']);
+        check('sound: program 27 is found as -1 -> next is 24', () => dc('sound', 1, { source: 'midi', program: 27 }).changes, { source: 'midi', program: 24 });
+        check('sound: wraps forward (31 -> pluck) and the stored program is kept', () => { const r = dc('sound', 1, { source: 'midi', program: 31 }); return [r.changes.source, r.changes.program ?? 31]; }, ['pluck', 31]);
+        check('sound: wraps backward (pluck -> midi 31)', () => dc('sound', -1, { source: 'pluck', program: -1 }).changes, { source: 'midi', program: 31 });
+        check('sound: an unlisted program 0 -> first / last', () => [dc('sound', 1, { source: 'midi', program: 0 }).changes.source, dc('sound', -1, { source: 'midi', program: 0 }).changes], ['pluck', { source: 'midi', program: 31 }]);
+        check('sound on the bass: auto -> pluck (bass is the default source)', () => dc('sound', 1, { source: 'auto' }, 'bass').changes.source, 'pluck');
+        await I18N.setLanguage('sv');
+        check('sv: "Tonart: D"', () => dc('key', 1, { root: 1 }).toast, 'Tonart: D');
+        await s.withCleanStorage(async () => {
+          ST.setGlobalSetting('noteNames', 'language');
+          check('sv with Swedish note names: B is "H"', () => dc('key', 1, { root: 10 }).toast, 'Tonart: H');
+        });
+        await I18N.setLanguage('en');
+      });
+
+      await s.section('D-pad action: menus, reset, drums, panel field (R4.15)', () => s.withCleanStorage(() => {
+        check('in a gamepad menu D-pad left/right navigate (menu controls, intents left/right)', () => [NAV.MENU_CONTROLS.has('dpadLeft'), NAV.MENU_CONTROLS.has('dpadRight'), NAV.intentFor('dpadLeft'), NAV.intentFor('dpadRight')], [true, true, 'left', 'right']);
+        check('an invalid stored dpadAction falls back to octave', () => { localStorage.setItem('musicSandbox.devices', JSON.stringify({ x: { dpadAction: 'jump' } })); return ST.getDeviceSettings('x').dpadAction; }, 'octave');
+        localStorage.clear();
+        const id = 'device:guitar:1';
+        ST.setDeviceSetting(id, 'dpadAction', 'key');
+        ST.setDeviceSetting(id, 'root', 7);
+        ST.setDeviceSetting(id, 'effect', 'epic');
+        ST.setDeviceSetting(id, 'rangeOffset', 5);
+        ST.resetDeviceSettings(id, { keepInstrument: true });
+        const after = ST.getDeviceSettings(id);
+        check('after a 5 s reset dpadAction and the changed values are back to their defaults', [after.dpadAction, after.root, after.effect, after.rangeOffset], [DEFAULTS.device.dpadAction, DEFAULTS.device.root, DEFAULTS.device.effect, 0]);
+        check('drums still play D-pad left/right as pads', () => {
+          const device = fakeDevice('device:gamepad:1', PAD);
+          const d = new DR.Drums(SETUP.drumOptions({ ...DEFAULTS.device }, device));
+          return [d.handle([press('dpadLeft')], {}, 0), d.handle([press('dpadRight')], {}, 0)].map((out) => ev(out, 'noteOn').length);
+        }, [1, 1]);
+        const shown = (device, kind, instrument) => { const p = openPanel(device, kind, instrument); try { return !!p.el.querySelector('[data-key="dpadAction"]'); } finally { p.destroy(); } };
+        check('dpadAction field shown for a guitar lane and a gamepad playing bass', () => [shown(fakeDevice('device:guitar:1', XPLORER), 'guitar', 'guitar'), shown(fakeDevice('device:gamepad:1', PAD), 'guitar', 'bass')], [true, true]);
+        check('dpadAction field hidden for drums and on the keyboard', () => [shown(fakeDevice('device:guitar:1', XPLORER), 'drums', 'drums'), shown(fakeDevice('computer-keyboard', 'keyboard', { isKeyboard: true, detection: { type: 'keyboard', mapping: 'keyboard' }, mapping: { controls: {} } }), 'keys', 'keys')], [false, false]);
+      }));
+
+      // ---- strum hold (R4.7.2) ----------------------------------------------
+      await s.section('strum hold (R4.7.2)', () => {
+        const ends = (out) => ev(out, 'holdEnd').map((e) => e.voiceId).sort();
+        let g = new Guitar();
+        const out = g.handle([press('fret1'), strum], {}, 0);
+        const on = ev(out, 'noteOn')[0] || {};
+        check('a strum press sends noteOn with hold: true', on.hold, true);
+        check('nothing more while the strum is held', play(g, [], {}, { t: 1 }).concat(ev(g.handle([], {}, 2), 'holdEnd')), []);
+        check('the release sends holdEnd for that voice', ends(g.handle([release('strumDown')], {}, 3)), [on.voiceId]);
+        g = new Guitar();
+        const chord = ev(g.handle([press('fret1'), press('fret3'), strum], {}, 0), 'noteOn').map((e) => e.voiceId).sort();
+        check('a chord: one holdEnd per voice', ends(g.handle([release('strumDown')], {}, 1)), chord);
+        g = new Guitar();
+        const both = g.handle([press('fret1'), strum, release('strumDown')], {}, 0);
+        check('press and release in one frame send noteOn (hold) and holdEnd together', [ev(both, 'noteOn').map((e) => e.hold), ends(both).length], [[true], 1]);
+        g = new Guitar();
+        const pair = ev(g.handle([press('fret1'), press('fret2'), strum], {}, 0), 'noteOn');
+        g.handle([release('fret1')], {}, 0.5);
+        const mute = g.handle([press('fret1')], {}, 1);
+        check('a fret press while held mutes (noteOff) ...', ev(mute, 'noteOff').map((e) => e.voiceId), [pair[0]?.voiceId]);
+        check('... and no holdEnd follows for that voice', ends(g.handle([release('strumDown')], {}, 2)), [pair[1]?.voiceId]);
+        g = new Guitar();
+        const first = ev(g.handle([press('fret1'), strum], {}, 0), 'noteOn')[0] || {};
+        const re = g.handle([press('strumUp')], {}, 1);
+        const second = ev(re, 'noteOn')[0] || {};
+        check('the other strum direction restrums: old voice noteOff, new voice held', [ev(re, 'noteOff').map((e) => e.voiceId), second.hold, second.voiceId !== first.voiceId], [[first.voiceId], true, true]);
+        check('releasing one direction sends no holdEnd while the other is held', ends(g.handle([release('strumDown')], {}, 2)), []);
+        check('holdEnd comes when both are released (new voice only)', ends(g.handle([release('strumUp')], {}, 3)), [second.voiceId]);
+        g = new Guitar();
+        const held = ev(g.handle([press('fret1'), strum], {}, 0), 'noteOn')[0] || {};
+        check('releaseStrumHold (menu opened) sends the holdEnds at once', () => ends(g.releaseStrumHold(1) || []), [held.voiceId]);
+        check('the later release sends nothing', ends(g.handle([release('strumDown')], {}, 2)), []);
+        g = new Guitar();
+        g.setTapToPlay(true);
+        check('tap-to-play notes carry no hold', !ev(g.handle([press('fret1')], {}, 0), 'noteOn')[0]?.hold, true);
+        g = new Guitar({ controlNames: GAMEPAD_GUITAR_CONTROLS });
+        const gp = ev(g.handle([press('faceA'), press('dpadUp')], {}, 0), 'noteOn')[0] || {};
+        check('gamepad guitar mode: D-pad up held -> hold, release -> holdEnd', [gp.hold, ends(g.handle([release('dpadUp')], {}, 1))], [true, [gp.voiceId]]);
+        check('the keyboard guitar keys (Backspace = strum) behave the same', () => {
+          const k = new KEYS.Keys({ guitar: guitarOptions({ ...DEFAULTS.device }, 'guitar') });
+          const kon = ev(k.handle([press('fret1'), press('strum')], {}, 0), 'noteOn')[0] || {};
+          const kend = ev(k.handle([release('strum')], {}, 1), 'holdEnd');
+          return [kon.part, kon.hold, kend.map((e) => e.voiceId === kon.voiceId)];
+        }, ['guitar', true, [true]]);
+      });
+
+      await s.section('strum hold and MIDI note length in the level estimate (R4.7, R4.7.2, VoiceTracker)', () => {
+        const tracker = (settings, source, instrument = 'guitar') => new AE.VoiceTracker(AE.trackerConfig(guitarSound({ ...DEFAULTS.device, ...settings }, instrument, source)));
+        const near = (a, b, tol = 0.02) => Math.abs(a - b) <= tol * Math.max(Math.abs(a), Math.abs(b), 1e-9);
+        let tr = tracker({}, 'pluck');
+        tr.noteOn({ voiceId: 1, midi: 52, velocity: 127, hold: true }, 0);
+        check('a held pluck voice stays at level 1 for 20 s', [tr.level(1, 0.1), tr.level(1, 10), tr.level(1, 20)].map((v) => +v.toFixed(3)), [1, 1, 1]);
+        tr.holdEnd({ voiceId: 1 }, 20);
+        check('after holdEnd it decays from the holdEnd time with the ring time (-30 dB after 5 s of 10 s)', () => near(tr.level(1, 25), Math.pow(0.001, 0.5), 0.05), true);
+        tr = tracker({}, 'midi');
+        tr.noteOn({ voiceId: 1, midi: 52, velocity: 100, hold: true }, 0);
+        tr.noteOn({ voiceId: 2, midi: 52, velocity: 100 }, 0);
+        check('a held MIDI voice has the same estimate as an unheld one', [3, 8].map((t) => near(tr.level(1, t), tr.level(2, t), 1e-6)), [true, true]);
+        check('with the MIDI source a fret release sends no noteOff', () => {
+          const { instrument } = SETUP.createInstrument(fakeDevice('device:guitar:1', XPLORER), 'guitar', { ...DEFAULTS.device, source: 'midi' });
+          instrument.handle([press('fret1'), strum], {}, 0);
+          return summarize(instrument.handle([release('fret1'), release('strumDown')], {}, 1)).filter((e) => e === 'off');
+        }, []);
+        // Program 19 (Church Organ) sustains: the estimate keeps its level until noteOff.
+        tr = tracker({ source: 'midi', program: 19 }, 'midi');
+        tr.noteOn({ voiceId: 1, midi: 52, velocity: 127 }, 0);
+        tr.active(30);
+        check('sustaining program: full level after 60 s without noteOff', () => near(tr.level(1, 60), tr.level(1, 0.01)), true);
+        const g = new Guitar(guitarOptions({ ...DEFAULTS.device, source: 'midi' }, 'guitar'));
+        g.handle([press('fret1'), strum], {}, 0);
+        g.handle([release('fret1')], {}, 1);
+        const offEv = ev(g.handle([press('fret1')], {}, 60), 'noteOff')[0];
+        if (offEv) tr.noteOff({ ...offEv, voiceId: 1 }, 60);
+        check('... it fades only after the fret is pressed again (gone 2.5 s later)', [!!offEv, tr.level(1, 62.5)], [true, 0]);
+        const short = tracker({ source: 'midi', program: 27, decay: 2 }, 'midi');
+        const long = tracker({ source: 'midi', program: 27, decay: 30 }, 'midi');
+        short.noteOn({ voiceId: 1, midi: 52, velocity: 100 }, 0);
+        long.noteOn({ voiceId: 1, midi: 52, velocity: 100 }, 0);
+        check('the ring time does not change the level estimate of a MIDI voice', near(short.level(1, 5), long.level(1, 5), 1e-6), true);
+        check('the MIDI source config carries no decay', () => 'decay' in guitarSound({ ...DEFAULTS.device, source: 'midi' }, 'guitar', 'midi'), false);
+        check('ring time default 10 s for the pluck sound (bass x1.5)', () => [guitarSound({ ...DEFAULTS.device }, 'guitar', 'pluck').decay, guitarSound({ ...DEFAULTS.device }, 'bass', 'pluck').decay], [10, 15]);
+      });
+
+      await s.section('highway trails follow the level estimate (R5.4.2)', () => {
+        const tr = new AE.VoiceTracker(AE.trackerConfig(guitarSound({ ...DEFAULTS.device, source: 'midi', program: 19 }, 'guitar', 'midi')));
+        const hw = new HV.HighwayState();
+        const e = { type: 'noteOn', voiceId: 7, midi: 52, velocity: 127, column: 0 };
+        tr.noteOn(e, 0);
+        hw.noteOn(e, tr, { x: 0.1, color: '#fff' }, 0);
+        for (let t = 0; t <= 60; t += 0.5) { tr.active(t); hw.update(t); }
+        check('an organ note without noteOff still has an open trail after 60 s', hw.notes.map((n) => n.end), [null]);
+        const p = new AE.VoiceTracker(AE.trackerConfig(guitarSound({ ...DEFAULTS.device }, 'guitar', 'pluck')));
+        const hp = new HV.HighwayState();
+        p.noteOn(e, 0);
+        hp.noteOn(e, p, { x: 0.1, color: '#fff' }, 0);
+        let endAt = null;
+        for (let t = 0; t <= 20; t += 0.25) { p.active(t); hp.update(t); if (endAt === null && hp.notes[0]?.end != null) endAt = t; }
+        check('a pluck note trail ends when its voice falls below 2 % (about 5.7 s of a 10 s ring time)', endAt !== null && endAt > 5 && endAt < 6.5, true);
+      });
+
+      // ---- Back hold (R4.11 - R4.11.3) --------------------------------------
+      await s.section('BackHold alone (R4.11.1)', () => {
+        const { BackHold } = BH;
+        check('hold tiers: 5 s and 10 s', [BH.BACK_HOLD_SECONDS, BH.BACK_FULL_RESET_SECONDS], [5, 10]);
+        let b = new BackHold();
+        b.press(10);
+        check('4.9 s is a tap on release', [b.update(14.9), b.release(14.9)], [null, 'tap']);
+        b.press(20);
+        check('5.0 s gives hold from update while held, once; 9.9 s nothing more', [b.update(24.99), b.update(25), b.update(26), b.update(29.9)], [null, 'hold', null, null]);
+        check('10.0 s gives fullReset from update, once; the release then nothing', [b.update(30), b.update(31), b.release(32)], ['fullReset', null, null]);
+        b.press(40);
+        check('a release after the hold tier returns nothing', [b.update(45), b.release(46)], ['hold', null]);
+        b = new BackHold(); b.press(0);
+        check('a release at 7 s without any update returns the missed hold', b.release(7), 'hold');
+        b = new BackHold(); b.press(0);
+        check('a release at 11 s without any update returns fullReset', b.release(11), 'fullReset');
+        b = new BackHold(); b.press(0);
+        check('one update jumping from 0 to 11 s returns only fullReset', [b.update(11), b.update(11.5), b.release(12)], ['fullReset', null, null]);
+        check('a release without a press does nothing', new BackHold().release(3), null);
+        b = new BackHold(); b.press(40); b.cancel();
+        check('cancel() forgets the press', [b.update(50), b.release(50)], [null, null]);
+        b = new BackHold(); b.press(1);
+        check('pending and heldFor', [b.pending, b.heldFor(3)], [true, 2]);
+      });
+
+      await s.section('Back hold on a guitar (R4.11, R4.11.2)', () => {
+        const g = tg();
+        tilt(g, 0.44);
+        check('handlesBackHold', g.handlesBackHold, true);
+        check('short press (0.1 s): toggles tilt on release only', () => { const r = hold(g, 100, 100.1); return [r.held, r.release, g.tiltEnabled]; }, [[], ['action:tiltToggled'], true]);
+        check('4.9 s hold: still toggles on release, no reset', () => { const r = hold(g, 200, 204.8); return [r.held, r.release, g.tiltEnabled]; }, [[], ['action:tiltToggled'], false]);
+        tapBack(g, 0.44, 300); tilt(g, 0.64, 300.5); tapBack(g, 0.64, 301);
+        g.handle([press('fret1')], ctl(0, 0.64), 302); g.handle([strum], ctl(0, 0.64), 302); g.handle([release('strumDown')], ctl(0, 0.64), 302.1);
+        tapBack(g, 0.64, 303);
+        const other = tg(); tilt(other, 0.44); tapBack(other, 0.44); tilt(other, 0.64); tapBack(other, 0.64); tapBack(other, 0.64);
+        const r5 = hold(g, 400, 405, 0.64);
+        check('5 s hold: ringing note muted and resetSettings (full: false) while still held', [r5.held, resets(r5.heldRaw)], [['off', 'action:resetSettings'], [false]]);
+        check('afterwards: tilt off, base 0, fret 1 plays E3', [g.tiltEnabled, g.stepBase, g.rangeSteps(), noteName(g.noteFor(0))], [false, 0, 0, 'E3']);
+        check('the release after the reset does nothing', [r5.release, g.tiltEnabled], [[], false]);
+        const r99 = hold(g, 500, 509.8);
+        check('a release at 9.9 s does nothing and there is no full reset', [resets(r99.heldRaw), r99.release], [[false], []]);
+        check('a later short press toggles tilt again', [hold(g, 600, 600.2).release, g.tiltEnabled], [['action:tiltToggled'], true]);
+        const r10 = hold(g, 700, 710);
+        check('holding on to 10 s: resetSettings full false at 5 s, then full true once', resets(r10.heldRaw), [false, true]);
+        check('the release after the full reset does nothing', r10.release, []);
+        check('a second guitar is not affected (tilt on, base +2)', [other.tiltEnabled, other.stepBase, other.rangeSteps()], [true, 2, 2]);
+        check('cancelBackHold() (menu took Back) forgets the press', () => { const h = tg(); h.handle([press('back')], ctl(0, 0.44), 0); h.cancelBackHold(); return [...noBendVol(summarize(h.handle([], ctl(0, 0.44), 6))), ...noBendVol(summarize(h.handle([release('back')], ctl(0, 0.44), 6.1)))]; }, []);
+      });
+
+      await s.section('Back hold with the settings store (R4.11.3)', () => s.withCleanStorage(() => {
+        const id = 'device:gamepad:1';
+        const otherId = 'device:gamepad:2';
+        ST.setDeviceSetting(id, 'instrument', 'guitar');
+        ST.setDeviceSetting(id, 'root', 9);
+        ST.setDeviceSetting(id, 'source', 'midi');
+        ST.setDeviceSetting(id, 'rangeOffset', 5);
+        ST.setDeviceSetting(otherId, 'root', 2);
+        ST.setGlobalSetting('view', 'simple');
+        ST.resetDeviceSettings(id, { keepInstrument: true });
+        const kept = ST.getDeviceSettings(id);
+        check('5 s level (keepInstrument): the manual instrument stays, key/sound/range offset back to defaults', [kept.instrument, kept.root, kept.source, kept.rangeOffset], ['guitar', DEFAULTS.device.root, DEFAULTS.device.source, 0]);
+        ST.resetDeviceSettings(id);
+        check('full reset: instrument back to auto (the detected type)', ST.getDeviceSettings(id).instrument, 'auto');
+        check('full reset: nothing stored for that device', storedAnywhere(id), false);
+        check('another device keeps its settings', ST.getDeviceSettings(otherId).root, 2);
+        check('global settings untouched', ST.getGlobalSettings().view, 'simple');
+        // The hold on a guitar: main.js resets the device when resetSettings arrives.
+        ST.setDeviceSetting(id, 'rangeOffset', 4);
+        const hg = new Guitar({ ...guitarOptions(ST.getDeviceSettings(id), 'guitar'), tiltSmoothing: 0 });
+        const hr = hold(hg, 0, 5);
+        for (const full of resets(hr.heldRaw)) ST.resetDeviceSettings(id, full ? undefined : { keepInstrument: true });
+        hg.configure(guitarOptions(ST.getDeviceSettings(id), 'guitar'));
+        check('the hold clears a saved range offset and the guitar is at 0', [ST.getDeviceSettings(id).rangeOffset, hg.stepBase, hg.rangeSteps()], [0, 0, 0]);
+        ST.setDeviceSetting(id, 'instrument', 'bass');
+        const device = fakeDevice(id, PAD);
+        const panel = openPanel(device, 'guitar', 'bass');
+        try {
+          panel.el.querySelector('.reset-button')?.click();
+          check('the Reset to defaults button keeps the instrument', ST.getDeviceSettings(id).instrument, 'bass');
+        } finally {
+          panel.destroy();
+        }
+      }));
+
+      // ---- note strip (R5.7, R5.8) ------------------------------------------
+      await s.section('note strip slides with the continuous tilt (R5.7)', () => {
+        check('displayOffset = base + (tilt - ref) / 0.1, limited', () => [G.displayOffset(0, 0.49, 0.44), G.displayOffset(2, 0.39, 0.44), G.displayOffset(14, 1, 0.44, 15)].map((v) => +v.toFixed(3)), [0.5, 1.5, 15]);
+        check('splitOffset: 2.25 = 2 + 0.25, -0.5 = -1 + 0.5, 3 = 3 + 0', () => [G.splitOffset(2.25), G.splitOffset(-0.5), G.splitOffset(3)].map((o) => [o.whole, +o.frac.toFixed(2)]), [[2, 0.25], [-1, 0.5], [3, 0]]);
+        const g = tg();
+        tilt(g, 0.44);
+        tapBack(g, 0.44);
+        tilt(g, 0.49);
+        check('half a step of tilt: display 0.5, sound still 0 steps (E3)', [+g.displaySteps().toFixed(3), g.rangeSteps(), noteName(g.noteFor(0))], [0.5, 0, 'E3']);
+        check('label strip at +0.5: E3..E4 with frac 0.5', () => { const st = SV.guitarLabelStrip(g, false); return [st.labels, +st.frac.toFixed(2)]; }, [['E3', 'G3', 'A3', 'B3', 'D4', 'E4'], 0.5]);
+        check('reduced motion: frac 0', () => SV.guitarLabelStrip(g, true).frac, 0);
+        tilt(g, 0.665);
+        check('+2.25 display while the sound is +2 (first label A3)', () => [+g.displaySteps().toFixed(2), g.rangeSteps(), SV.guitarLabelStrip(g, false).labels[0]], [2.25, 2, 'A3']);
+        tapBack(g, 0.665);
+        check('tilt off: the strip snaps to the locked step (frac 0)', () => [g.displaySteps(), SV.guitarLabelStrip(g, false).frac], [2, 0]);
+        tilt(g, 0.9);
+        check('tilt off: tilting does not move the strip', g.displaySteps(), 2);
+      });
+
+      await s.section('orientation bars (R5.8)', () => {
+        const bars = SV.orientationBars;
+        check('reference A3: 57 -> 1, 45 and 69 -> 2, 33 and 81 -> 3, 93 -> 4', () => [57, 45, 69, 33, 81, 93].map((m) => bars(m, 57)), [1, 2, 2, 3, 3, 4]);
+        check('other pitch classes get no bars', () => [52, 55, 59, 56, 58, 62].map((m) => bars(m, 57)), [0, 0, 0, 0, 0, 0]);
+        check('reference F#3 (54): 54 -> 1, 66 and 42 -> 2, 57 -> 0', () => [54, 66, 42, 57].map((m) => bars(m, 54)), [1, 2, 2, 0]);
+        check('no reference = no bars', () => bars(57, null), 0);
+        check('bars use the yellow fret colour (FRET_COLORS[2])', SV.ORIENTATION_COLOR, SV.FRET_COLORS?.[2]);
+        check('default reference A3', () => noteName(new Guitar().referenceMidi()), 'A3');
+        check('default strip E3 G3 A3 B3 D4 E4 with bars 0 0 1 0 0 0', () => { const st = SV.guitarLabelStrip(new Guitar(), false); return [st.labels, st.bars]; }, [['E3', 'G3', 'A3', 'B3', 'D4', 'E4'], [0, 0, 1, 0, 0, 0]]);
+        const g = tg(); tilt(g, 0.44); tapBack(g, 0.44); tilt(g, 0.965);
+        check('about an octave up mid-slide (+5.25): E4..E5, A4 has 2 bars, frac 0.25, reference still A3', () => { const st = SV.guitarLabelStrip(g, false); return [noteName(g.referenceMidi()), st.labels, st.bars, +st.frac.toFixed(2)]; }, ['A3', ['E4', 'G4', 'A4', 'B4', 'D5', 'E5'], [0, 0, 2, 0, 0, 0], 0.25]);
+        tapBack(g, 0.965);
+        check('locked base +5 keeps A4 at 2 bars', () => [g.stepBase, noteName(g.referenceMidi()), SV.guitarLabelStrip(g, false).bars], [5, 'A3', [0, 0, 2, 0, 0, 0]]);
+        const csm = () => new Guitar({ ...guitarOptions({ ...DEFAULTS.device, root: 1, scale: 'minorPentatonic' }, 'guitar'), tiltSmoothing: 0 });
+        check('C# minor pentatonic: reference F#3, strip C#3..C#4 marks F#3 with 1 bar', () => { const h = csm(); const st = SV.guitarLabelStrip(h, false); return [noteName(h.referenceMidi()), st.labels, st.bars]; }, ['F#3', ['C#3', 'E3', 'F#3', 'G#3', 'B3', 'C#4'], [0, 0, 1, 0, 0, 0]]);
+        check('C# minor pentatonic at base +5 / -5: F#4 / F#2 get 2 bars', () => { const h = csm(); const r = []; for (const base of [5, -5]) { h.configure({ rangeOffset: base }); const st = SV.guitarLabelStrip(h, false); r.push(st.labels[2], st.bars); } return r; }, ['F#4', [0, 0, 2, 0, 0, 0], 'F#2', [0, 0, 2, 0, 0, 0]]);
+        check('G major: reference B3, strip G3..E4 marks B3', () => { const h = new Guitar(guitarOptions({ ...DEFAULTS.device, root: 7, scale: 'major' }, 'guitar')); const st = SV.guitarLabelStrip(h, false); return [noteName(h.referenceMidi()), st.labels, st.bars]; }, ['B3', ['G3', 'A3', 'B3', 'C4', 'D4', 'E4'], [0, 0, 1, 0, 0, 0]]);
+        check('changing the key on a running guitar moves the reference (A3 -> B3)', () => { const h = new Guitar(); const before = noteName(h.referenceMidi()); h.configure(guitarOptions({ ...DEFAULTS.device, root: 7, scale: 'major' }, 'guitar')); return [before, noteName(h.referenceMidi())]; }, ['A3', 'B3']);
+      });
+
+      // ---- tilt glide (R4.14) -----------------------------------------------
+      await s.section('tilt glide (R4.14)', () => {
+        const EMP = (i) => G.shiftInScale(52, [0, 3, 5, 7, 10], 0, i);
+        check('glidePitch 2.5 -> 58, 3.25 -> 59.75', () => [G.glidePitch(EMP, 2.5), G.glidePitch(EMP, 3.25)], [58, 59.75]);
+        check('glidePitch at whole steps = the scale notes', () => [G.glidePitch(EMP, 2), G.glidePitch(EMP, 3), G.glidePitch(EMP, -1)], [57, 59, 50]);
+        const gg = () => tg({ tiltGlide: true });
+        const frame = (h, edges, v, w = 0, t = 0) => h.handle(edges, ctl(w, v), t);
+        const glides = (out) => ev(out, 'glide').map((e) => +e.semitones.toFixed(6));
+        let h = gg();
+        frame(h, [], 0.44); tapBack(h, 0.44); frame(h, [], 0.69);
+        frame(h, [press('fret1')], 0.69);
+        let out = frame(h, [strum], 0.69);
+        let on = ev(out, 'noteOn')[0] || {};
+        check('offset 2.5: a strum sends noteOn midi 57 with glide +1', [on.midi, +(on.glide ?? NaN).toFixed(6)], [57, 1]);
+        check('strip and sound share 2.5', () => [+h.displaySteps().toFixed(6), +h.soundOffset().toFixed(6), +SV.guitarLabelStrip(h, false).frac.toFixed(6)], [2.5, 2.5, 0.5]);
+        frame(h, [release('fret1'), release('strumDown')], 0.69);
+        out = frame(h, [], 0.79);
+        check('a ringing note follows to +3.5 (60.5) with a glide event', ev(out, 'glide').map((e) => [e.voiceId === on.voiceId, +(57 + e.semitones).toFixed(6)]), [[true, 60.5]]);
+        const lastGlide = glides(out).pop();
+        out = frame(h, [], 0.79, 1);
+        const bend = ev(out, 'bend').map((e) => e.semitones);
+        check('a whammy bend stays a separate event (no glide event); total 58.5 with bend -2', [bend, glides(out).length, 57 + lastGlide + (bend[0] ?? 0)], [[-2], 0, 58.5]);
+        frame(h, [], 0.70, 1);
+        out = tapBack(h, 0.70);
+        check('tilt off at +2.6: settles on step 3 (glide +2) and locks base 3', [glides(out), h.stepBase, h.displaySteps()], [[2], 3, 3]);
+        out = frame(h, [], 0.95);
+        check('afterwards tilting sends no glide', glides(out), []);
+        h = gg(); frame(h, [], 0.44); tapBack(h, 0.44); frame(h, [], 0.68);
+        frame(h, [press('fret1')], 0.68); frame(h, [strum], 0.68);
+        out = tapBack(h, 0.68);
+        check('tilt off at +2.4: settles on step 2 (glide 0)', [glides(out), h.stepBase], [[0], 2]);
+        h = tg();
+        frame(h, [], 0.44); tapBack(h, 0.44); frame(h, [], 0.69);
+        frame(h, [press('fret1')], 0.69); out = frame(h, [strum], 0.69);
+        on = ev(out, 'noteOn')[0] || {};
+        check('setting off: the strum sends the whole-step note 57 without a glide field', [on.midi, 'glide' in on], [57, false]);
+        const offOut = [...frame(h, [], 0.79), ...frame(h, [], 0.5), ...tapBack(h, 0.5)];
+        check('setting off: tilting sends no glide events', glides(offOut), []);
+        h = gg(); frame(h, [], 0.44); tapBack(h, 0.44); frame(h, [], 0.69);
+        frame(h, [press('fret1')], 0.69); frame(h, [strum], 0.69);
+        h.configure({ tiltGlide: false });
+        out = frame(h, [], 0.69);
+        check('turning the setting off while tilt is on settles ringing notes on step 2', [glides(out), h.rangeSteps()], [[0], 2]);
+        h.configure({ tiltGlide: true });
+        out = frame(h, [], 0.79);
+        check('turning it on again glides them to 60.5', ev(out, 'glide').map((e) => +(57 + e.semitones).toFixed(6)), [60.5]);
+        check('the keyboard guitar keys never glide', () => {
+          const k = new KEYS.Keys({ guitar: { ...guitarOptions({ ...DEFAULTS.device, tiltGlide: true }, 'guitar') } });
+          const out2 = k.handle([press('fret1'), press('strum')], {}, 0);
+          return [ev(out2, 'noteOn').map((e) => e.glide ?? 0), ev(out2, 'glide').length];
+        }, [[0], 0]);
+      });
+
+      await s.section('tilt glide in the MIDI source (fake synth, R4.14)', async () => {
+        const param = () => ({ value: 0, setValueAtTime(v) { this.value = v; }, setTargetAtTime(v) { this.value = v; }, linearRampToValueAtTime(v) { this.value = v; }, cancelScheduledValues() {} });
+        const fakeSynth = {
+          bend: [0], notetab: [],
+          send(msg) {
+            const cmd = msg[0] & 0xf0;
+            if (cmd === 0x90) this.notetab.push({ ch: 0, n: msg[1], o: [{ frequency: {}, detune: Object.assign(param(), { value: this.bend[0] }) }, { playbackRate: {}, detune: param() }] });
+            if (cmd === 0xe0) { this.bend[0] = ((msg[1] + (msg[2] << 7)) - 8192) * 200 / 8192; for (const nt of this.notetab) for (const o of nt.o) if (o.frequency) o.detune.setValueAtTime(this.bend[0]); }
+          },
+          setBendRange() {}, setProgram() {},
+        };
+        const ctx = new OfflineAudioContext(1, 4800, 48000);
+        ctx.resume = () => Promise.resolve(); // the synth library resumes its context; an offline one cannot be resumed before rendering
+        const ms = new MS.MidiSource(ctx, ctx.destination, { drums: false, program: 27, bendRange: -2 });
+        await ms.ready;
+        ms.synth = fakeSynth;
+        const detune = (i) => fakeSynth.notetab[i]?.o[0].detune.value;
+        ms.noteOn(1, 57, 100, { glide: 1 });
+        check('noteOn with glide +1: detune 100', detune(0), 100);
+        ms.bend(-1);
+        check('a bend of -1 with glide +1 gives 0', [fakeSynth.bend[0], detune(0)], [-100, 0]);
+        ms.glide(1, 3.5);
+        check('glide 3.5 on top of bend -1 gives 250 (no bend-range limit)', detune(0), 250);
+        check('noise (unpitched) oscillators are untouched', fakeSynth.notetab[0]?.o[1].detune.value, 0);
+        ms.noteOn(2, 60, 100, {});
+        check('a note without glide gets only the bend', detune(1), -100);
+      });
+
+      await s.section('tiltGlide setting and where it is shown (R4.14)', () => s.withCleanStorage(() => {
+        const id = 'device:guitar:1';
+        check('tiltGlide default off', [DEFAULTS.device.tiltGlide, ST.getDeviceSettings(id).tiltGlide], [false, false]);
+        ST.setDeviceSetting(id, 'tiltGlide', true);
+        check('saved per device', ST.getDeviceSettings(id).tiltGlide, true);
+        ST.resetDeviceSettings(id, { keepInstrument: true });
+        check('cleared by the reset', ST.getDeviceSettings(id).tiltGlide, false);
+        localStorage.setItem('musicSandbox.devices', JSON.stringify({ [id]: { tiltGlide: 'yes' } }));
+        check('invalid stored value -> off', ST.getDeviceSettings(id).tiltGlide, false);
+        localStorage.clear();
+        const has = (device, kind, instrument) => { const p = openPanel(device, kind, instrument); try { return !!p.el.querySelector('input[type="checkbox"][data-key="tiltGlide"]'); } finally { p.destroy(); } };
+        check('the checkbox is offered on a guitar lane and a guitar playing bass (with tilt)', () => [has(fakeDevice(id, XPLORER), 'guitar', 'guitar'), has(fakeDevice(id, XPLORER), 'guitar', 'bass')], [true, true]);
+        check('no checkbox for a gamepad (no tilt) or drums', () => [has(fakeDevice('device:gamepad:1', PAD), 'guitar', 'guitar'), has(fakeDevice(id, XPLORER), 'drums', 'drums')], [false, false]);
+      }));
 
       s.finish();
     </script>

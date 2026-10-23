@@ -12,101 +12,81 @@
   </head>
   <body>
     <h1>Pluck sound tests (OfflineAudioContext)</h1>
-    <p>Renders the Karplus-Strong worklet offline and checks level, pitch, decay and mute fade. Open via a local server at <code>/tests/pluck.test.html</code>.</p>
+    <p>Renders the Karplus-Strong worklet offline and checks level, pitch, decay, mute fade, bend and strum hold (R3.4, R4.7.2, design 5, 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
     <p id="summary"></p>
     <ul id="results"></ul>
     <script type="module">
       import { createSuite } from './test-runner.js';
-      import { PluckSource } from '../src/js/audio/pluck-source.js';
+      import { render, rms, db, peak, frequency, timeTo60dB } from './offline-audio.js';
 
-      const s = createSuite('pluck tests');
+      const s = createSuite('pluck tests', { timeoutMs: 55000 });
       const { check } = s;
-      const RATE = 48000;
+      const { PluckSource } = await s.load('../src/js/audio/pluck-source.js', ['PluckSource']);
+      const pluck = (params = { decay: 4, brightness: 0.3 }) => (ctx, dest) => new PluckSource(ctx, dest, params);
+      const near = (a, b, tol) => Math.abs(a - b) <= tol;
 
-      function rms(data, from, to) {
-        let sum = 0;
-        const a = Math.floor(from * RATE);
-        const b = Math.floor(to * RATE);
-        for (let i = a; i < b; i++) sum += data[i] * data[i];
-        return Math.sqrt(sum / Math.max(1, b - a));
-      }
-
-      /** Estimates the fundamental frequency (50-1000 Hz) by autocorrelation. */
-      function frequency(data, from, to) {
-        const a = Math.floor(from * RATE);
-        const n = Math.min(Math.floor((to - from) * RATE), 8192);
-        let best = 0;
-        let bestLag = 1;
-        for (let lag = Math.floor(RATE / 1000); lag <= Math.ceil(RATE / 50); lag++) {
-          let sum = 0;
-          for (let i = 0; i < n; i++) sum += data[a + i] * data[a + i + lag];
-          if (sum > best) {
-            best = sum;
-            bestLag = lag;
-          }
-        }
-        return RATE / bestLag;
-      }
-
-      function peak(data) {
-        let p = 0;
-        for (const v of data) p = Math.max(p, Math.abs(v));
-        return p;
-      }
-
-      /**
-       * Renders `seconds` of audio. `steps` is a list of [time, fn(source)]:
-       * the rendering is suspended at each time, the messages are posted, and
-       * it resumes after a short wait so the worklet has received them.
-       */
-      async function render(seconds, steps, params = { decay: 4, brightness: 0.3 }) {
-        const ctx = new OfflineAudioContext(1, seconds * RATE, RATE);
-        const source = new PluckSource(ctx, ctx.destination, params);
-        await source.ready;
-        const wait = () => new Promise((r) => setTimeout(r, 30));
-        for (const [time, fn] of steps) {
-          ctx.suspend(time).then(async () => {
-            fn(source);
-            await wait();
-            ctx.resume();
-          });
-        }
-        return (await ctx.startRendering()).getChannelData(0);
-      }
-
-      try {
-        const ring = await render(3, [[0, (src) => src.noteOn(1, 57, 100)]]); // A3 = 220 Hz
+      await s.section('plucked string (R3.4)', async () => {
+        const { data: ring } = await render(3, pluck(), [[0, (src) => src.noteOn(1, 57, 100)]]); // A3 = 220 Hz
         check('a plucked note is audible', rms(ring, 0.05, 0.25) > 0.02, true);
         const f = frequency(ring, 0.5, 1.5);
         check(`pitch of A3 is about 220 Hz (measured ${f.toFixed(1)})`, Math.abs(f - 220) < 3, true);
         check('the note decays naturally (R4.7)', rms(ring, 2.5, 3) < rms(ring, 0.05, 0.25) / 4, true);
         check('no clipping', peak(ring) <= 1, true);
 
-        const muted = await render(1.5, [
+        const { data: muted } = await render(1.5, pluck(), [
           [0, (src) => src.noteOn(1, 57, 100)],
           [0.5, (src) => src.noteOff(1, 0.2)], // mute after 0.5 s with a 0.2 s fade
         ]);
         check('a muted note is silent after its fade (R4.3.1)', rms(muted, 0.75, 1.5) < 1e-4, true);
         check('the fade is soft, not a hard cut', rms(muted, 0.6, 0.65) > rms(muted, 0.45, 0.5) * 0.1, true);
 
-        const bent = await render(1.5, [
-          [0, (src) => {
-            src.bend(-12);
-            src.noteOn(1, 57, 100);
-          }],
-        ]);
+        const { data: bent } = await render(1.5, pluck(), [[0, (src) => { src.bend(-12); src.noteOn(1, 57, 100); }]]);
         const fb = frequency(bent, 0.5, 1.4);
         check(`a bend of -12 semitones halves the pitch (measured ${fb.toFixed(1)} Hz)`, Math.abs(fb - 110) < 3, true);
 
-        const chord = await render(1, [
-          [0, (src) => {
-            for (const [i, m] of [52, 55, 57, 59, 62].entries()) src.noteOn(i + 1, m, 127);
-          }],
-        ]);
+        const { data: chord } = await render(1, pluck(), [[0, (src) => { for (const [i, m] of [52, 55, 57, 59, 62].entries()) src.noteOn(i + 1, m, 127); }]]);
         check('a five-note chord at full velocity stays below 1.0', peak(chord) <= 1, true);
-      } catch (err) {
-        check(`rendering works (${err})`, false, true);
-      }
+      });
+
+      await s.section('strum hold (R4.7.2)', async () => {
+        const RING = 1; // ring time in seconds
+        const params = { decay: RING, brightness: 0.3 };
+        const hold = { hold: true };
+        const held = await render(5.2, pluck(params), [
+          [0, (src) => src.noteOn(1, 52, 100, hold)], // E3
+          [4.1, (src) => src.holdEnd(1)],
+        ]);
+        check('the source has holdEnd(voiceId)', held.errors, []);
+        const l0 = db(held.data, 0.1, 0.15);
+        const l4 = db(held.data, 4.0, 4.05);
+        check(`a held E3 stays within 1 dB of its level at 0.1 s for 4 s (${l0.toFixed(1)} -> ${l4.toFixed(1)} dB)`, near(l4, l0, 1), true);
+        const t60 = timeTo60dB(held.data, 4.3, 5.0);
+        check(`after holdEnd it falls 60 dB in the ring time ±10 % (measured ${t60.toFixed(2)} s for ${RING} s)`, near(t60, RING, RING * 0.1), true);
+
+        // The noise burst is random, so single renders differ by about 1 dB (sd) even without hold, and
+        // 0.5 dB cannot be checked reliably. Compare the mean of 16 renders each, every level relative to the
+        // render's own 0.05-0.15 s level, within 1 dB (decision 4-pluck-hold-tolerance).
+        const N = 16;
+        const relative = async (withHold) => {
+          let sum = 0;
+          for (let i = 0; i < N; i++) {
+            const steps = withHold ? [[0, (src) => src.noteOn(1, 52, 100, hold)], [0.005, (src) => src.holdEnd(1)]] : [[0, (src) => src.noteOn(1, 52, 100)]];
+            const { data } = await render(1.2, pluck({ decay: 2, brightness: 0.3 }), steps);
+            sum += db(data, 0.5, 1.0) - db(data, 0.05, 0.15);
+          }
+          return sum / N;
+        };
+        const lq = await relative(true);
+        const lp = await relative(false);
+        check(`a holdEnd at 5 ms renders like a voice without hold, within 1 dB (${lq.toFixed(2)} vs ${lp.toFixed(2)} dB, mean of ${N}, relative)`, near(lq, lp, 1), true);
+
+        const off = await render(2, pluck(params), [
+          [0, (src) => src.noteOn(1, 52, 100, hold)],
+          [1, (src) => src.noteOff(1, 0.2)],
+        ]);
+        check('a held voice still fades out on noteOff', [rms(off.data, 0.8, 0.95) > 0.01, rms(off.data, 1.3, 2) < 1e-4], [true, true]);
+      });
+
       s.finish();
     </script>
   </body>

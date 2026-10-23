@@ -12,62 +12,68 @@
   </head>
   <body>
     <h1>Drum logic tests</h1>
-    <p>Open via a local server (e.g. <code>python3 -m http.server</code>) at <code>/tests/drums.test.html</code>.</p>
+    <p>Drum mapping, one-shot notes, trigger velocity and custom mapping (R4b, design 4.3, 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
     <p id="summary"></p>
     <ul id="results"></ul>
     <script type="module">
       import { createSuite, edge } from './test-runner.js';
-      import { Drums, DEFAULT_DRUM_MAP, triggerVelocity, TRIGGER_ON } from '../src/js/instruments/drums.js';
-      import { MAPPINGS } from '../src/js/input/mappings.js';
 
       const s = createSuite('drum tests');
       const { check } = s;
-      const pad = Object.keys(MAPPINGS['gamepad-standard'].controls);
+      const DR = await s.load('../src/js/instruments/drums.js', ['Drums', 'DEFAULT_DRUM_MAP', 'triggerVelocity', 'TRIGGER_ON']);
+      const { MAPPINGS } = await s.load('../src/js/input/mappings.js', ['MAPPINGS']);
+      const { Drums, DEFAULT_DRUM_MAP, triggerVelocity, TRIGGER_ON } = DR;
+      const pad = Object.keys(MAPPINGS?.['gamepad-standard']?.controls || {});
       const hits = (events) => events.filter((e) => e.type === 'noteOn').map((e) => `${e.midi}/${e.velocity}@${e.column}`);
       const play = (d, edges) => d.handle(edges, {}, 0);
+      let d;
 
-      s.group('default mapping (R4b.1)');
-      let d = new Drums({ controls: pad });
-      check('A = kick 36, velocity 100, column 0', hits(play(d, [edge('faceA')])), ['36/100@0']);
-      check('B = snare 38', hits(play(d, [edge('faceB')])), ['38/100@1']);
-      check('X = closed hi-hat 42', hits(play(d, [edge('faceX')])), ['42/100@2']);
-      check('Y = tom 45', hits(play(d, [edge('faceY')])), ['45/100@3']);
-      check('LB = crash 49, RB = ride 51', hits(play(d, [edge('shoulderL'), edge('shoulderR')])), ['49/100@4', '51/100@5']);
-      check('release plays nothing', hits(play(d, [edge('faceA', 'released')])), []);
-      check('drum notes are one-shot: no noteOff ever', play(d, [edge('faceA'), edge('faceA', 'released')]).some((e) => e.type === 'noteOff'), false);
-      check('noteOn is marked oneShot', play(d, [edge('faceB')])[0].oneShot, true);
-      check('every hit gets a new voice id', (() => { const a = play(d, [edge('faceA')])[0].voiceId; const b = play(d, [edge('faceA')])[0].voiceId; return a !== b; })(), true);
-      check('pads follow the mapping order', d.pads.map((p) => p.control).slice(0, 6), ['faceA', 'faceB', 'faceX', 'faceY', 'shoulderL', 'shoulderR']);
-      check('Start asks to open the settings', play(d, [edge('start')]).map((e) => e.action), ['openSettings']);
-      check('Back has no sound', play(d, [edge('back')]), []);
+      await s.section('default mapping (R4b.1)', () => {
+        d = new Drums({ controls: pad });
+        check('A = kick 36, velocity 100, column 0', hits(play(d, [edge('faceA')])), ['36/100@0']);
+        check('B = snare 38', hits(play(d, [edge('faceB')])), ['38/100@1']);
+        check('X = closed hi-hat 42', hits(play(d, [edge('faceX')])), ['42/100@2']);
+        check('Y = tom 45', hits(play(d, [edge('faceY')])), ['45/100@3']);
+        check('LB = crash 49, RB = ride 51', hits(play(d, [edge('shoulderL'), edge('shoulderR')])), ['49/100@4', '51/100@5']);
+        check('release plays nothing', hits(play(d, [edge('faceA', 'released')])), []);
+        check('drum notes are one-shot: no noteOff ever', play(d, [edge('faceA'), edge('faceA', 'released')]).some((e) => e.type === 'noteOff'), false);
+        check('noteOn is marked oneShot', play(d, [edge('faceB')])[0].oneShot, true);
+        check('every hit gets a new voice id', (() => { const a = play(d, [edge('faceA')])[0].voiceId; const b = play(d, [edge('faceA')])[0].voiceId; return a !== b; })(), true);
+        check('pads follow the mapping order', d.pads.map((p) => p.control).slice(0, 6), ['faceA', 'faceB', 'faceX', 'faceY', 'shoulderL', 'shoulderR']);
+        check('Start asks to open the settings', play(d, [edge('start')]).map((e) => e.action), ['openSettings']);
+        check('Back has no sound', play(d, [edge('back')]), []);
+      });
 
-      s.group('velocity triggers (R4b.1)');
-      d = new Drums({ controls: pad });
-      const lt = (value) => play(d, [edge('triggerL', 'changed', value)]);
-      check(`below the threshold (${TRIGGER_ON}) nothing plays`, hits(lt(0.1)), []);
-      check('passing the threshold at 0.6 plays the open hi-hat with velocity 79', hits(lt(0.6)), ['46/79@6']);
-      check('pressing further does not hit again', hits(lt(0.9)), []);
-      check('letting go a little (above re-arm) and pressing again: no hit', hits([...lt(0.15), ...lt(1)]), []);
-      check('after letting go (below 0.1) a full press hits with 127', hits([...lt(0.05), ...lt(1)]), ['46/127@6']);
-      check('velocity just above the threshold is soft (30)', triggerVelocity(TRIGGER_ON), 30);
-      check('velocity at full press is 127', triggerVelocity(1), 127);
-      check('RT is the high tom', hits(play(d, [edge('triggerR', 'pressed', 0.7)])), ['50/91@7']);
+      await s.section('velocity triggers (R4b.1)', () => {
+        d = new Drums({ controls: pad });
+        const lt = (value) => play(d, [edge('triggerL', 'changed', value)]);
+        check(`below the threshold (${TRIGGER_ON}) nothing plays`, hits(lt(0.1)), []);
+        check('passing the threshold at 0.6 plays the open hi-hat with velocity 79', hits(lt(0.6)), ['46/79@6']);
+        check('pressing further does not hit again', hits(lt(0.9)), []);
+        check('letting go a little (above re-arm) and pressing again: no hit', hits([...lt(0.15), ...lt(1)]), []);
+        check('after letting go (below 0.1) a full press hits with 127', hits([...lt(0.05), ...lt(1)]), ['46/127@6']);
+        check('velocity just above the threshold is soft (30)', triggerVelocity(TRIGGER_ON), 30);
+        check('velocity at full press is 127', triggerVelocity(1), 127);
+        check('RT is the high tom', hits(play(d, [edge('triggerR', 'pressed', 0.7)])), ['50/91@7']);
+      });
 
-      s.group('custom mapping (R4b.2)');
-      d = new Drums({ controls: pad, map: { faceA: 54, faceB: 0 } });
-      check('A can be changed to tambourine', hits(play(d, [edge('faceA')])), ['54/100@0']);
-      check('a control set to none plays nothing', hits(play(d, [edge('faceB')])), []);
-      check('a control set to none has no pad', d.pads.some((p) => p.control === 'faceB'), false);
-      check('other controls keep their defaults', hits(play(d, [edge('faceX')])), ['42/100@1']);
-      d.configure({ map: { faceA: 36 } });
-      check('configure() applies a new map', hits(play(d, [edge('faceA'), edge('faceB')])), ['36/100@0', '38/100@1']);
+      await s.section('custom mapping (R4b.2)', () => {
+        d = new Drums({ controls: pad, map: { faceA: 54, faceB: 0 } });
+        check('A can be changed to tambourine', hits(play(d, [edge('faceA')])), ['54/100@0']);
+        check('a control set to none plays nothing', hits(play(d, [edge('faceB')])), []);
+        check('a control set to none has no pad', d.pads.some((p) => p.control === 'faceB'), false);
+        check('other controls keep their defaults', hits(play(d, [edge('faceX')])), ['42/100@1']);
+        d.configure({ map: { faceA: 36 } });
+        check('configure() applies a new map', hits(play(d, [edge('faceA'), edge('faceB')])), ['36/100@0', '38/100@1']);
+      });
 
-      s.group('guitar controller as drums');
-      d = new Drums({ controls: Object.keys(MAPPINGS['guitar-standard'].controls) });
-      check('frets play kick, snare, hi-hat, tom, crash', hits(play(d, ['fret1', 'fret2', 'fret3', 'fret4', 'fret5'].map((n) => edge(n)))).map((h) => h.split('/')[0]), ['36', '38', '42', '45', '49']);
-      check('strum up/down play ride and open hi-hat', hits(play(d, [edge('strumUp'), edge('strumDown')])).map((h) => h.split('/')[0]), ['51', '46']);
-      check('whammy and tilt are not drums by default', d.pads.some((p) => p.control === 'whammy' || p.control === 'tilt'), false);
-      check('every default note is a GM drum note (35-81)', Object.values(DEFAULT_DRUM_MAP).every((n) => n >= 35 && n <= 81), true);
+      await s.section('guitar controller as drums', () => {
+        d = new Drums({ controls: Object.keys(MAPPINGS['guitar-standard'].controls) });
+        check('frets play kick, snare, hi-hat, tom, crash', hits(play(d, ['fret1', 'fret2', 'fret3', 'fret4', 'fret5'].map((n) => edge(n)))).map((h) => h.split('/')[0]), ['36', '38', '42', '45', '49']);
+        check('strum up/down play ride and open hi-hat', hits(play(d, [edge('strumUp'), edge('strumDown')])).map((h) => h.split('/')[0]), ['51', '46']);
+        check('whammy and tilt are not drums by default', d.pads.some((p) => p.control === 'whammy' || p.control === 'tilt'), false);
+        check('every default note is a GM drum note (35-81)', Object.values(DEFAULT_DRUM_MAP).every((n) => n >= 35 && n <= 81), true);
+      });
 
       s.finish();
     </script>
