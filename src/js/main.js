@@ -355,8 +355,8 @@ function laneAction(ui, event) {
     }
     case 'dpad': {
       // D-pad effect / key / sound (R4.15): a normal settings change.
-      const action = getDeviceSettings(id).dpadAction;
-      const result = dpadChange(action, event.dir, getDeviceSettings(id), ui.instrument);
+      const settings = getDeviceSettings(id);
+      const result = dpadChange(settings.dpadAction, event.dir, settings, ui.instrument);
       saveChanges(ui, result.changes);
       if (result.toast) showLaneToast(ui, result.toast);
       break;

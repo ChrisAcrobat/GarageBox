@@ -4,9 +4,10 @@
 // R4c.7), ignores auto-repeat and only acts while enabled (R4c.2). While
 // enabled it prevents the browser's default action for Space, Backspace, Alt,
 // Numpad0-Numpad9 and every playing key (R4c.8, R4c.10, R4c.14), also for the
-// keys that play nothing in Drums mode, so the page never scrolls or jumps. Keys with Ctrl or Meta held are left
-// to the browser (shortcuts such as Ctrl+W cannot be blocked anyway), and so
-// is typing into form fields such as the settings panel's selects.
+// keys that play nothing in Drums mode, so the page never scrolls or jumps.
+// Keys with Ctrl or Meta held are left to the browser (shortcuts such as
+// Ctrl+W cannot be blocked anyway), and so is typing into form fields such as
+// the settings panel's selects.
 //
 // The KeyboardDevice looks like a gamepad Device to the rest of the app:
 // it has `controls` and per-frame `controlEdges` with these names:
