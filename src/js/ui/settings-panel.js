@@ -14,7 +14,7 @@ import { defaultInstrumentFor } from '../input/detect.js';
 import { activeNoteNames } from '../audio/theory.js';
 import { DEFAULT_PROGRAMS, DEFAULT_SOURCES, SOURCES_FOR, resolveSource, canStarPower } from '../instruments/setup.js';
 import { DEFAULT_DRUM_MAP, DRUM_NOTES } from '../instruments/drums.js';
-import { DEFAULT_KEYS_DRUM_MAP, DEFAULT_NUMPAD_DRUM_MAP, KEYS_MODES, resolveKeysMode } from '../instruments/keys.js';
+import { DEFAULT_KEYS_DRUM_MAP, DEFAULT_NUMPAD_DRUM_MAP, KEYS_MODES, resolveDrumMap, resolveKeysMode } from '../instruments/keys.js';
 import { MenuNavigator } from './menu-nav.js';
 
 /** The settings id of a device (type + slot, R2.7); fake devices without one use their id. */
@@ -181,7 +181,8 @@ function fieldDefinitions(device) {
     // One sound per letter key in Drums mode (R4c.13) and per numpad key in both modes (R4c.14).
     const drumField = (code, settingKey, defaults, extra) => ({
       key: `${settingKey}:${code}`,
-      get: (settings) => keysDrumNote(settings[settingKey], defaults, code),
+      // The stored note of `code`, else its default (design 4.4).
+      get: (settings) => resolveDrumMap(defaults, settings[settingKey])[code],
       set: (settings, value) => [settingKey, { ...settings[settingKey], [code]: value }],
       options: drumOptions,
       ...extra,
@@ -194,12 +195,6 @@ function fieldDefinitions(device) {
     }
   }
   return fields;
-}
-
-/** The drum note of `code` in a stored keyboard drum map, else its default (design 4.4). */
-function keysDrumNote(stored, defaults, code) {
-  const value = stored?.[code];
-  return DRUM_NOTES.includes(value) ? value : defaults[code];
 }
 
 /**
