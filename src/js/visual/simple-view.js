@@ -156,7 +156,7 @@ export function prefersReducedMotion() {
 }
 
 /** Steepness of the strip snap (R5.7.2); a first guess, to be tried on the real guitar. */
-export const STRIP_SNAP_STEEPNESS = 8;
+export const STRIP_SNAP_STEEPNESS = 20;
 
 /**
  * Strip snap (R5.7.2): an S-shaped curve f^k / (f^k + (1 - f)^k) for f in
