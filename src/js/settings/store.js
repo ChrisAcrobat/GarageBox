@@ -74,6 +74,13 @@ export const DEFAULTS = Object.freeze({
     starPower: true,
     // Drums: control name -> General MIDI drum note (0 = none). Missing entries use the defaults.
     drumMap: Object.freeze({}),
+    // Computer keyboard (R4c.12 - R4c.14): plays 'piano' or 'drums' (its
+    // instrument choice, kept by Reset to defaults), and the drum sounds of
+    // the letter keys (Drums mode) and the numpad kit: code -> GM drum note
+    // (0 = none). Missing or invalid entries use the defaults of keys.js.
+    keysMode: 'piano',
+    keysDrumMap: Object.freeze({}),
+    numpadDrumMap: Object.freeze({}),
   }),
 });
 
@@ -90,6 +97,7 @@ export const CHOICES = Object.freeze({
   effect: Object.freeze(['clean', 'crunch', 'epic']),
   whammy: Object.freeze(['bend', 'volume', 'off']),
   dpadAction: Object.freeze(['octave', 'effect', 'key', 'sound', 'off']),
+  keysMode: Object.freeze(['piano', 'drums']),
 });
 
 /**
@@ -114,6 +122,9 @@ export function clampNumber(key, value) {
 export const BRIGHTNESS_VALUES = Object.freeze({ dark: 0.15, warm: 0.35, normal: 0.55, bright: 0.85 });
 
 /** Validators for settings that are neither enumerations nor plain values. */
+/** A plain object (stored drum maps; their entries are checked when used). */
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
 const VALIDATORS = {
   program: (v) => Number.isInteger(v) && v >= -1 && v <= 127,
   // +-3 octaves of a 12-note scale is the most any scale allows.
@@ -123,6 +134,9 @@ const VALIDATORS = {
     typeof v === 'object' &&
     !Array.isArray(v) &&
     Object.values(v).every((n) => Number.isInteger(n) && (n === 0 || (n >= 35 && n <= 81))),
+  // Entry by entry: an invalid entry falls back to that key's default (design 4.4).
+  keysDrumMap: isPlainObject,
+  numpadDrumMap: isPlainObject,
 };
 
 function isValid(key, value, defaultValue) {
@@ -201,16 +215,27 @@ export function getDeviceSettings(id) {
   return mergeWithDefaults(DEFAULTS.device, all[id]);
 }
 
+/** Settings that make up a device's instrument choice, kept by a reset with `keepInstrument`. */
+const INSTRUMENT_CHOICE_KEYS = Object.freeze(['instrument', 'keysMode']);
+
 /**
  * Resets the stored settings of one device to the defaults. With
  * `keepInstrument` (Back held 5 s, the panel's reset button, R4.11.2) a
- * manually chosen instrument is kept; without it (Back held 10 s, R4.11.3)
- * everything is removed, so the instrument follows detection again.
+ * manually chosen instrument (and the keyboard's Piano/Drums choice, R4c.12)
+ * is kept; without it (Back held 10 s, R4.11.3) everything is removed, so the
+ * instrument follows detection again.
  */
 export function resetDeviceSettings(id, { keepInstrument = false } = {}) {
   const all = readJson(DEVICES_KEY) || {};
-  const instrument = all[id]?.instrument;
-  if (keepInstrument && instrument !== undefined && isValid('instrument', instrument)) all[id] = { instrument };
+  // The instrument choice: `instrument`, and the keyboard's `keysMode` (R4c.12).
+  const kept = {};
+  if (keepInstrument) {
+    for (const key of INSTRUMENT_CHOICE_KEYS) {
+      const value = all[id]?.[key];
+      if (value !== undefined && isValid(key, value)) kept[key] = value;
+    }
+  }
+  if (Object.keys(kept).length) all[id] = kept;
   else delete all[id];
   writeJson(DEVICES_KEY, all);
   notify({ scope: 'device', id, key: null, value: null });

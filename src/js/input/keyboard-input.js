@@ -2,17 +2,19 @@
 //
 // Listens to keydown/keyup by KeyboardEvent.code (physical key position,
 // R4c.7), ignores auto-repeat and only acts while enabled (R4c.2). While
-// enabled it prevents the browser's default action for Space, Backspace, Alt
-// and every playing key (R4c.8, R4c.10). Keys with Ctrl or Meta held are left
+// enabled it prevents the browser's default action for Space, Backspace, Alt,
+// Numpad0-Numpad9 and every playing key (R4c.8, R4c.10, R4c.14), also for the
+// keys that play nothing in Drums mode, so the page never scrolls or jumps. Keys with Ctrl or Meta held are left
 // to the browser (shortcuts such as Ctrl+W cannot be blocked anyway), and so
 // is typing into form fields such as the settings panel's selects.
 //
 // The KeyboardDevice looks like a gamepad Device to the rest of the app:
 // it has `controls` and per-frame `controlEdges` with these names:
 //   fret1..fret5 (Digit1..Digit5), strum (Backspace), note:<code> (musical
-//   typing keys), sustain (Space), octaveUp (Shift), octaveDown (Alt).
+//   typing keys), sustain (Space), octaveUp (Shift), octaveDown (Alt),
+//   pad:<code> (Numpad0..Numpad9, by code so NumLock does not matter).
 
-import { KEY_OFFSETS } from '../instruments/keys.js';
+import { KEY_OFFSETS, DEFAULT_NUMPAD_DRUM_MAP } from '../instruments/keys.js';
 
 export const KEYBOARD_ID = 'computer-keyboard';
 /** Lane index of the keyboard: after every gamepad (R4c, design 3.2). */
@@ -32,6 +34,7 @@ export const KEY_CONTROLS = Object.freeze({
   AltLeft: 'octaveDown',
   AltRight: 'octaveDown',
   ...Object.fromEntries(Object.keys(KEY_OFFSETS).map((code) => [code, `note:${code}`])),
+  ...Object.fromEntries(Object.keys(DEFAULT_NUMPAD_DRUM_MAP).map((code) => [code, `pad:${code}`])),
 });
 
 function isFormField(target) {
