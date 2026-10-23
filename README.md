@@ -31,6 +31,7 @@ Some defaults (e.g. sounds) are marked *provisional* in the [design](docs/design
 - Several controllers at once become several instruments, one per controller.
 - Sound is either MIDI tones or synthesized sounds, possibly selectable.
 - The screen shows which notes are being played.
+- Planned (not scheduled yet): a phone opening the page can be an instrument itself, e.g. maracas (shake the phone) or a microphone, and a phone can be paired with a computer by scanning a QR code to act as a remote controller there ([F15, F16](docs/requirements.md#future-work-out-of-scope-for-now)).
 
 ## Documentation
 

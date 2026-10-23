@@ -422,3 +422,32 @@ Not part of the current design or milestones; a starting point for when F13 and 
   - File references: a moved, renamed or deleted file breaks the track, and a project cannot be moved to another computer with its local backing tracks.
   - Memory: a decoded song is large (about 10 MB per minute at 48 kHz stereo float); handles themselves take almost no storage.
   - Formats: `decodeAudioData` supports different formats per browser (MP3, WAV, AAC and Ogg/Opus mostly, but not everywhere).
+
+## 14. Future: mobile instruments and phone pairing (sketch)
+
+Not part of the current design or milestones; a starting point for when F15 and F16 are taken up. Open points are Q2 – Q4 in the requirements.
+
+### 14.1 Mobile instruments (F15)
+
+- **Mobile mode.** Detected with `matchMedia('(pointer: coarse)')` plus `'DeviceMotionEvent' in window`, and offered on the start screen; a manual switch is always available (also for testing on a computer). A mobile instrument is a new input device next to gamepads and the keyboard (3.), so it produces the same note events (4.1) and the audio engine and views need no special case.
+- **Permissions.** A *Start* tap calls `DeviceMotionEvent.requestPermission()` where it exists (iOS Safari) and `navigator.mediaDevices.getUserMedia({ audio: true })` for the microphone, and resumes the `AudioContext` in the same gesture. A refused permission shows a message and leaves the instrument off.
+- **Maracas.** A `devicemotion` listener reads `accelerationIncludingGravity` (or `acceleration` where available), removes gravity with a simple high-pass filter, and finds a shake when the movement changes direction with a magnitude above a threshold (with a short refractory time, about 60–80 ms, so one shake gives one hit). The peak magnitude above the threshold maps to a velocity 1–127 (strength). The shaker sound is generated: a short burst of band-passed noise with a fast attack and a decay of about 50–150 ms, louder and slightly brighter at higher velocity. Threshold, refractory time and curve are first guesses to be tuned on real phones.
+- **Microphone.** Not designed until Q2 is answered. Each option fits the audio engine differently: live input = `MediaStreamAudioSourceNode` into an instrument's effect chain; pitch detection = an `AnalyserNode` or AudioWorklet with autocorrelation producing `noteOn`/`noteOff`/`bend`; percussion trigger = an onset detector producing one-shot drum `noteOn` events.
+
+### 14.2 Phone pairing (F16)
+
+- **Library.** PeerJS (MIT licence) vendored as a classic script in `vendor/` (it sets `window.Peer`), loaded on first use like tinysynth; a small vendored QR code generator draws the code on a canvas. No build step (R7.1).
+- **Pairing flow.** The computer creates `new Peer()` and waits for its id, then shows a QR code of `location.origin + location.pathname + '?pair=' + id`. The phone page sees `?pair=` on load, creates its own `Peer` and calls `peer.connect(id, { serialization: 'json' })`, with an unreliable data channel where the library offers one, for low latency: a lost shake event is better than a late one. The computer accepts connections only while the pairing dialog has been opened in this page load (or the id is still the one it showed).
+- **Messages.** Small JSON objects, one per event, sent at once (no batching):
+  - `{ type: 'hello', version: 1, instrument: 'maracas', deviceId }` from the phone after connecting (`deviceId` is a random id kept in the phone's local storage, so a reconnecting phone gets the same lane and settings key, R2.7).
+  - `{ type: 'shake', intensity }` with `intensity` 0–1 (the computer maps it to velocity); further instruments add their own types (e.g. `noteOn`/`noteOff` like 4.1).
+  - `{ type: 'ping', t }` / `{ type: 'pong', t }` about once a second, to measure the round trip (shown in the debug view) and to notice a dead connection.
+  - `{ type: 'status', ... }` from the computer to the phone (e.g. lane number and color, so the phone can show which lane it plays).
+- **On the computer.** Each connection becomes a *remote device* in the input layer with its own lane, numbered after the gamepads; its settings are keyed by type and `deviceId` (R2.7.1). Incoming events go through the same instrument code as local input.
+- **Disconnect and reconnect.** `close`/`error` on the connection, or no `pong` for about 3 s, marks the lane as disconnected (ringing notes are stopped). The phone retries `connect` with growing delays while the page is open; the computer keeps its `Peer` id for the page load, so the QR code stays valid. The phone also reconnects when it becomes visible again (`visibilitychange`).
+- **Notable technical risks.**
+  - Signalling: PeerJS Cloud is a free public service without guarantees (Q3); if it is down, pairing does not work, while already open connections keep running.
+  - NAT: the default PeerJS setup has only STUN; some networks (mobile data, guest Wi-Fi) need a TURN relay, otherwise the connection fails (Q3).
+  - Mobile browsers pause a page whose screen is locked or which is in the background, which ends the connection; a wake lock (`navigator.wakeLock`) can keep the screen on while playing.
+  - Sensor rates and accuracy differ per phone (`devicemotion` is usually 60 Hz, sometimes less), and iOS requires the permission tap every page load.
+  - Latency: network delay plus the computer's audio output latency; to be measured with real devices (F16.6).
