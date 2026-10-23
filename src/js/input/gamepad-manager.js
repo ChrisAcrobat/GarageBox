@@ -12,6 +12,7 @@
 
 import { detectController } from './detect.js';
 import { selectMapping, readLogical } from './mappings.js';
+import { deviceSettingsId } from '../settings/store.js';
 
 /** Smallest analog change reported as a 'changed' edge (filters sensor noise). */
 export const ANALOG_EPSILON = 0.01;
@@ -23,6 +24,8 @@ export class Device {
     this.gamepadMapping = gamepad.mapping || '';
     this.detection = detectController(gamepad.id);
     this.mapping = selectMapping(this.detection.type, this.gamepadMapping);
+    // Settings are saved per detected type and slot, not per gamepad.id (R2.7).
+    this.settingsId = deviceSettingsId(this.detection.type, this.index);
     this.connectedAt = performance.now();
     /** Raw state of the current frame. */
     this.raw = { buttons: [], axes: [] };
