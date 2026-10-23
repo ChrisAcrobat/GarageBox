@@ -14,7 +14,7 @@ How a piece of work goes from the docs to a finished build. The design bot write
 1. **Build.** A developer bot implements the agreed part from the docs, runs all tests, and finishes by cleaning up its own code (no behaviour change). Status: "Arbetar", then "Väntar på QA". A status names what the bot is waiting for and never says "Klar".
 2. **Refactoring.** A separate refactoring bot reviews the code with fresh eyes and refactors it (structure, names, duplication) **without changing behaviour**. All tests must give the same result before and after. Exception: if a module is already hard to work with before a large build, it may be refactored before that build instead.
 3. **QA.** The design bot tests the result against the docs (requirements, design, tests).
-4. **Owner test.** When QA passes, the owner tests on the real hardware (e.g. the guitar). Defects found there go through the same defect flow as QA defects. While the owner tests, the build bots have the status "Väntar på användartest".
+4. **Owner test.** When QA passes, the owner tests on the real hardware (e.g. the guitar). Defects found there go through the same defect flow as QA defects. While the owner tests, the build bots have the status "Väntar på användartest". The design bot gives the owner the test protocol in the chat as simple steps, one at a time: each step is a short description of what to do and what should happen, followed by a question with selectable answers (for example "Looks good", "Wrong" with free text, "Skip"). The design bot keeps track of the answers, sends any defects to the bot that caused them, and continues with the next step when the owner is back.
 
 ## 3. QA defects
 
