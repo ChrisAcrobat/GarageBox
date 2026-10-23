@@ -18,6 +18,7 @@ import { t } from '../i18n/i18n.js';
 import { formatVidPid } from '../input/detect.js';
 import { controlsForAxis, controlsForButton, describeSource } from '../input/mappings.js';
 import { MenuNavigator } from './menu-nav.js';
+import { closeOnOutsideClick } from './outside-click.js';
 
 const LOG_LENGTH = 12;
 
@@ -242,6 +243,8 @@ export class DebugView {
     this.closeButton.type = 'button';
     this.closeButton.addEventListener('click', onClose);
     header.append(this.titleEl, this.closeButton);
+    // A click outside closes the view like the close button (R2.15).
+    this.disposeOutsideClick = closeOnOutsideClick(this.el, onClose);
 
     // Toolbar: export and clear (for the hardware check, design 9.1).
     const toolbar = el('div', 'debug-toolbar');
@@ -509,6 +512,7 @@ export class DebugView {
   }
 
   destroy() {
+    this.disposeOutsideClick();
     clearTimeout(this._statusTimer);
     this.el.remove();
   }

@@ -9,6 +9,7 @@
 // (no cursor; the controller keeps playing).
 
 import { t } from '../i18n/i18n.js';
+import { closeOnOutsideClick } from './outside-click.js';
 import { CHOICES, NUMBER_FIELDS, clampNumber, getDeviceSettings, setDeviceSetting, resetDeviceSettings } from '../settings/store.js';
 import { defaultInstrumentFor } from '../input/detect.js';
 import { activeNoteNames } from '../audio/theory.js';
@@ -268,6 +269,8 @@ export class SettingsPanel {
     this.gamepadMenu = !!gamepadMenu && !device.isKeyboard;
 
     this.closeButton.addEventListener('click', onClose);
+    // A click outside closes the panel like the close button (R2.15).
+    this.disposeOutsideClick = closeOnOutsideClick(this.el, onClose);
     this.debugButton.addEventListener('click', onOpenDebug);
     // Reset to defaults keeps the chosen instrument, like Back held 5 s (R4.11.2).
     this.resetButton.addEventListener('click', () => resetDeviceSettings(settingsIdOf(device), { keepInstrument: true }));
@@ -423,6 +426,7 @@ export class SettingsPanel {
   }
 
   destroy() {
+    this.disposeOutsideClick();
     this.el.remove();
   }
 }
