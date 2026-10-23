@@ -155,16 +155,33 @@ export function prefersReducedMotion() {
   return !!reducedMotionQuery?.matches;
 }
 
+/** Steepness of the strip snap (R5.7.2); a first guess, to be tried on the real guitar. */
+export const STRIP_SNAP_STEEPNESS = 4;
+
+/**
+ * Strip snap (R5.7.2): an S-shaped curve f^k / (f^k + (1 - f)^k) for f in
+ * 0..1. Flat near 0 and 1, steepest at 0.5, symmetric; k = 1 is linear.
+ */
+export function stripSnap(frac, steepness = STRIP_SNAP_STEEPNESS) {
+  if (frac <= 0) return 0;
+  if (frac >= 1) return 1;
+  const a = frac ** steepness;
+  return a / (a + (1 - frac) ** steepness);
+}
+
 /**
  * The note-name strip of a guitar (R5.7): six labels starting at the
  * whole part of the display offset and the fraction to scroll by. While tilt
  * is on the offset follows the tilt continuously (guitar.displaySteps());
  * with reduced motion, or tilt off, it is the whole-step offset the sound
- * uses, so the strip jumps/snaps per step.
+ * uses, so the strip jumps/snaps per step. Without tilt glide the fraction
+ * snaps towards the nearest step (stripSnap, R5.7.2); `offset` stays raw.
  */
 export function guitarLabelStrip(guitar, reducedMotion = prefersReducedMotion()) {
   const offset = !reducedMotion && guitar.displaySteps ? guitar.displaySteps() : guitar.rangeSteps ? guitar.rangeSteps() : 0;
-  const { whole, frac } = splitOffset(offset);
+  const split = splitOffset(offset);
+  const { whole } = split;
+  const frac = guitar.glideActive?.() ? split.frac : stripSnap(split.frac);
   const midis = [0, 1, 2, 3, 4, 5].map((j) => guitar.noteFor(j, whole));
   const labels = midis.map((midi) => (midi >= 0 && midi <= 127 ? noteName(midi) : ''));
   const refMidi = guitar.referenceMidi ? guitar.referenceMidi() : null;
