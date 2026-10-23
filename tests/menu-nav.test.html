@@ -39,6 +39,8 @@
       };
       const keyboardDevice = () => ({ id: 'computer-keyboard', settingsId: 'computer-keyboard', index: 0, isKeyboard: true, detection: { type: 'keyboard', source: 'none' }, mapping: { name: 'keyboard', controls: {} } });
       function openPanel(device, kind, instrument, extra = {}) {
+        // Each check opens its panel fresh: forget remembered highlights (R2.12.1) left by earlier checks.
+        MN.clearRememberedControls?.();
         return new PANEL.SettingsPanel({ container: box, device, getInstrument: () => ({ kind, instrument }), onClose: () => {}, onOpenDebug: () => {}, focus: false, ...extra });
       }
       const NAMED = ['close-button', 'reset-button', 'debug-button'];
@@ -358,6 +360,135 @@
         } finally {
           for (const p of open) if (p.el?.isConnected) p.destroy();
           outside.remove();
+        }
+      }));
+
+      await s.section('remembered highlight (R2.12.1, 7.4)', () => s.withCleanStorage(async () => {
+        const MEM = await s.load('../src/js/ui/menu-nav.js', ['rememberedControl', 'clearRememberedControls']);
+        const DV = await s.load('../src/js/ui/debug-view.js', ['DebugView']);
+        const forget = () => MEM.clearRememberedControls?.();
+        // The key is the navigator's own identity (data-key, data-nav or the class names); named buttons are compared by their named class.
+        const named = (k) => (typeof k === 'string' ? NAMED.find((c) => k.split(' ').includes(c)) || k : k);
+        const remembered = (id) => (MEM.rememberedControl ? named(MEM.rememberedControl(id)) : 'rememberedControl missing');
+        forget();
+
+        // MenuNavigator with a memoryKey.
+        const menu = (keys, hiddenKey) => {
+          box.innerHTML = `<section id="mem">${keys.map((k) => (k === hiddenKey ? `<div hidden><select data-key="${k}"><option>x</option></select></div>` : `<select data-key="${k}"><option>x</option></select>`)).join('')}</section>`;
+          return box.querySelector('#mem');
+        };
+        const at = (nav) => ctlTag(nav.current());
+        let nav = new MenuNavigator(menu(['a', 'b', 'c']), { memoryKey: 'dev:1' });
+        check('memory: with nothing remembered the cursor starts on the first control', at(nav), 'a');
+        nav.move(1);
+        check('memory: rememberedControl() gives the key of the control under the cursor', remembered('dev:1'), 'b');
+        nav = new MenuNavigator(menu(['a', 'b', 'c']), { memoryKey: 'dev:1' });
+        check('memory: a new navigator with the same memoryKey starts on the remembered control', at(nav), 'b');
+        nav = new MenuNavigator(menu(['x', 'y', 'a', 'b']), { memoryKey: 'dev:1' });
+        check('memory: found by key, not by index (rows before it added)', at(nav), 'b');
+        check('memory: another memoryKey is separate and starts on the first control', [at(new MenuNavigator(menu(['a', 'b', 'c']), { memoryKey: 'dev:2' })), remembered('dev:1')], ['a', 'b']);
+        nav = new MenuNavigator(menu(['a', 'b', 'c']), { memoryKey: 'dev:1' });
+        check('memory: the position is remembered again after every move', [nav.move(1), remembered('dev:1')][1], 'c');
+        nav = new MenuNavigator(menu(['a', 'b', 'c'], 'c'), { memoryKey: 'dev:1' });
+        check('memory: a hidden remembered control falls back to the initial/first control', at(nav), 'a');
+        nav = new MenuNavigator(menu(['a', 'b', 'q']), { memoryKey: 'dev:3', initial: '[data-key="b"]' });
+        nav.move(1);
+        nav = new MenuNavigator(menu(['a', 'b']), { memoryKey: 'dev:3', initial: '[data-key="b"]' });
+        check('memory: a remembered control that no longer exists falls back to `initial`', at(nav), 'b');
+        nav = new MenuNavigator(menu(['a', 'b', 'c']));
+        nav.move(1);
+        check('memory: without a memoryKey nothing is remembered (start screen, device information view)', at(new MenuNavigator(menu(['a', 'b', 'c']))), 'a');
+        forget();
+        check('memory: clearRememberedControls() forgets everything (as a page reload)', [remembered('dev:1') ?? null, at(new MenuNavigator(menu(['a', 'b', 'c']), { memoryKey: 'dev:1' }))], [null, 'a']);
+        box.innerHTML = '';
+
+        // The settings panel remembers per controller (settingsId).
+        const guitar = fakeDevice('device:guitar:1', XPLORER);
+        const guitar2 = fakeDevice('device:guitar:2', XPLORER);
+        const gp = (device, kind = 'guitar', extra = {}) => new PANEL.SettingsPanel({ container: box, device, getInstrument: () => ({ kind, instrument: kind }), onClose: () => {}, onOpenDebug: () => {}, focus: false, gamepadMenu: true, ...extra });
+        const cur = (panel) => ctlTag(panel.el.querySelector(`.${CURSOR_CLASS}`));
+        const open = [];
+        const keep = (p) => (open.push(p), p);
+        try {
+          let p = keep(gp(guitar));
+          check('panel: first opening starts on the first field (instrument)', cur(p), 'instrument');
+          p.navigate('down');
+          p.navigate('down');
+          const k = cur(p);
+          check('panel: moved to another field', k !== 'instrument' && !!k, true);
+          check('panel: the panel remembers under the device settingsId', remembered('device:guitar:1'), k);
+          p.destroy();
+          p = keep(gp(guitar));
+          check('panel: closed and opened again with Start, the highlight starts on the remembered field', cur(p), k);
+          check('panel: another controller is not affected (starts on its first field)', cur(keep(gp(guitar2))), 'instrument');
+          p.navigate('up');
+          const k2 = cur(p);
+          p.refresh();
+          check('panel: a refresh keeps the cursor and the memory', [cur(p), remembered('device:guitar:1')], [k2, k2]);
+          p.destroy();
+
+          // Rows change (instrument changed): found by key.
+          p = keep(gp(guitar));
+          const toReset = p.nav ? p.nav.controls().findIndex((el) => el.classList.contains('reset-button')) - p.nav.controls().indexOf(p.nav.current()) : 0;
+          for (let i = 0; i < Math.abs(toReset); i++) p.navigate(toReset > 0 ? 'down' : 'up');
+          check('panel: on the Reset to defaults button', cur(p), 'reset-button');
+          p.destroy();
+          check('panel: found by key when the rows changed (opened as drums)', cur(keep(gp(guitar, 'drums'))), 'reset-button');
+
+          // A reset does not clear the memory.
+          ST.resetDeviceSettings(guitar.settingsId, { keepInstrument: true });
+          check('panel: kept after a reset (R4.11.2)', cur(keep(gp(guitar))), 'reset-button');
+          ST.resetDeviceSettings(guitar.settingsId);
+          check('panel: kept after a full reset (R4.11.3)', cur(keep(gp(guitar))), 'reset-button');
+          for (const q of open) if (q.el.isConnected) q.destroy();
+
+          // A remembered control that is gone (tilt glide row only on guitar/bass).
+          p = keep(gp(guitar));
+          const toGlide = p.nav ? p.nav.controls().findIndex((el) => el.dataset.key === 'tiltGlide') - p.nav.controls().indexOf(p.nav.current()) : 0;
+          for (let i = 0; i < Math.abs(toGlide); i++) p.navigate(toGlide > 0 ? 'down' : 'up');
+          check('panel: on the tilt glide checkbox', cur(p), 'tiltGlide');
+          p.destroy();
+          check('panel: a remembered row that is gone (drums) starts on the first field', cur(keep(gp(guitar, 'drums'))), 'instrument');
+          for (const q of open) if (q.el.isConnected) q.destroy();
+
+          // Mouse-opened panels: no cursor, memory untouched; Start (reopen as a controller menu) uses it.
+          ST.setDeviceSetting(guitar.settingsId, 'instrument', 'guitar');
+          p = keep(gp(guitar));
+          p.navigate('down');
+          const k3 = cur(p);
+          p.destroy();
+          const mouse = keep(gp(guitar, 'guitar', { gamepadMenu: false }));
+          check('mouse-opened: no cursor and the memory is unchanged', [mouse.el.querySelector(`.${CURSOR_CLASS}`), remembered('device:guitar:1')], [null, k3]);
+          mouse.destroy();
+          check('mouse-opened panel turned into a controller menu (R2.14) starts on the remembered control', cur(keep(gp(guitar))), k3);
+          for (const q of open) if (q.el.isConnected) q.destroy();
+
+          // Device information: Start on its button, then back to the settings.
+          let debugOpened = 0;
+          p = keep(gp(guitar, 'guitar', { onOpenDebug: () => debugOpened++ }));
+          const toDebug = p.nav ? p.nav.controls().findIndex((el) => el.classList.contains('debug-button')) - p.nav.controls().indexOf(p.nav.current()) : 0;
+          for (let i = 0; i < Math.abs(toDebug); i++) p.navigate(toDebug > 0 ? 'down' : 'up');
+          p.navigate('start');
+          check('device information: Start on its button opens it, remembered as debug-button', [debugOpened, remembered('device:guitar:1')], [1, 'debug-button']);
+          p.destroy();
+          if (DV.DebugView) {
+            const idle = new Proxy({}, { get: () => ({ value: 0, pressed: false }) });
+            const dvDevice = { ...guitar, raw: { id: XPLORER, buttons: [], axes: [], mapping: 'standard' }, controls: idle, rawEdges: [], edges: [] };
+            const dv = new DV.DebugView({ container: box, device: dvDevice, onClose: () => {}, focus: false, gamepadMenu: true });
+            open.push(dv);
+            check('device information view still starts on its close button', ctlTag(dv.el.querySelector(`.${CURSOR_CLASS}`)), 'close-button');
+            dv.navigate('down');
+            dv.destroy();
+          }
+          check('device information: moving in the view does not change the settings memory', remembered('device:guitar:1'), 'debug-button');
+          check('device information: settings opened again start on the Device information button', cur(keep(gp(guitar))), 'debug-button');
+
+          forget();
+          check('after a page reload (memory cleared) the settings start on the first field', cur(keep(gp(guitar))), 'instrument');
+        } finally {
+          for (const q of open) if (q.el?.isConnected) q.destroy();
+          forget();
+          box.innerHTML = '';
         }
       }));
 
