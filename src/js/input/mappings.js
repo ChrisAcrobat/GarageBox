@@ -6,7 +6,9 @@
 //   { axis: i, from: a, to: b }      analog axis, value = (v - a) / (b - a), clamped to 0..1
 //   { axis: i, dir: -1 | 1 }         one direction of an axis used as a button (e.g. a hat)
 // Buttons use the browser's pressed flag; axes count as pressed when their
-// value is above PRESS_THRESHOLD.
+// value is above PRESS_THRESHOLD, except `tilt`, which counts as pressed only
+// at TILT_PRESS_THRESHOLD or more (raw axis -0.8 or lower on the Xplorer), so
+// ordinary playing angles do not show as pressed (star power uses it, R5.5).
 //
 // The guitar-standard indexes were confirmed with the real Xplorer on Chrome
 // 155/Linux (design 9.1): frets B0, B1, B3, B2, B4; strum B12/B13; Start B9;
@@ -17,6 +19,7 @@
 import { ControllerType } from './detect.js';
 
 export const PRESS_THRESHOLD = 0.5;
+export const TILT_PRESS_THRESHOLD = 0.9;
 
 // Guitar on a browser that applies the "standard" mapping, e.g. Chrome on
 // Windows (XInput: "GUITAR_ALTERNATE") or Chrome on Linux when the id
@@ -139,9 +142,10 @@ function clamp01(v) {
 /**
  * Reads one source from raw state { buttons: [{pressed, value}], axes: [] }.
  * Returns { value: 0..1, pressed }. A button uses the browser's own pressed
- * flag; an axis counts as pressed above PRESS_THRESHOLD.
+ * flag; an axis counts as pressed above PRESS_THRESHOLD, or (when
+ * `atLeast` is given) at `atLeast` or more.
  */
-export function readSource(source, raw) {
+export function readSource(source, raw, atLeast = null) {
   if ('button' in source) {
     const b = raw.buttons[source.button];
     if (!b) return { value: 0, pressed: false };
@@ -152,7 +156,7 @@ export function readSource(source, raw) {
     const v = raw.axes[source.axis];
     if (typeof v !== 'number') return { value: 0, pressed: false };
     const value = 'dir' in source ? clamp01(v * source.dir) : clamp01((v - source.from) / (source.to - source.from));
-    return { value, pressed: value > PRESS_THRESHOLD };
+    return { value, pressed: atLeast === null ? value > PRESS_THRESHOLD : value >= atLeast - 1e-9 };
   }
   return { value: 0, pressed: false };
 }
@@ -160,7 +164,7 @@ export function readSource(source, raw) {
 /** Reads all logical controls: returns { name: { value, pressed } }. */
 export function readLogical(mapping, raw) {
   const out = {};
-  for (const [name, source] of Object.entries(mapping.controls)) out[name] = readSource(source, raw);
+  for (const [name, source] of Object.entries(mapping.controls)) out[name] = readSource(source, raw, name === 'tilt' ? TILT_PRESS_THRESHOLD : null);
   return out;
 }
 
