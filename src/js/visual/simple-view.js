@@ -12,7 +12,8 @@
 // hit with a brightness from the hit's velocity.
 //
 // Keyboard: the guitar frets of keys 1-5, the ringing notes and the
-// on-screen keyboard (keyboard-view.js).
+// on-screen keyboard (keyboard-view.js); in Drums mode only the keyboard,
+// which shows the drum sounds (R4c.13).
 
 import { ANALOG_CONTROLS } from '../input/mappings.js';
 import { noteName } from '../audio/theory.js';
@@ -314,6 +315,11 @@ export function drawSimpleView(ctx, lane, area, t, now) {
 
   if (lane.kind === 'keys' && instrument) {
     const kbH = keyboardHeight(w);
+    if (instrument.drumsMode) {
+      // Drums mode (R4c.13): no frets and no ringing notes; the keys show the drum sounds.
+      drawKeyboard(ctx, device, instrument, x, Math.max(y, area.y + area.h - kbH), w, color, t);
+      return;
+    }
     const guitarTracker = lane.channels.guitar.tracker;
     y = sectionTitle(ctx, t('lane.frets'), x, y, w);
     y = drawFretRow(ctx, guitarFretStates(instrument.guitar, guitarTracker, now), x, y, Math.min(w, 340), 20, guitarLabelStrip(instrument.guitar));

@@ -13,7 +13,9 @@
 // HighwayState records notes per lane from the note events, with a level
 // history sampled from the audio engine's VoiceTracker (design 6: envelope
 // model on the main thread). Columns: the five frets on a guitar, one per pad
-// on drums, and pitch on the keyboard.
+// on drums, and pitch on the keyboard, with one narrow column at the right
+// edge for numpad drum hits (R4c.15); a keyboard in Drums mode has one column
+// per drum sound, like a drums lane (R4c.13).
 
 import { FRET_COLORS, withAlpha } from './lanes.js';
 import { drawFretRow, guitarFretStates, guitarLabelStrip } from './simple-view.js';
@@ -32,6 +34,8 @@ const MAX_BEND_WIDTH = 1.5;
 /** Pitch range spread across the keyboard lane's road. */
 const KEYS_LOW = 36;
 const KEYS_HIGH = 91;
+/** Share of the keyboard road (Piano mode) taken by the numpad drum column at its right edge (R4c.15). */
+const KEYS_DRUM_COLUMN = 0.06;
 
 export class HighwayState {
   constructor() {
@@ -99,14 +103,27 @@ export function bendWidth(semitones) {
   return Math.max(MIN_BEND_WIDTH, Math.min(MAX_BEND_WIDTH, w));
 }
 
-/** Where a note goes on the road and in which color, per lane kind. */
+/** x of a pitch on the keyboard road in Piano mode, left of the numpad column. */
+function keysPitchX(midi) {
+  return ((midi - KEYS_LOW) / (KEYS_HIGH - KEYS_LOW)) * (1 - KEYS_DRUM_COLUMN);
+}
+
+/**
+ * Where a note goes on the road and in which color, per lane kind. On the
+ * keyboard lane `columns` is the number of drum columns in Drums mode, or 0
+ * in Piano mode (pitch columns plus the numpad column).
+ */
 export function placeNote(kind, event, laneColor, columns) {
+  if (kind === 'keys' && event.part === 'drums') {
+    if (columns > 0) return { x: (Math.max(0, event.column ?? 0) + 0.5) / columns, color: laneColor };
+    return { x: 1 - KEYS_DRUM_COLUMN / 2, color: laneColor };
+  }
   if (event.part === 'guitar' || kind === 'guitar') {
     const i = event.column ?? 0;
-    if (kind === 'keys') return { x: (event.midi - KEYS_LOW) / (KEYS_HIGH - KEYS_LOW), color: FRET_COLORS[i] };
+    if (kind === 'keys') return { x: keysPitchX(event.midi), color: FRET_COLORS[i] };
     return { x: (i + 0.5) / 5, color: FRET_COLORS[i] };
   }
-  if (kind === 'keys') return { x: (event.midi - KEYS_LOW) / (KEYS_HIGH - KEYS_LOW), color: '#e8ecf4' };
+  if (kind === 'keys') return { x: keysPitchX(event.midi), color: '#e8ecf4' };
   const n = Math.max(1, columns);
   return { x: ((event.column ?? 0) + 0.5) / n, color: laneColor };
 }
@@ -149,16 +166,8 @@ function drawRoad(ctx, road, project, columns, color, now) {
   ctx.stroke();
 
   // Column lines.
+  for (let i = 1; i < columns; i++) drawColumnLine(ctx, project, i / columns);
   ctx.lineWidth = 1;
-  for (let i = 1; i < columns; i++) {
-    const a = project(i / columns, 0);
-    const b = project(i / columns, 1);
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.stroke();
-  }
   // Cross lines moving away with the notes, every half second.
   const step = 0.5;
   const offset = (now % step) / HIGHWAY_SECONDS;
@@ -171,6 +180,18 @@ function drawRoad(ctx, road, project, columns, color, now) {
     ctx.strokeStyle = `rgba(255, 255, 255, ${0.1 * (1 - d)})`;
     ctx.stroke();
   }
+}
+
+/** One line along the road at x (0..1 across), like the column lines. */
+function drawColumnLine(ctx, project, x) {
+  const a = project(x, 0);
+  const b = project(x, 1);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.stroke();
 }
 
 function drawNote(ctx, note, project, colWidth, now) {
@@ -276,10 +297,15 @@ export function drawHighway(ctx, lane, area, t, now) {
   };
   if (road.yNear - road.yFar < 40) return;
   const project = makeProjection(road);
-  const columns = kind === 'guitar' ? 5 : kind === 'drums' ? Math.max(1, instrument?.pads.length || 1) : 12;
-  drawRoad(ctx, road, project, kind === 'keys' ? 1 : columns, color, now);
+  const keysDrums = kind === 'keys' && !!instrument?.drumsMode;
+  let columns = 5;
+  if (kind === 'drums') columns = Math.max(1, instrument?.pads.length || 1);
+  else if (keysDrums) columns = Math.max(1, instrument.drumColumns().length);
+  const pitchRoad = kind === 'keys' && !keysDrums;
+  drawRoad(ctx, road, project, pitchRoad ? 1 : columns, color, now);
+  if (pitchRoad) drawColumnLine(ctx, project, 1 - KEYS_DRUM_COLUMN);
 
-  const colWidth = kind === 'keys' ? road.w / 16 : road.w / columns;
+  const colWidth = pitchRoad ? road.w / 16 : road.w / columns;
   ctx.save();
   // Oldest first, so newer gems and trails are drawn on top (R5.4.1).
   const sorted = [...highway.notes].sort((a, b) => a.start - b.start);
