@@ -10,16 +10,16 @@
 //   { type: 'noteOff', voiceId, fade, time }      fade in seconds (R4.3.1)
 //   { type: 'bend',    semitones, time }          whole instrument
 //   { type: 'volume',  gain, time }               whole instrument
-//   { type: 'vibrato', cents, time }              whole instrument: depth of a
-//                                                 ~5.5 Hz pitch LFO (0 = none),
-//                                                 added on top of any bend
-//   { type: 'glide',   voiceId, semitones, time } experiment E: one voice's pitch
-//                                                 offset from its noteOn midi
-//                                                 (per-voice detune, adds to
-//                                                 the bend and vibrato)
+//   { type: 'glide',   voiceId, semitones, time } tilt glide (R4.14): one voice's
+//                                                 pitch offset from its noteOn
+//                                                 midi (per-voice detune, adds
+//                                                 to the bend)
+//   { type: 'starPower', on, time }               star power on/off (R5.5),
+//                                                 visual only
 // A noteOn may carry `glide` (semitones) so the voice starts at that offset.
-// plus one non-musical event for the UI:
+// plus non-musical 'action' events for the UI, e.g.
 //   { type: 'action',  action: 'openSettings', time }
+// (the guitar also emits tiltToggled, rangeShifted, dpad and resetSettings).
 // `column` tells the visuals where the note belongs (fret index, drum pad
 // index, ...). Drum hits also carry `oneShot: true` (they end by themselves).
 

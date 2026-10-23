@@ -243,7 +243,7 @@ export function drawHighway(ctx, lane, area, t, now) {
   // Bottom strip: what the player presses.
   let bottomH = 0;
   const fretRadius = Math.min(30, (area.w * 0.92) / 13);
-  if (kind === 'guitar') bottomH = 2 * fretRadius + 44; // buttons plus their note names and orientation bars (experiment E)
+  if (kind === 'guitar') bottomH = 2 * fretRadius + 44; // buttons plus their note names and orientation bars (R5.7, R5.8)
   else if (kind === 'drums') bottomH = 44;
   else if (kind === 'keys') bottomH = keyboardHeight(area.w) + 8;
 

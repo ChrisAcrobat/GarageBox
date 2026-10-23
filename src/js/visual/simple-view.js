@@ -35,7 +35,7 @@ export function sectionTitle(ctx, text, x, y, w) {
 
 /**
  * Draws five fret buttons in a row.
- * Experiment E: with `strip` ({ labels: string[6], frac: 0..1 }, see
+ * Note strip (R5.7): with `strip` ({ labels: string[6], frac: 0..1 }, see
  * guitarLabelStrip) the note names under the buttons are drawn as a strip
  * that is scrolled left by `frac` of the button spacing: label j belongs
  * under fret j at frac 0 and slides towards fret j-1 as frac grows; the 6th
@@ -80,16 +80,16 @@ export function drawFretRow(ctx, frets, x, y, w, maxRadius = 30, strip = null) {
     }
   });
   if (strip) drawLabelStrip(ctx, frets, strip, x, y, r, spacing);
-  // Experiment E: fixed room for the orientation bars under the strip
+  // Fixed room for the orientation bars (R5.8) under the strip
   // labels (fixed, so the layout below does not jump while the strip slides).
   return y + 2 * r + (frets.some((f) => f.label) || strip ? 30 + (strip ? 10 : 0) : 14);
 }
 
-/** Experiment E: colour of the orientation bars, the same as the yellow fret. */
+/** Colour of the orientation bars (R5.8), the same as the yellow fret. */
 export const ORIENTATION_COLOR = FRET_COLORS[2];
 
 /**
- * Experiment E: number of orientation bars under a note name in the strip.
+ * Number of orientation bars (R5.8) under a note name in the strip.
  * The bars mark the middle of the key/scale: `refMidi` is the note of the
  * middle (yellow) fret at range offset 0 (guitar.referenceMidi(); A3 with the
  * default E minor pentatonic). Notes with the same pitch class get
@@ -103,7 +103,7 @@ export function orientationBars(midi, refMidi) {
   return 1 + Math.abs(diff / 12);
 }
 
-/** Experiment E: draws `count` short bars stacked under a label centred at cx (top at y). */
+/** Draws `count` short bars stacked under a label centred at cx (top at y). */
 function drawOrientationBars(ctx, count, cx, y, labelSize) {
   if (count <= 0) return;
   const w = Math.max(10, labelSize * 1.1);
@@ -113,7 +113,7 @@ function drawOrientationBars(ctx, count, cx, y, labelSize) {
   for (let k = 0; k < count; k++) ctx.fillRect(Math.round(cx - w / 2), Math.round(y + k * (h + gap)), Math.round(w), h);
 }
 
-/** Experiment E: the sliding note-name strip under the fret buttons (see drawFretRow). */
+/** The sliding note-name strip (R5.7) under the fret buttons (see drawFretRow). */
 function drawLabelStrip(ctx, frets, strip, x, y, r, spacing) {
   const { labels, frac } = strip;
   const bars = strip.bars || [];
@@ -152,7 +152,7 @@ export function prefersReducedMotion() {
 }
 
 /**
- * Experiment E: the note-name strip of a guitar: six labels starting at the
+ * The note-name strip of a guitar (R5.7): six labels starting at the
  * whole part of the display offset and the fraction to scroll by. While tilt
  * is on the offset follows the tilt continuously (guitar.displaySteps());
  * with reduced motion, or tilt off, it is the whole-step offset the sound
@@ -215,7 +215,7 @@ export function drawPills(ctx, items, x, y, w, color) {
 }
 
 /**
- * Experiment E: a range offset in scale steps as text, e.g. "+2 steps",
+ * A range offset in scale steps (R5.6) as text, e.g. "+2 steps",
  * "−1 step", "0 steps" (proper minus sign, + for positive numbers).
  */
 export function formatSteps(t, steps) {
@@ -225,7 +225,7 @@ export function formatSteps(t, steps) {
 
 /**
  * Pills for the device's logical controls, except the ones in `skip`.
- * Experiment E: `instrument` (a Guitar) labels the tilt pill with on/off and
+ * `instrument` (a Guitar, R5.6) labels the tilt pill with on/off and
  * the current range offset in steps, and dims it while tilt is off.
  */
 export function controlPills(device, t, skip = new Set(), instrument = null) {
