@@ -14,6 +14,7 @@ import { defaultInstrumentFor } from '../input/detect.js';
 import { activeNoteNames } from '../audio/theory.js';
 import { DEFAULT_PROGRAMS, DEFAULT_SOURCES, SOURCES_FOR, resolveSource, canStarPower } from '../instruments/setup.js';
 import { DEFAULT_DRUM_MAP, DRUM_NOTES } from '../instruments/drums.js';
+import { DEFAULT_KEYS_DRUM_MAP, DEFAULT_NUMPAD_DRUM_MAP, KEYS_MODES, resolveKeysMode } from '../instruments/keys.js';
 import { MenuNavigator } from './menu-nav.js';
 
 /** The settings id of a device (type + slot, R2.7); fake devices without one use their id. */
@@ -26,7 +27,9 @@ export function settingsIdOf(device) {
  * context c = { kind, instrument, source, device, settings }, where kind is
  * 'guitar' (guitar and bass), 'drums' or 'keys'. A field is a select
  * (`options`), a number field (`number: true`, range from NUMBER_FIELDS,
- * R2.9.1) or a checkbox (`checkbox: true`).
+ * R2.9.1) or a checkbox (`checkbox: true`). Fields with a `group` (a text
+ * key) are shown after the others under that heading. `labelText` is a label
+ * that is not translated.
  */
 function fieldDefinitions(device) {
   const auto = defaultInstrumentFor(device.detection);
@@ -35,9 +38,22 @@ function fieldDefinitions(device) {
   const guitarLane = (c) => c.kind === 'guitar' && !device.isKeyboard;
   // Ring time and tone apply to the generated sources (pluck, bass); the
   // keyboard always has them for its plucked guitar emulation.
-  const plucked = (c) => (c.kind === 'guitar' && (c.source === 'pluck' || c.source === 'bass')) || c.kind === 'keys';
+  // The keyboard in Drums mode (R4c.13) has no note settings, as for drums.
+  const keysDrums = (c) => c.kind === 'keys' && resolveKeysMode(c.settings.keysMode) === 'drums';
+  const notes = (c) => c.kind !== 'drums' && !keysDrums(c);
+  const plucked = (c) => (c.kind === 'guitar' && (c.source === 'pluck' || c.source === 'bass')) || (c.kind === 'keys' && !keysDrums(c));
+  const guitarNotes = (c) => guitarPart(c) && notes(c);
+  const drumOptions = DRUM_NOTES.map((value) => ({ value, text: t(`drum.${value}`) }));
   const fields = [];
-  if (!device.isKeyboard) {
+  if (device.isKeyboard) {
+    // The keyboard's instrument: Piano or Drums (R4c.12).
+    fields.push({
+      key: 'keysMode',
+      label: 'settings.instrument',
+      get: (settings) => resolveKeysMode(settings.keysMode),
+      options: KEYS_MODES.map((value) => ({ value, text: t(`keysMode.${value}`) })),
+    });
+  } else {
     fields.push({
       key: 'instrument',
       label: 'settings.instrument',
@@ -51,7 +67,7 @@ function fieldDefinitions(device) {
     {
       key: 'source',
       label: 'settings.source',
-      when: (c) => (SOURCES_FOR[c.instrument] || []).length > 1,
+      when: (c) => (SOURCES_FOR[c.instrument] || []).length > 1 && notes(c),
       options: (c) => [
         { value: 'auto', text: t('source.autoWith', { source: t(`source.${DEFAULT_SOURCES[c.instrument]}`) }) },
         ...SOURCES_FOR[c.instrument].map((value) => ({ value, text: t(`source.${value}`) })),
@@ -60,7 +76,7 @@ function fieldDefinitions(device) {
     {
       key: 'program',
       label: 'settings.program',
-      when: (c) => c.source === 'midi' && c.kind !== 'drums',
+      when: (c) => c.source === 'midi' && notes(c),
       options: (c) => [
         { value: -1, text: t('program.autoWith', { program: t(`gm.${DEFAULT_PROGRAMS[c.instrument] ?? 0}`) }) },
         ...Array.from({ length: 128 }, (_, i) => ({ value: i, text: `${i + 1}. ${t(`gm.${i}`)}` })),
@@ -69,7 +85,7 @@ function fieldDefinitions(device) {
     {
       key: 'effect',
       label: 'settings.effect',
-      when: (c) => c.kind !== 'drums',
+      when: notes,
       options: CHOICES.effect.map((value) => ({ value, text: t(`effect.${value}`) })),
     },
     {
@@ -82,14 +98,14 @@ function fieldDefinitions(device) {
     {
       key: 'root',
       label: 'settings.root',
-      when: guitarPart,
+      when: guitarNotes,
       hint: (c) => (c.kind === 'keys' ? 'settings.keysGuitarHint' : null),
       options: () => CHOICES.root.map((value) => ({ value, text: activeNoteNames()[value] })),
     },
     {
       key: 'scale',
       label: 'settings.scale',
-      when: guitarPart,
+      when: guitarNotes,
       options: CHOICES.scale.map((value) => ({ value, text: t(`scale.${value}`) })),
     },
     {
@@ -131,7 +147,7 @@ function fieldDefinitions(device) {
       key: 'fadeMs',
       label: 'settings.fade',
       unit: 'unit.msName',
-      when: guitarPart,
+      when: guitarNotes,
       number: true,
     },
     {
@@ -155,12 +171,35 @@ function fieldDefinitions(device) {
       key: `drum:${control}`,
       label: `control.${control}`,
       when: (c) => c.kind === 'drums',
+      group: 'settings.drumSounds',
       get: (settings) => ({ ...DEFAULT_DRUM_MAP, ...settings.drumMap })[control],
       set: (settings, value) => ['drumMap', { ...settings.drumMap, [control]: value }],
-      options: DRUM_NOTES.map((value) => ({ value, text: t(`drum.${value}`) })),
+      options: drumOptions,
     });
   }
+  if (device.isKeyboard) {
+    // One sound per letter key in Drums mode (R4c.13) and per numpad key in both modes (R4c.14).
+    const drumField = (code, settingKey, defaults, extra) => ({
+      key: `${settingKey}:${code}`,
+      get: (settings) => keysDrumNote(settings[settingKey], defaults, code),
+      set: (settings, value) => [settingKey, { ...settings[settingKey], [code]: value }],
+      options: drumOptions,
+      ...extra,
+    });
+    for (const code of Object.keys(DEFAULT_KEYS_DRUM_MAP)) {
+      fields.push(drumField(code, 'keysDrumMap', DEFAULT_KEYS_DRUM_MAP, { labelText: code.slice(3), group: 'settings.drumSounds', when: keysDrums }));
+    }
+    for (const code of Object.keys(DEFAULT_NUMPAD_DRUM_MAP)) {
+      fields.push(drumField(code, 'numpadDrumMap', DEFAULT_NUMPAD_DRUM_MAP, { label: `key.${code}`, group: 'settings.numpadDrums' }));
+    }
+  }
   return fields;
+}
+
+/** The drum note of `code` in a stored keyboard drum map, else its default (design 4.4). */
+function keysDrumNote(stored, defaults, code) {
+  const value = stored?.[code];
+  return DRUM_NOTES.includes(value) ? value : defaults[code];
 }
 
 /**
@@ -263,13 +302,13 @@ export class SettingsPanel {
     const c = { kind, instrument, source: resolveSource(settings, instrument), device, settings };
     const focusedKey = this.el.contains(document.activeElement) ? document.activeElement.dataset.key : null;
     const fields = fieldDefinitions(device).filter((f) => !f.when || f.when(c));
-    const drumFields = fields.filter((f) => f.key.startsWith('drum:'));
-    const children = fields.filter((f) => !drumFields.includes(f)).map((f) => this._field(f, settings, c));
-    if (drumFields.length) {
+    const children = fields.filter((f) => !f.group).map((f) => this._field(f, settings, c));
+    // Grouped fields (drum sounds) under their heading, in order of first appearance.
+    for (const group of new Set(fields.map((f) => f.group).filter(Boolean))) {
       const heading = document.createElement('h3');
       heading.className = 'fields-heading';
-      heading.textContent = t('settings.drumSounds');
-      children.push(heading, ...drumFields.map((f) => this._field(f, settings, c)));
+      heading.textContent = t(group);
+      children.push(heading, ...fields.filter((f) => f.group === group).map((f) => this._field(f, settings, c)));
     }
     this.fieldsEl.replaceChildren(...children);
     // Per-device checkboxes at the very bottom of the panel.
@@ -292,7 +331,8 @@ export class SettingsPanel {
     label.className = 'field';
     const span = document.createElement('span');
     span.className = 'field-label';
-    span.textContent = def.unit ? `${t(def.label)} (${t(def.unit)})` : t(def.label);
+    const text = def.labelText ?? t(def.label);
+    span.textContent = def.unit ? `${text} (${t(def.unit)})` : text;
     const control = def.number ? this._numberInput(def, settings) : this._select(def, settings, c);
     label.append(span, control);
     const hintKey = def.hint?.(c);
