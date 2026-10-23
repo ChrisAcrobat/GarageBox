@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>Highway and lane drawing tests – GarageBox - Music Sandbox</title>
+    <style>
+      body { background: #0e0f12; color: #e8eaed; font: 14px/1.5 ui-monospace, monospace; padding: 16px; }
+      .pass { color: #3dd68c; }
+      .fail { color: #ff6369; }
+    </style>
+  </head>
+  <body>
+    <h1>Highway and lane drawing tests</h1>
+    <p>The highway view on its own (as it runs when the view is set to Highway, without the simple view), the draw order of notes, the trail width, and that the lane drawing code runs without errors on a real canvas (R5.4 – R5.4.5, R5.7, R5.8, design 6, 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
+    <p id="summary"></p>
+    <ul id="results"></ul>
+    <script type="module">
+      import { createSuite, edge } from './test-runner.js';
+
+      const s = createSuite('highway tests');
+      const { check } = s;
+      const HV = await s.load('../src/js/visual/highway-view.js', ['HighwayState', 'drawHighway', 'placeNote', 'bendWidth', 'HIGHWAY_SECONDS']);
+      const SV = await s.load('../src/js/visual/simple-view.js', ['drawSimpleView', 'drawFretRow', 'guitarLabelStrip', 'guitarFretStates']);
+      const AE = await s.load('../src/js/audio/audio-engine.js', ['VoiceTracker', 'trackerConfig']);
+      const SETUP = await s.load('../src/js/instruments/setup.js', ['guitarSound']);
+      const ST = await s.load('../src/js/settings/store.js', ['DEFAULTS']);
+      const G = await s.load('../src/js/instruments/guitar.js', ['Guitar']);
+      const DR = await s.load('../src/js/instruments/drums.js', ['Drums']);
+      const KEYS = await s.load('../src/js/instruments/keys.js', ['Keys']);
+
+      const DEFAULTS = ST.DEFAULTS || { device: {} };
+      const FRAME = 1 / 60;
+      const AREA = { x: 0, y: 0, w: 400, h: 600 };
+      const t = (k) => k;
+      const canvas = () => { const c = document.createElement('canvas'); c.width = 400; c.height = 600; return c.getContext('2d'); };
+      // A 2D context that records the fillStyle of every fill() (for the draw order).
+      function fillRecorder() {
+        const real = canvas();
+        const fills = [];
+        const ctx = new Proxy(real, {
+          get(target, k) {
+            const v = target[k];
+            if (typeof v !== 'function') return v;
+            return (...a) => { if (k === 'fill') fills.push(String(target.fillStyle)); return v.apply(target, a); };
+          },
+          set(target, k, v) { target[k] = v; return true; },
+        });
+        return { ctx, fills };
+      }
+      const device = () => ({ down: new Set(), controls: {}, mapping: { controls: {} } });
+      const pluckTracker = () => new AE.VoiceTracker(AE.trackerConfig(SETUP.guitarSound({ ...DEFAULTS.device }, 'guitar', 'pluck')));
+      // A guitar lane as main.js builds it for the highway view.
+      function guitarLane() {
+        const tracker = pluckTracker();
+        return { kind: 'guitar', color: '#3399ff', device: device(), instrument: new G.Guitar(), highway: new HV.HighwayState(), channels: { main: { tracker } } };
+      }
+      // Runs the highway view frame by frame (only drawHighway, as main.js does in the highway view).
+      function runHighway(lane, from, to, ctx = canvas()) {
+        for (let now = from; now <= to + 1e-9; now += FRAME) HV.drawHighway(ctx, lane, AREA, t, now);
+      }
+
+      // ---- known bug 1: the highway view never ends notes -------------------
+      await s.section('highway view alone ends notes (R5.4, R5.4.2, R5.4.3)', () => {
+        const lane = guitarLane();
+        const tr = lane.channels.main.tracker;
+        const e = { type: 'noteOn', voiceId: 1, midi: 52, velocity: 100, column: 0 };
+        tr.noteOn(e, 0);
+        lane.highway.noteOn(e, tr, HV.placeNote('guitar', e, lane.color, 5), 0);
+        runHighway(lane, 0, 1);
+        tr.noteOff({ voiceId: 1, fade: 0.2 }, 1);
+        runHighway(lane, 1, 2);
+        const note = lane.highway.notes[0];
+        check('a released note that has faded out (fade 0.2 s from 1 s) gets an end time by 2 s', !!note && note.end !== null && note.end <= 1.5, true);
+        runHighway(lane, 2, 9);
+        check('and it is removed once it has left the road (6 s after its end)', lane.highway.notes.length, 0);
+        check('the tracker no longer keeps the silent voice', tr.voices.size, 0);
+
+        const lane2 = guitarLane();
+        const tr2 = lane2.channels.main.tracker;
+        tr2.noteOn(e, 0);
+        lane2.highway.noteOn(e, tr2, HV.placeNote('guitar', e, lane2.color, 5), 0);
+        let endAt = null;
+        for (let now = 0; now <= 8; now += FRAME) {
+          HV.drawHighway(canvas(), lane2, AREA, t, now);
+          if (endAt === null && lane2.highway.notes[0]?.end != null) endAt = now;
+        }
+        check('a pluck note left to ring ends when its voice falls below 2 % (about 5.7 s of the 10 s ring time)', endAt !== null && endAt > 5 && endAt < 6.5, true);
+      });
+
+      // ---- draw order and trail width ---------------------------------------
+      await s.section('notes are drawn oldest first (R5.4.1)', () => {
+        const lane = guitarLane();
+        const tr = lane.channels.main.tracker;
+        const older = { type: 'noteOn', voiceId: 1, midi: 52, velocity: 127, column: 0 };
+        const newer = { type: 'noteOn', voiceId: 2, midi: 52, velocity: 127, column: 0 };
+        tr.noteOn(older, 0);
+        tr.noteOn(newer, 1);
+        // Added newest first, so the order comes from the drawing code, not from the list.
+        lane.highway.noteOn(newer, tr, { x: 0.1, color: '#0000ff' }, 1);
+        lane.highway.noteOn(older, tr, { x: 0.1, color: '#ff0000' }, 0);
+        const { ctx, fills } = fillRecorder();
+        HV.drawHighway(ctx, lane, AREA, t, 2);
+        const red = (c) => /^#ff0000|^rgba\(255, 0, 0,/.test(c);
+        const blue = (c) => /^#0000ff|^rgba\(0, 0, 255,/.test(c);
+        const lastRed = fills.map(red).lastIndexOf(true);
+        const firstBlue = fills.map(blue).indexOf(true);
+        check('both notes are drawn', [lastRed >= 0, firstBlue >= 0], [true, true]);
+        check('every fill of the older note comes before the first fill of the newer one', lastRed < firstBlue, true);
+      });
+
+      await s.section('trail width follows the bend (R5.4.5)', () => {
+        check('no bend = normal width; -1 = 75 %; full whammy -2 = 50 %; +2 = 150 %', [0, -1, -2, 2].map(HV.bendWidth), [1, 0.75, 0.5, 1.5]);
+        check('clamped to 50 % .. 150 %', [-4, 4].map(HV.bendWidth), [0.5, 1.5]);
+      });
+
+      // ---- drawing runs without errors on a real canvas ---------------------
+      await s.section('lane drawing runs without errors (R5.7, R5.8)', () => {
+        const g = new G.Guitar({ tiltSmoothing: 0 });
+        const tr = pluckTracker();
+        check('drawFretRow with the note strip (drawLabelStrip) draws without errors', () => {
+          SV.drawFretRow(canvas(), SV.guitarFretStates(g, tr, 0), 0, 0, 400, 30, SV.guitarLabelStrip(g, false));
+          SV.drawFretRow(canvas(), SV.guitarFretStates(g, tr, 0), 0, 0, 400, 30, SV.guitarLabelStrip(g, true));
+          return true;
+        }, true);
+        check('... also while the strip slides between steps (tilt on, part way to the next step)', () => {
+          const h = new G.Guitar({ tiltSmoothing: 0 });
+          const ctl = (v) => ({ whammy: { value: 0, pressed: false }, tilt: { value: v, pressed: v > 0.9 } });
+          h.handle([], ctl(0.4), 0);
+          h.handle([edge('back', 'pressed')], ctl(0.4), 0);
+          h.handle([edge('back', 'released')], ctl(0.4), 0);
+          h.handle([], ctl(0.55), 0.1);
+          SV.drawFretRow(canvas(), SV.guitarFretStates(h, tr, 0.1), 0, 0, 400, 30, SV.guitarLabelStrip(h, false));
+          return true;
+        }, true);
+
+        const lanes = {
+          guitar: () => ({ kind: 'guitar', instrument: new G.Guitar() }),
+          drums: () => ({ kind: 'drums', instrument: new DR.Drums() }),
+          'keys (piano)': () => ({ kind: 'keys', instrument: new KEYS.Keys() }),
+          'keys (drums mode)': () => ({ kind: 'keys', instrument: new KEYS.Keys({ keysMode: 'drums' }) }),
+        };
+        for (const [name, make] of Object.entries(lanes)) {
+          const { kind, instrument } = make();
+          const tracker = pluckTracker();
+          const highway = new HV.HighwayState();
+          const e = { type: 'noteOn', voiceId: 1, midi: 60, velocity: 100, column: 0, oneShot: kind === 'drums' };
+          tracker.noteOn(e, 0);
+          highway.noteOn(e, tracker, HV.placeNote(kind, e, '#3399ff', 5), 0);
+          const lane = { kind, instrument, color: '#3399ff', device: device(), highway, channels: { main: { tracker }, guitar: { tracker: pluckTracker() }, drums: { tracker: pluckTracker() } } };
+          check(`${name} lane: the highway view draws without errors`, () => { for (const now of [0.5, 3, 7]) HV.drawHighway(canvas(), lane, AREA, t, now); return true; }, true);
+          check(`${name} lane: the simple view draws without errors`, () => { for (const now of [0.5, 3, 7]) SV.drawSimpleView(canvas(), lane, AREA, t, now); return true; }, true);
+        }
+      });
+
+      s.finish();
+    </script>
+  </body>
+</html>
