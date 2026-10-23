@@ -165,12 +165,11 @@ export class BassSource {
     for (const voice of [...this.voices.values()]) this._stop(voice, Math.max(0.001, Number(fade) || 0.08));
   }
 
-  /** Level of a voice's gain at time t, from its schedule (no cancelAndHoldAtTime, R1 browsers). */
+  /** Level of a voice's gain at time t, from its schedule (cancelAndHoldAtTime is missing in Firefox). */
   _levelAt(voice, t) {
     const age = t - voice.start;
-    if (age < ATTACK && voice.decayFrom === null) return voice.peak * Math.max(0, age / ATTACK);
-    if (voice.decayFrom === null) return voice.peak;
-    if (t <= voice.decayFrom) return age < ATTACK ? voice.peak * Math.max(0, age / ATTACK) : voice.peak;
+    if (age < ATTACK) return voice.peak * Math.max(0, age / ATTACK);
+    if (voice.decayFrom === null || t <= voice.decayFrom) return voice.peak;
     return voice.peak * Math.exp(-(t - voice.decayFrom) / voice.tau);
   }
 

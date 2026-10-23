@@ -23,9 +23,10 @@
 // Strum hold (R4.7.2, design 5): a voice started with `hold` runs with loop
 // gain 1 (no ring-time loss; only the loop low-pass takes energy) and a
 // make-up gain that keeps its output at its level between 50 and 100 ms
-// (HOLD_REFERENCE_START, HOLD_REFERENCE_SECONDS), at most x4 (MAX_MAKEUP). On holdEnd the make-up
-// freezes and the ring-time loop gain applies again, so the note falls 60 dB
-// in the ring time from the level it had at the release.
+// (HOLD_REFERENCE_START, HOLD_REFERENCE_SECONDS), at most x4 (MAX_MAKEUP).
+// On holdEnd the make-up freezes and the ring-time loop gain applies again,
+// so the note falls 60 dB in the ring time from the level it had at the
+// release.
 
 const BUFFER_SIZE = 8192; // power of two; enough for ~6 Hz at 48 kHz
 const MASK = BUFFER_SIZE - 1;
@@ -138,8 +139,8 @@ class StringVoice {
   }
 
   /**
-   * While held: measures the reference level over the first
-   * HOLD_REFERENCE_SECONDS, then moves the make-up gain towards
+   * While held: measures the reference level (RMS from HOLD_REFERENCE_START
+   * for HOLD_REFERENCE_SECONDS), then moves the make-up gain towards
    * reference / current RMS (1 .. MAX_MAKEUP).
    */
   _followHold(y, k) {
