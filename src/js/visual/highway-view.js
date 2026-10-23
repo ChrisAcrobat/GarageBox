@@ -7,7 +7,8 @@
 // rings, a sustain trail connects the gem to the near end; the trail's opacity
 // follows the note's level over time (decay, fade-out, mute, volume), and
 // when the note stops the trail's near end detaches and travels away too.
-// Drum hits are one-shot gems without a trail.
+// The trail's width shows the whammy bend (R5.4.5). Drum hits are one-shot
+// gems without a trail.
 //
 // HighwayState records notes per lane from the note events, with a level
 // history sampled from the audio engine's VoiceTracker (design 6: envelope
@@ -24,13 +25,17 @@ export const HIGHWAY_SECONDS = 6;
 /** Perspective strength: the far end is drawn 1 / (1 + K) as wide as the near end. */
 const K = 2.2;
 const SAMPLE_INTERVAL = 1 / 40;
+/** Trail width per semitone of bend, and its limits (R5.4.5): -2 semitones = 50 %. */
+const BEND_WIDTH_PER_SEMITONE = 0.25;
+const MIN_BEND_WIDTH = 0.5;
+const MAX_BEND_WIDTH = 1.5;
 /** Pitch range spread across the keyboard lane's road. */
 const KEYS_LOW = 36;
 const KEYS_HIGH = 91;
 
 export class HighwayState {
   constructor() {
-    /** { voiceId, x (0..1 across the road), color, start, end, oneShot, velocity, midi, tracker, history: [{t, level}] } */
+    /** { voiceId, x (0..1 across the road), color, start, end, oneShot, velocity, midi, tracker, history: [{t, level, bend}] } */
     this.notes = [];
   }
 
@@ -52,7 +57,7 @@ export class HighwayState {
       velocity: event.velocity ?? 100,
       midi: event.midi,
       tracker,
-      history: [{ t: now, level: tracker.level(event.voiceId, now) || (event.velocity ?? 100) / 127 }],
+      history: [{ t: now, level: tracker.level(event.voiceId, now) || (event.velocity ?? 100) / 127, bend: tracker.bend || 0 }],
     });
   }
 
@@ -63,7 +68,7 @@ export class HighwayState {
       const alive = n.tracker.voices.has(n.voiceId);
       const level = alive ? n.tracker.level(n.voiceId, now) : 0;
       const last = n.history[n.history.length - 1];
-      if (now - last.t >= SAMPLE_INTERVAL) n.history.push({ t: now, level });
+      if (now - last.t >= SAMPLE_INTERVAL) n.history.push({ t: now, level, bend: n.tracker.bend || 0 });
       if (!alive) n.end = now;
     }
     this.notes = this.notes.filter((n) => n.end === null || now - n.end < HIGHWAY_SECONDS);
@@ -74,18 +79,24 @@ export class HighwayState {
   }
 }
 
-/** Level of a note at time `t`, from its history (nearest earlier sample). */
-function levelAt(note, t) {
+/** The history sample of a note at time `t` (nearest earlier sample). */
+function sampleAt(note, t) {
   const h = note.history;
   let lo = 0;
   let hi = h.length - 1;
-  if (t <= h[0].t) return h[0].level;
+  if (t <= h[0].t) return h[0];
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
     if (h[mid].t <= t) lo = mid;
     else hi = mid - 1;
   }
-  return h[lo].level;
+  return h[lo];
+}
+
+/** Trail width factor for a bend in semitones (R5.4.5): linear, clamped. */
+export function bendWidth(semitones) {
+  const w = 1 + BEND_WIDTH_PER_SEMITONE * (semitones || 0);
+  return Math.max(MIN_BEND_WIDTH, Math.min(MAX_BEND_WIDTH, w));
 }
 
 /** Where a note goes on the road and in which color, per lane kind. */
@@ -126,6 +137,13 @@ function drawRoad(ctx, road, project, columns, color, now) {
   g.addColorStop(1, 'rgba(10, 11, 14, 0.25)');
   ctx.fillStyle = g;
   ctx.fill();
+  // Edges: the near end and both sides, but no line across the far end, so
+  // the road looks as if it continues past the top of the lane (R5.4.4).
+  ctx.beginPath();
+  ctx.moveTo(fl.x, fl.y);
+  ctx.lineTo(nl.x, nl.y);
+  ctx.lineTo(nr.x, nr.y);
+  ctx.lineTo(fr.x, fr.y);
   ctx.lineWidth = 2;
   ctx.strokeStyle = withAlpha(color, 0.55);
   ctx.stroke();
@@ -161,18 +179,21 @@ function drawNote(ctx, note, project, colWidth, now) {
   if (tail >= 1) return;
 
   // Sustain trail from the tail (near) to the head (far), in slices with the
-  // opacity the note had when that part of the trail was "played".
+  // opacity the note had when that part of the trail was "played" and the
+  // width of the bend at that time (R5.4.5).
   if (!note.oneShot && head > tail) {
     const slices = Math.max(2, Math.ceil((head - tail) * 48));
     for (let i = 0; i < slices; i++) {
       const d0 = tail + ((head - tail) * i) / slices;
       const d1 = tail + ((head - tail) * (i + 1)) / slices;
-      const level = levelAt(note, now - ((d0 + d1) / 2) * HIGHWAY_SECONDS);
+      const sample = sampleAt(note, now - ((d0 + d1) / 2) * HIGHWAY_SECONDS);
+      const level = sample.level;
       if (level < 0.01) continue;
       const a = project(note.x, d0);
       const b = project(note.x, d1);
-      const wa = colWidth * 0.32 * a.s;
-      const wb = colWidth * 0.32 * b.s;
+      const width = colWidth * 0.32 * bendWidth(sample.bend);
+      const wa = width * a.s;
+      const wb = width * b.s;
       ctx.beginPath();
       ctx.moveTo(a.x - wa / 2, a.y);
       ctx.lineTo(a.x + wa / 2, a.y);
@@ -251,7 +272,7 @@ export function drawHighway(ctx, lane, area, t, now) {
     cx: area.x + area.w / 2,
     w: area.w * 0.92,
     yNear: area.y + area.h - bottomH - 6,
-    yFar: area.y + 4,
+    yFar: area.y, // the road runs to the top of the lane (R5.4.4)
   };
   if (road.yNear - road.yFar < 40) return;
   const project = makeProjection(road);
@@ -260,8 +281,8 @@ export function drawHighway(ctx, lane, area, t, now) {
 
   const colWidth = kind === 'keys' ? road.w / 16 : road.w / columns;
   ctx.save();
-  // Far notes first so near ones are drawn on top.
-  const sorted = [...highway.notes].sort((a, b) => b.start - a.start);
+  // Oldest first, so newer gems and trails are drawn on top (R5.4.1).
+  const sorted = [...highway.notes].sort((a, b) => a.start - b.start);
   for (const note of sorted) drawNote(ctx, note, project, colWidth, now);
   ctx.restore();
 
