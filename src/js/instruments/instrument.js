@@ -10,6 +10,14 @@
 //   { type: 'noteOff', voiceId, fade, time }      fade in seconds (R4.3.1)
 //   { type: 'bend',    semitones, time }          whole instrument
 //   { type: 'volume',  gain, time }               whole instrument
+//   { type: 'vibrato', cents, time }              whole instrument: depth of a
+//                                                 ~5.5 Hz pitch LFO (0 = none),
+//                                                 added on top of any bend
+//   { type: 'glide',   voiceId, semitones, time } experiment E: one voice's pitch
+//                                                 offset from its noteOn midi
+//                                                 (per-voice detune, adds to
+//                                                 the bend and vibrato)
+// A noteOn may carry `glide` (semitones) so the voice starts at that offset.
 // plus one non-musical event for the UI:
 //   { type: 'action',  action: 'openSettings', time }
 // `column` tells the visuals where the note belongs (fret index, drum pad

@@ -15,7 +15,8 @@ import { StartScreen } from './ui/start-screen.js';
 import { SettingsPanel } from './ui/settings-panel.js';
 import { DebugView } from './ui/debug-view.js';
 import { MenuInput, MENU_CONTROLS } from './ui/menu-nav.js';
-import { CHOICES, getGlobalSettings, setGlobalSetting, getDeviceSettings, onSettingsChange } from './settings/store.js';
+import { CHOICES, getGlobalSettings, setGlobalSetting, getDeviceSettings, setDeviceSetting, resetDeviceSettings, onSettingsChange } from './settings/store.js';
+import { BackHold } from './input/back-hold.js';
 import { SUPPORTED_LANGUAGES, applyTranslations, onLanguageChange, setLanguage, t } from './i18n/i18n.js';
 import { getAudioContext, getEngine, keepAudioAlive, unlockAudio } from './audio/audio-engine.js';
 import { createInstrument, instrumentKind } from './instruments/setup.js';
@@ -98,6 +99,9 @@ function createLaneUi(device) {
     panel: null,
     debug: null,
     menuInput: new MenuInput(),
+    // Experiment E: Back hold (5 s = reset settings) for instruments that do
+    // not handle Back themselves (the guitar does, see guitar.js).
+    backHold: new BackHold(),
   };
   laneUis.set(device.index, ui);
   translateLaneUi(ui);
@@ -115,6 +119,7 @@ function destroyLaneUi(index) {
   if (!ui) return;
   ui.panel?.destroy();
   ui.debug?.destroy();
+  clearTimeout(ui.toastTimer);
   releaseInstrument(ui);
   ui.el.remove();
   laneUis.delete(index);
@@ -241,6 +246,10 @@ function menuInput(ui, nowMs) {
     ui.menuInput.reset();
     return edges;
   }
+  // Experiment E: while a menu owns Back, no Back hold or tilt toggle may be
+  // pending; the release of a Back press that closed a menu then does nothing.
+  ui.logic?.cancelBackHold?.();
+  ui.backHold.cancel();
   const intents = ui.menuInput.update(edges, ui.device.controls, nowMs);
   if (startActive) {
     for (const intent of intents) startScreen.navigate(intent);
@@ -263,9 +272,16 @@ function playInstruments() {
     // Tap-to-play only while the settings panel is open as a gamepad menu (design 7.4).
     ui.logic.setTapToPlay?.(!!ui.panel?.gamepadMenu);
     const events = ui.logic.handle(edges, ui.device.controls, now);
+    if (!ui.logic.handlesBackHold) events.push(...genericBackHold(ui, edges, now));
     for (const event of events) {
       if (event.type === 'action') {
         if (event.action === 'openSettings') toggleSettings(ui.device.index, { byGamepad: !ui.device.isKeyboard });
+        else if (event.action === 'tiltToggled') {
+          // Experiment E: no toast (owner feedback); locking (tilt off) saves
+          // the new base with the device settings.
+          if (!event.enabled && !ui.device.isKeyboard) saveRangeOffset(ui, event.base);
+        }
+        else if (event.action === 'resetSettings') resetLaneSettings(ui);
         continue;
       }
       const channel = ui.channels[event.part || 'main'] || ui.channels.main;
@@ -276,6 +292,57 @@ function playInstruments() {
       }
     }
   }
+}
+
+/**
+ * Experiment E: Back held 5 s on an instrument without its own Back handling
+ * (drums, ...): the same 'resetSettings' action as the guitar emits.
+ */
+function genericBackHold(ui, edges, now) {
+  for (const e of edges) {
+    if (e.name !== 'back') continue;
+    if (e.type === 'pressed') ui.backHold.press(now);
+    else if (e.type === 'released' && ui.backHold.release(now) === 'hold') return [{ type: 'action', action: 'resetSettings', time: now }];
+  }
+  return ui.backHold.update(now) === 'hold' ? [{ type: 'action', action: 'resetSettings', time: now }] : [];
+}
+
+/** Experiment E: stores the guitar's locked range offset as a device setting (survives a reload). */
+function saveRangeOffset(ui, base) {
+  if (!Number.isInteger(base) || getDeviceSettings(ui.device.id).rangeOffset === base) return;
+  setDeviceSetting(ui.device.id, 'rangeOffset', Math.max(-36, Math.min(36, base)));
+}
+
+/**
+ * Experiment E: resets this controller's stored settings to the defaults
+ * (only this device; global settings such as language and view stay). The
+ * settings listener then rebuilds or reconfigures the instrument and
+ * refreshes an open panel. Ringing guitar notes were already muted by the
+ * guitar itself.
+ */
+function resetLaneSettings(ui) {
+  resetDeviceSettings(ui.device.id);
+  showLaneToast(ui, t('lane.settingsReset'));
+}
+
+/**
+ * Experiment D/E: a short message in the lane (experiment E: only "Settings
+ * reset" after a 5 s Back hold). One toast per lane; a new one replaces the old
+ * one and restarts its timer. It fades out after about 1.2 s.
+ */
+const TOAST_MS = 1200;
+function showLaneToast(ui, text) {
+  if (!ui.toast) {
+    ui.toast = document.createElement('div');
+    ui.toast.className = 'lane-toast';
+    ui.toast.setAttribute('role', 'status');
+    ui.toast.setAttribute('aria-live', 'polite');
+    ui.el.append(ui.toast);
+  }
+  ui.toast.textContent = text;
+  ui.toast.classList.add('visible');
+  clearTimeout(ui.toastTimer);
+  ui.toastTimer = setTimeout(() => ui.toast?.classList.remove('visible'), TOAST_MS);
 }
 
 function laneColorOf(ui) {

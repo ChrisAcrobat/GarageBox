@@ -5,8 +5,10 @@
 // gamepad.id. Unknown or invalid stored values fall back to the defaults, so
 // adding new settings never breaks old saved data.
 
-const GLOBAL_KEY = 'musicSandbox.global';
-const DEVICES_KEY = 'musicSandbox.devices';
+// Experiment E: own keys (suffix "-expE"), so settings saved by the main app
+// (or another experiment) do not override this variant's defaults.
+const GLOBAL_KEY = 'musicSandbox.global-expE';
+const DEVICES_KEY = 'musicSandbox.devices-expE';
 
 /** Default values. Every setting must have one. */
 export const DEFAULTS = Object.freeze({
@@ -34,11 +36,24 @@ export const DEFAULTS = Object.freeze({
     source: 'auto',
     // General MIDI program 0-127 for the MIDI source, -1 = the instrument's default.
     program: -1,
-    // Whammy and tilt assignment (R4.5): 'bend' | 'volume' | 'off'. Provisional defaults.
+    // Whammy and tilt assignment (R4.5): 'bend' | 'volume' | 'vibrato' | 'off'.
+    // Experiment E defaults: whammy = pitch bend, tilt = off (no sound effect;
+    // with Back, tilt shifts the fret range by scale steps instead).
     whammy: 'bend',
-    tilt: 'volume',
+    tilt: 'off',
     // Pitch bend at full deflection, in semitones (negative = down).
     bendRange: -2,
+    // Tilt smoothing time constant in ms, 0 = off (R4.5.1, design 4.2).
+    tiltSmoothing: 80,
+    // Experiment E: the guitar's locked fret-range offset in scale steps (the
+    // base that Back locks when tilt is turned off). Saved per device, so it
+    // survives a reload; reset to 0 with the other settings. Tilt on/off is
+    // not saved (always off after a reload).
+    rangeOffset: 0,
+    // Experiment E: while tilt is on, the pitch glides continuously between
+    // scale steps (the same fractional offset as the note strip) instead of
+    // moving in whole steps. Off by default; reset with the other settings.
+    tiltGlide: false,
     // Drums: control name -> General MIDI drum note (0 = none). Missing entries use the defaults.
     drumMap: Object.freeze({}),
   }),
@@ -54,9 +69,12 @@ export const CHOICES = Object.freeze({
   decay: Object.freeze([1, 2, 4, 6, 10]),
   brightness: Object.freeze(['dark', 'warm', 'normal', 'bright']),
   source: Object.freeze(['auto', 'pluck', 'midi']),
-  whammy: Object.freeze(['bend', 'volume', 'off']),
-  tilt: Object.freeze(['bend', 'volume', 'off']),
+  whammy: Object.freeze(['bend', 'volume', 'vibrato', 'off']),
+  tilt: Object.freeze(['bend', 'volume', 'vibrato', 'off']),
   bendRange: Object.freeze([-12, -7, -5, -2, -1, 1, 2, 5, 7, 12]),
+  // Design 4.2 asks for a number field (0-1000, step 10); number fields are not
+  // implemented yet, so this is a choice list like fadeMs for now.
+  tiltSmoothing: Object.freeze([0, 20, 40, 80, 150, 300, 600, 1000]),
 });
 
 /** Brightness names -> 0..1 for the plucked string. */
@@ -65,6 +83,9 @@ export const BRIGHTNESS_VALUES = Object.freeze({ dark: 0.15, warm: 0.35, normal:
 /** Validators for settings that are neither enumerations nor plain values. */
 const VALIDATORS = {
   program: (v) => Number.isInteger(v) && v >= -1 && v <= 127,
+  // Experiment E: +-3 octaves of a 12-note scale is the most any scale allows.
+  rangeOffset: (v) => Number.isInteger(v) && Math.abs(v) <= 36,
+  tiltGlide: (v) => typeof v === 'boolean',
   drumMap: (v) =>
     !!v &&
     typeof v === 'object' &&

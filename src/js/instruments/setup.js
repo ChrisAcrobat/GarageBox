@@ -8,7 +8,7 @@
 import { Guitar, GAMEPAD_GUITAR_CONTROLS } from './guitar.js';
 import { Drums } from './drums.js';
 import { Keys } from './keys.js';
-import { guitarRootMidi, scaleNotes } from '../audio/theory.js';
+import { guitarRootMidi, scaleNotes, SCALES } from '../audio/theory.js';
 import { BRIGHTNESS_VALUES } from '../settings/store.js';
 
 /** Default General MIDI program (0-based) per instrument when the MIDI source is used. */
@@ -59,10 +59,15 @@ export function guitarOptions(settings, instrument, { gamepad = false } = {}) {
   const root = guitarRootMidi(settings.root) - (bass ? 12 : 0);
   return {
     notes: scaleNotes(root, settings.scale, 5),
+    rootMidi: root,
+    scale: [...(SCALES[settings.scale] || SCALES.minorPentatonic)],
     fade: settings.fadeMs / 1000,
     whammy: settings.whammy ?? 'bend',
-    tilt: settings.tilt ?? 'volume',
+    tilt: settings.tilt ?? 'off',
     bendRange: settings.bendRange ?? -2,
+    tiltSmoothing: (settings.tiltSmoothing ?? 80) / 1000,
+    rangeOffset: settings.rangeOffset ?? 0, // experiment E: saved locked range offset
+    tiltGlide: settings.tiltGlide === true, // experiment E: tilt glides the pitch
     controlNames: gamepad ? GAMEPAD_GUITAR_CONTROLS : null,
   };
 }
@@ -121,7 +126,8 @@ export function createInstrument(device, instrument, settings) {
   }
   if (instrument === 'keys') {
     return {
-      instrument: new Keys({ guitar: guitarOptions(settings, 'guitar') }),
+      // Experiment E: the keyboard has no tilt, so no tilt glide either.
+      instrument: new Keys({ guitar: { ...guitarOptions(settings, 'guitar'), tiltGlide: false } }),
       // The guitar emulation on keys 1-5 always uses the plucked string.
       sounds: { main: keysSound(settings), guitar: guitarSound(settings, 'guitar', 'pluck') },
     };

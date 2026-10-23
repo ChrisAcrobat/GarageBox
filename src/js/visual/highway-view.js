@@ -15,7 +15,7 @@
 // on drums, and pitch on the keyboard.
 
 import { FRET_COLORS, withAlpha } from './lanes.js';
-import { drawFretRow, guitarFretStates } from './simple-view.js';
+import { drawFretRow, guitarFretStates, guitarLabelStrip } from './simple-view.js';
 import { drawKeyboard, keyboardHeight } from './keyboard-view.js';
 import { noteName } from '../audio/theory.js';
 
@@ -243,7 +243,7 @@ export function drawHighway(ctx, lane, area, t, now) {
   // Bottom strip: what the player presses.
   let bottomH = 0;
   const fretRadius = Math.min(30, (area.w * 0.92) / 13);
-  if (kind === 'guitar') bottomH = 2 * fretRadius + 36; // buttons plus their note names
+  if (kind === 'guitar') bottomH = 2 * fretRadius + 44; // buttons plus their note names and orientation bars (experiment E)
   else if (kind === 'drums') bottomH = 44;
   else if (kind === 'keys') bottomH = keyboardHeight(area.w) + 8;
 
@@ -271,7 +271,7 @@ export function drawHighway(ctx, lane, area, t, now) {
     const nearW = road.w;
     const r = fretRadius;
     const rowW = nearW - nearW / 5 + 2 * r;
-    drawFretRow(ctx, guitarFretStates(instrument, lane.channels.main.tracker, now), road.cx - rowW / 2, road.yNear + 4, rowW, r);
+    drawFretRow(ctx, guitarFretStates(instrument, lane.channels.main.tracker, now), road.cx - rowW / 2, road.yNear + 4, rowW, r, guitarLabelStrip(instrument));
   } else if (kind === 'drums') {
     drawPadLabels(ctx, instrument, project, columns, color, t, now);
   } else if (kind === 'keys') {

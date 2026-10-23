@@ -16,6 +16,7 @@
 
 import { ANALOG_CONTROLS } from '../input/mappings.js';
 import { noteName } from '../audio/theory.js';
+import { splitOffset } from '../instruments/guitar.js';
 import { FRET_COLORS, withAlpha, fitText } from './lanes.js';
 import { drawKeyboard, keyboardHeight } from './keyboard-view.js';
 
@@ -34,10 +35,15 @@ export function sectionTitle(ctx, text, x, y, w) {
 
 /**
  * Draws five fret buttons in a row.
+ * Experiment E: with `strip` ({ labels: string[6], frac: 0..1 }, see
+ * guitarLabelStrip) the note names under the buttons are drawn as a strip
+ * that is scrolled left by `frac` of the button spacing: label j belongs
+ * under fret j at frac 0 and slides towards fret j-1 as frac grows; the 6th
+ * label comes in from the right. Labels fade out beyond the outer frets.
  * @param {{held:boolean, level:number, label:string}[]} frets
  * @returns {number} next y
  */
-export function drawFretRow(ctx, frets, x, y, w, maxRadius = 30) {
+export function drawFretRow(ctx, frets, x, y, w, maxRadius = 30, strip = null) {
   const r = Math.max(8, Math.min(maxRadius, (w - 4 * 10) / 10));
   // Keep the buttons together in wide lanes, centered.
   const rowWidth = Math.min(w, 10 * r + 4 * 1.4 * r);
@@ -65,7 +71,7 @@ export function drawFretRow(ctx, frets, x, y, w, maxRadius = 30) {
     ctx.lineWidth = 2;
     ctx.strokeStyle = color;
     ctx.stroke();
-    if (fret.label) {
+    if (fret.label && !strip) {
       ctx.font = `700 ${Math.round(Math.max(10, Math.min(16, r * 0.62)))}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
@@ -73,7 +79,93 @@ export function drawFretRow(ctx, frets, x, y, w, maxRadius = 30) {
       ctx.fillText(fret.label, cx, cy + r + 6);
     }
   });
-  return y + 2 * r + (frets.some((f) => f.label) ? 30 : 14);
+  if (strip) drawLabelStrip(ctx, frets, strip, x, y, r, spacing);
+  // Experiment E: fixed room for the orientation bars under the strip
+  // labels (fixed, so the layout below does not jump while the strip slides).
+  return y + 2 * r + (frets.some((f) => f.label) || strip ? 30 + (strip ? 10 : 0) : 14);
+}
+
+/** Experiment E: colour of the orientation bars, the same as the yellow fret. */
+export const ORIENTATION_COLOR = FRET_COLORS[2];
+
+/**
+ * Experiment E: number of orientation bars under a note name in the strip.
+ * The bars mark the middle of the key/scale: `refMidi` is the note of the
+ * middle (yellow) fret at range offset 0 (guitar.referenceMidi(); A3 with the
+ * default E minor pentatonic). Notes with the same pitch class get
+ * 1 + |octaves from the reference| bars (the reference itself 1, one octave
+ * away 2, ...); every other note 0.
+ */
+export function orientationBars(midi, refMidi) {
+  if (!Number.isInteger(midi) || !Number.isInteger(refMidi)) return 0;
+  const diff = midi - refMidi;
+  if (diff % 12 !== 0) return 0;
+  return 1 + Math.abs(diff / 12);
+}
+
+/** Experiment E: draws `count` short bars stacked under a label centred at cx (top at y). */
+function drawOrientationBars(ctx, count, cx, y, labelSize) {
+  if (count <= 0) return;
+  const w = Math.max(10, labelSize * 1.1);
+  const h = 2;
+  const gap = 1.5;
+  ctx.fillStyle = ORIENTATION_COLOR;
+  for (let k = 0; k < count; k++) ctx.fillRect(Math.round(cx - w / 2), Math.round(y + k * (h + gap)), Math.round(w), h);
+}
+
+/** Experiment E: the sliding note-name strip under the fret buttons (see drawFretRow). */
+function drawLabelStrip(ctx, frets, strip, x, y, r, spacing) {
+  const { labels, frac } = strip;
+  const bars = strip.bars || [];
+  const size = Math.round(Math.max(10, Math.min(16, r * 0.62)));
+  ctx.font = `700 ${size}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const first = x + r;
+  const last = x + r + 4 * spacing;
+  labels.forEach((label, j) => {
+    if (!label) return;
+    const cx = x + r + (j - frac) * spacing;
+    // Fade out over one spacing outside the outer frets.
+    const outside = cx < first ? first - cx : cx > last ? cx - last : 0;
+    const alpha = Math.max(0, 1 - outside / (spacing * 0.6));
+    if (alpha <= 0.01) return;
+    // The fret the label is closest to decides its brightness.
+    const fret = frets[Math.round(j - frac)];
+    const lit = !!fret && (fret.level > 0.01 || fret.held) && Math.abs(j - frac - Math.round(j - frac)) < 0.25;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = lit ? '#ffffff' : 'rgba(255, 255, 255, 0.7)';
+    ctx.fillText(label, cx, y + 2 * r + 6);
+    // Orientation bars belong to the label: same position and fade.
+    drawOrientationBars(ctx, bars[j] || 0, cx, y + 2 * r + 6 + size + 3, size);
+  });
+  ctx.globalAlpha = 1;
+}
+
+let reducedMotionQuery;
+/** True when the user asked the system for reduced motion (prefers-reduced-motion). */
+export function prefersReducedMotion() {
+  if (reducedMotionQuery === undefined) {
+    reducedMotionQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+  }
+  return !!reducedMotionQuery?.matches;
+}
+
+/**
+ * Experiment E: the note-name strip of a guitar: six labels starting at the
+ * whole part of the display offset and the fraction to scroll by. While tilt
+ * is on the offset follows the tilt continuously (guitar.displaySteps());
+ * with reduced motion, or tilt off, it is the whole-step offset the sound
+ * uses, so the strip jumps/snaps per step.
+ */
+export function guitarLabelStrip(guitar, reducedMotion = prefersReducedMotion()) {
+  const offset = !reducedMotion && guitar.displaySteps ? guitar.displaySteps() : guitar.rangeSteps ? guitar.rangeSteps() : 0;
+  const { whole, frac } = splitOffset(offset);
+  const midis = [0, 1, 2, 3, 4, 5].map((j) => guitar.noteFor(j, whole));
+  const labels = midis.map((midi) => (midi >= 0 && midi <= 127 ? noteName(midi) : ''));
+  const refMidi = guitar.referenceMidi ? guitar.referenceMidi() : null;
+  const bars = midis.map((midi) => orientationBars(midi, refMidi));
+  return { labels, midis, bars, frac, offset, refMidi };
 }
 
 /** Lays out labelled pills left to right, wrapping lines. Returns the next y. */
@@ -109,7 +201,7 @@ export function drawPills(ctx, items, x, y, w, color) {
     ctx.lineWidth = 1;
     ctx.strokeStyle = item.pressed ? color : 'rgba(255, 255, 255, 0.14)';
     ctx.stroke();
-    ctx.fillStyle = lit ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
+    ctx.fillStyle = lit ? '#ffffff' : item.dimmed ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.75)';
     ctx.fillText(label, cx + padX, cy + h / 2 + 1);
     if (item.showValue) {
       // Whammy prints its value 0.00-1.00 next to the fill bar.
@@ -122,17 +214,38 @@ export function drawPills(ctx, items, x, y, w, color) {
   return cy + h + 14;
 }
 
-/** Pills for the device's logical controls, except the ones in `skip`. */
-export function controlPills(device, t, skip = new Set()) {
+/**
+ * Experiment E: a range offset in scale steps as text, e.g. "+2 steps",
+ * "−1 step", "0 steps" (proper minus sign, + for positive numbers).
+ */
+export function formatSteps(t, steps) {
+  const value = steps > 0 ? `+${steps}` : steps < 0 ? `−${-steps}` : '0';
+  return t(Math.abs(steps) === 1 ? 'unit.step' : 'unit.steps', { value });
+}
+
+/**
+ * Pills for the device's logical controls, except the ones in `skip`.
+ * Experiment E: `instrument` (a Guitar) labels the tilt pill with on/off and
+ * the current range offset in steps, and dims it while tilt is off.
+ */
+export function controlPills(device, t, skip = new Set(), instrument = null) {
   return Object.keys(device.mapping.controls)
     .filter((n) => !skip.has(n))
-    .map((n) => ({
-      label: t(`control.${n}`),
-      pressed: device.controls[n].pressed,
-      value: device.controls[n].value,
-      analog: ANALOG_CONTROLS.has(n),
-      showValue: n === 'whammy',
-    }));
+    .map((n) => {
+      const isTilt = !!instrument?.rangeSteps && instrument.reverse?.[n] === 'tilt';
+      const isTiltOff = isTilt && instrument.tiltEnabled === false;
+      const label = !isTilt
+        ? t(`control.${n}`)
+        : t(isTiltOff ? 'lane.tiltPillOff' : 'lane.tiltPillOn', { label: t(`control.${n}`), steps: formatSteps(t, instrument.rangeSteps()) });
+      return {
+        label,
+        pressed: isTiltOff ? false : device.controls[n].pressed,
+        value: isTiltOff ? 0 : device.controls[n].value,
+        analog: ANALOG_CONTROLS.has(n),
+        showValue: n === 'whammy',
+        dimmed: isTiltOff,
+      };
+    });
 }
 
 /** Big names of ringing notes, brightness following each note's level. Returns next y. */
@@ -184,12 +297,12 @@ export function drawSimpleView(ctx, lane, area, t, now) {
   if (lane.kind === 'guitar' && instrument) {
     const tracker = lane.channels.main.tracker;
     y = sectionTitle(ctx, t('lane.frets'), x, y, w);
-    y = drawFretRow(ctx, guitarFretStates(instrument, tracker, now), x, y, w);
+    y = drawFretRow(ctx, guitarFretStates(instrument, tracker, now), x, y, w, 30, guitarLabelStrip(instrument));
     y = sectionTitle(ctx, t('lane.ringing'), x, y, w);
     y = drawRingingNotes(ctx, tracker.active(now), x, y, w, (v) => FRET_COLORS[v.column] || color);
     const fretControls = new Set(Object.keys(device.mapping.controls).filter((n) => instrument.reverse[n]?.startsWith('fret')));
     y = sectionTitle(ctx, t('lane.controls'), x, y, w);
-    drawPills(ctx, controlPills(device, t, fretControls), x, y, w, color);
+    drawPills(ctx, controlPills(device, t, fretControls, instrument), x, y, w, color);
     return;
   }
 
@@ -203,7 +316,7 @@ export function drawSimpleView(ctx, lane, area, t, now) {
     const kbH = keyboardHeight(w);
     const guitarTracker = lane.channels.guitar.tracker;
     y = sectionTitle(ctx, t('lane.frets'), x, y, w);
-    y = drawFretRow(ctx, guitarFretStates(instrument.guitar, guitarTracker, now), x, y, Math.min(w, 340), 20);
+    y = drawFretRow(ctx, guitarFretStates(instrument.guitar, guitarTracker, now), x, y, Math.min(w, 340), 20, guitarLabelStrip(instrument.guitar));
     y = sectionTitle(ctx, t('lane.ringing'), x, y, w);
     const voices = [
       ...lane.channels.main.tracker.active(now).map((v) => ({ ...v, color })),

@@ -196,6 +196,8 @@ export class Channel {
     this.tracker = new VoiceTracker(trackerConfig(this.config));
     this.gainNode = null;
     this.source = null;
+    // Last vibrato depth in cents, re-applied when the source is rebuilt.
+    this.vibratoCents = 0;
     this.disposed = false;
     if (engine.context) this._build();
   }
@@ -210,6 +212,7 @@ export class Channel {
     }
     this.source?.dispose();
     this.source = createSource(ctx, this.gainNode, this.config);
+    if (this.vibratoCents) this.source?.vibrato?.(this.vibratoCents);
   }
 
   /** Applies a new configuration; rebuilds the source when its type changed. */
@@ -236,6 +239,13 @@ export class Channel {
         break;
       case 'bend':
         this.source?.bend(event.semitones);
+        break;
+      case 'glide': // experiment E: per-voice pitch offset (tilt glide)
+        this.source?.glide?.(event.voiceId, event.semitones);
+        break;
+      case 'vibrato':
+        this.vibratoCents = event.cents;
+        this.source?.vibrato?.(event.cents);
         break;
       case 'volume':
         t.gain = event.gain;

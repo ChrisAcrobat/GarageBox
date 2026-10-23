@@ -55,7 +55,8 @@ export class PluckSource {
     Object.assign(this.params, params);
   }
 
-  noteOn(voiceId, midi, velocity) {
+  /** `event.glide` (experiment E): start the voice that many semitones away from midi. */
+  noteOn(voiceId, midi, velocity, event) {
     this._post({
       type: 'noteOn',
       id: voiceId,
@@ -63,7 +64,13 @@ export class PluckSource {
       velocity: Math.max(0, Math.min(1, velocity / 127)),
       decay: this.params.decay,
       brightness: this.params.brightness,
+      ...(event?.glide ? { glide: event.glide } : {}),
     });
+  }
+
+  /** Experiment E (tilt glide): one voice's pitch offset in semitones, on top of the bend. */
+  glide(voiceId, semitones) {
+    this._post({ type: 'glide', id: voiceId, semitones });
   }
 
   noteOff(voiceId, fade) {
@@ -76,6 +83,11 @@ export class PluckSource {
 
   bend(semitones) {
     this._post({ type: 'bend', semitones });
+  }
+
+  /** Vibrato depth in cents (0 = off); the worklet runs the LFO and adds it to the bend. */
+  vibrato(cents) {
+    this._post({ type: 'vibrato', cents });
   }
 
   dispose() {

@@ -80,7 +80,9 @@ function fieldDefinitions(device) {
     {
       key: 'tilt',
       label: 'settings.tilt',
-      when: (c) => expression(c) && has('tilt'),
+      // Experiment E: tilt has no sound effect (it shifts the fret range with
+      // Back instead), so its assignment choice is hidden.
+      when: () => false,
       hint: (c) => (c.settings.tilt === 'off' ? null : `settings.tiltHint.${c.settings.tilt}`),
       options: CHOICES.tilt.map((value) => ({ value, text: t(`expression.${value}`) })),
     },
@@ -90,6 +92,13 @@ function fieldDefinitions(device) {
       when: (c) => expression(c) && (c.settings.whammy === 'bend' || c.settings.tilt === 'bend'),
       hint: () => 'settings.bendRangeHint',
       options: CHOICES.bendRange.map((value) => ({ value, text: t('unit.semitones', { value: value > 0 ? `+${value}` : String(value).replace('-', '−') }) })),
+    },
+    {
+      key: 'tiltSmoothing',
+      label: 'settings.tiltSmoothing',
+      when: (c) => expression(c) && has('tilt'),
+      hint: () => 'settings.tiltSmoothingHint',
+      options: CHOICES.tiltSmoothing.map((value) => ({ value, text: value === 0 ? t('expression.off') : t('unit.ms', { value }) })),
     },
     {
       key: 'fadeMs',
@@ -125,6 +134,17 @@ function fieldDefinitions(device) {
   return fields;
 }
 
+/**
+ * Experiment E: boolean device settings shown as checkboxes below the panel
+ * buttons. Tilt glide only where tilt exists: guitar/bass lanes of a device
+ * with a tilt control (not drums, not the keyboard's guitar keys, not a
+ * gamepad in guitar mode, which has no tilt).
+ */
+export function checkboxDefinitions(device) {
+  const hasTilt = 'tilt' in device.mapping.controls;
+  return [{ key: 'tiltGlide', label: 'settings.tiltGlide', when: (c) => c.kind === 'guitar' && hasTilt && !device.isKeyboard }];
+}
+
 export class SettingsPanel {
   /**
    * @param {object} options
@@ -153,6 +173,7 @@ export class SettingsPanel {
         <button type="button" class="button debug-button"></button>
         <button type="button" class="button reset-button"></button>
       </div>
+      <div class="panel-options"></div>
       <p class="gamepad-hint"></p>`;
     this.titleEl = this.el.querySelector('.panel-title');
     this.closeButton = this.el.querySelector('.close-button');
@@ -161,6 +182,7 @@ export class SettingsPanel {
     this.debugButton = this.el.querySelector('.debug-button');
     this.resetButton = this.el.querySelector('.reset-button');
     this.hintEl = this.el.querySelector('.gamepad-hint');
+    this.optionsEl = this.el.querySelector('.panel-options');
     this.onClose = onClose;
     this.gamepadMenu = !!gamepadMenu && !device.isKeyboard;
 
@@ -219,7 +241,10 @@ export class SettingsPanel {
       children.push(heading, ...drumFields.map((f) => this._field(f, settings, c)));
     }
     this.fieldsEl.replaceChildren(...children);
-    if (focusedKey) this.fieldsEl.querySelector(`[data-key="${focusedKey}"]`)?.focus({ preventScroll: true });
+    // Experiment E: per-device checkboxes at the very bottom of the panel.
+    this.optionsEl.replaceChildren(...checkboxDefinitions(device).filter((f) => f.when(c)).map((f) => this._checkbox(f, settings)));
+    this.optionsEl.hidden = !this.optionsEl.childElementCount;
+    if (focusedKey) this.el.querySelector(`[data-key="${focusedKey}"]`)?.focus({ preventScroll: true });
     // Gamepad menu: how to use it. Mouse-opened gamepad panel: how to get one.
     let hintKey = null;
     if (this.gamepadMenu) hintKey = kind === 'guitar' ? 'settings.gamepadHintGuitar' : 'settings.gamepadHint';
@@ -259,6 +284,22 @@ export class SettingsPanel {
       hint.textContent = t(hintKey);
       label.append(hint);
     }
+    return label;
+  }
+
+  /** Experiment E: a checkbox row for a boolean device setting (the gamepad menu toggles it with left/right). */
+  _checkbox(def, settings) {
+    const label = document.createElement('label');
+    label.className = 'field field-checkbox';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.dataset.key = def.key;
+    input.checked = settings[def.key] === true;
+    input.addEventListener('change', () => setDeviceSetting(this.device.id, def.key, input.checked));
+    const span = document.createElement('span');
+    span.className = 'field-checkbox-label';
+    span.textContent = t(def.label);
+    label.append(input, span);
     return label;
   }
 
