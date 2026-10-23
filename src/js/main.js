@@ -190,6 +190,12 @@ function openDebug(index) {
   ui.el.classList.add('debug-open');
 }
 
+/** Back in a gamepad-opened device information view: close it and reopen the settings as a gamepad menu (R2.12). */
+function backFromDebug(index) {
+  closeDebug(index);
+  toggleSettings(index, { byGamepad: true });
+}
+
 function closeDebug(index) {
   const ui = laneUis.get(index);
   if (!ui?.debug) return;
@@ -295,7 +301,13 @@ function menuInput(ui, nowMs) {
   const rotated = menuRotated(ui.device);
   for (const intent of intents) {
     // A previous intent may have closed or replaced the menu (Back, a button).
-    [ui.panel, ui.debug].find((m) => m?.gamepadMenu)?.navigate(rotated ? rotateIntent(intent) : intent);
+    const menu = [ui.panel, ui.debug].find((m) => m?.gamepadMenu);
+    if (menu && menu === ui.debug && intent === 'back') {
+      // Back in the device information view goes back to the settings (R2.12).
+      backFromDebug(ui.device.index);
+      continue;
+    }
+    menu?.navigate(rotated ? rotateIntent(intent) : intent);
   }
   return instrumentEdges(edges);
 }
