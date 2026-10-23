@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>Bass sound tests – GarageBox - Music Sandbox</title>
+    <style>
+      body { background: #0e0f12; color: #e8eaed; font: 14px/1.5 ui-monospace, monospace; padding: 16px; }
+      .pass { color: #3dd68c; }
+      .fail { color: #ff6369; }
+    </style>
+  </head>
+  <body>
+    <h1>Bass sound tests (OfflineAudioContext)</h1>
+    <p>Renders the generated bass source offline and checks level, pitch, thump, decay, mute fade, bend, voice limit and strum hold (R3.4.1, R4.7.2, design 5, 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
+    <p id="summary"></p>
+    <ul id="results"></ul>
+    <script type="module">
+      import { createSuite } from './test-runner.js';
+      import { render, rms, db, peak, frequency, brightness, timeTo60dB } from './offline-audio.js';
+
+      const s = createSuite('bass tests', { timeoutMs: 55000 });
+      const { check } = s;
+      const { BassSource } = await s.load('../src/js/audio/bass-source.js', ['BassSource']);
+      const SETUP = await s.load('../src/js/instruments/setup.js', ['DEFAULT_SOURCES', 'guitarSound', 'resolveSource']);
+      const ST = await s.load('../src/js/settings/store.js', ['DEFAULTS']);
+      const bass = (params = { decay: 10, brightness: 0.3 }) => (ctx, dest) => new BassSource(ctx, dest, params);
+      const near = (a, b, tol) => Math.abs(a - b) <= tol;
+
+      await s.section('bass is the default bass source (R3.4.1, R3.5)', () => {
+        check('DEFAULT_SOURCES.bass is "bass"', () => SETUP.DEFAULT_SOURCES.bass, 'bass');
+        check('the default settings give the bass source for the bass', () => SETUP.guitarSound({ ...ST.DEFAULTS.device }, 'bass').source, 'bass');
+        check('the guitar still defaults to the pluck source', () => SETUP.guitarSound({ ...ST.DEFAULTS.device }, 'guitar').source, 'pluck');
+      });
+
+      await s.section('bass sound (R3.4.1)', async () => {
+        const { data: ring } = await render(2, bass(), [[0, (src) => src.noteOn(1, 45, 100)]]); // A2 = 110 Hz (sub sine at 55 Hz)
+        check('a bass note is audible', rms(ring, 0.05, 0.25) > 0.02, true);
+        check('no clipping', peak(ring) <= 1, true);
+        const f = frequency(ring, 0.5, 1.5, { min: 40, max: 400 });
+        check(`pitch of A2: period of 110 Hz or its sub octave 55 Hz (measured ${f.toFixed(1)} Hz)`, near(f, 110, 3) || near(f, 55, 2), true);
+        const early = brightness(ring, 0.01, 0.06);
+        const late = brightness(ring, 0.35, 0.4);
+        check(`the thump: more high content at the start than after 0.3 s (${early.toFixed(3)} > ${late.toFixed(3)})`, early > late, true);
+
+        const { data: decaying } = await render(2, bass({ decay: 2, brightness: 0.3 }), [[0, (src) => src.noteOn(1, 45, 100)]]);
+        const t60 = timeTo60dB(decaying, 0.5, 1.5);
+        check(`natural decay: 60 dB in the ring time ±10 % (measured ${t60.toFixed(2)} s for 2 s)`, near(t60, 2, 0.2), true);
+
+        const { data: muted } = await render(1.5, bass(), [[0, (src) => src.noteOn(1, 45, 100)], [0.5, (src) => src.noteOff(1, 0.2)]]);
+        check('a muted note is silent after its fade (R4.3.1)', rms(muted, 0.75, 1.5) < 1e-4, true);
+        check('the fade is soft, not a hard cut', rms(muted, 0.6, 0.65) > rms(muted, 0.45, 0.5) * 0.1, true);
+
+        const { data: bent } = await render(1.5, bass(), [[0, (src) => { src.bend(-12); src.noteOn(1, 45, 100); }]]);
+        const fb = frequency(bent, 0.5, 1.4, { min: 20, max: 400 });
+        check(`a bend of -12 semitones halves the pitch (${f.toFixed(1)} -> ${fb.toFixed(1)} Hz)`, near(fb / f, 0.5, 0.03), true);
+
+        const limit = await render(1.2, bass(), [
+          [0, (src) => { for (let id = 1; id <= 25; id++) src.noteOn(id, 28 + id, 80); }],
+          [0.5, (src) => { for (let id = 2; id <= 25; id++) src.noteOff(id, 0.05); }],
+        ]);
+        check('voice limit 24: the 25th voice drops the oldest (silent once the other 24 are muted)', [limit.errors, rms(limit.data, 0.8, 1.2) < 1e-4], [[], true]);
+      });
+
+      await s.section('strum hold (R4.7.2)', async () => {
+        const RING = 1;
+        const held = await render(5.2, bass({ decay: RING, brightness: 0.3 }), [
+          [0, (src) => src.noteOn(1, 40, 100, { hold: true })], // E2
+          [4.1, (src) => src.holdEnd(1)],
+        ]);
+        check('the source has holdEnd(voiceId)', held.errors, []);
+        // Reference after the thump has settled (the filter sweep lasts about 0.25 s).
+        const l0 = db(held.data, 0.5, 0.55);
+        const l4 = db(held.data, 4.0, 4.05);
+        check(`a held voice keeps its level within 0.5 dB for 4 s (${l0.toFixed(1)} -> ${l4.toFixed(1)} dB)`, near(l4, l0, 0.5), true);
+        const t60 = timeTo60dB(held.data, 4.3, 5.0);
+        check(`after holdEnd it falls 60 dB in the ring time ±10 % (measured ${t60.toFixed(2)} s for ${RING} s)`, near(t60, RING, RING * 0.1), true);
+      });
+
+      s.finish();
+    </script>
+  </body>
+</html>

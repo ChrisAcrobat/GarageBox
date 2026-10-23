@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>Effects tests – GarageBox - Music Sandbox</title>
+    <style>
+      body { background: #0e0f12; color: #e8eaed; font: 14px/1.5 ui-monospace, monospace; padding: 16px; }
+      .pass { color: #3dd68c; }
+      .fail { color: #ff6369; }
+    </style>
+  </head>
+  <body>
+    <h1>Effects chain tests (OfflineAudioContext)</h1>
+    <p>Effect presets Clean, Crunch and Epic rendered offline, and where the setting is offered (R3.6, design 5, 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
+    <p id="summary"></p>
+    <ul id="results"></ul>
+    <div id="sandbox"></div>
+    <script type="module">
+      import { createSuite } from './test-runner.js';
+      import { render, rms, db, toneLevel, RATE } from './offline-audio.js';
+
+      const s = createSuite('effects tests', { timeoutMs: 55000 });
+      const { check } = s;
+      const FX = await s.load('../src/js/audio/effects.js', ['EFFECT_ORDER', 'EFFECT_PRESETS', 'EffectChain']);
+      const ST = await s.load('../src/js/settings/store.js', ['DEFAULTS']);
+      const PANEL = await s.load('../src/js/ui/settings-panel.js', ['SettingsPanel']);
+      const DET = await s.load('../src/js/input/detect.js', ['detectController']);
+      const MAP = await s.load('../src/js/input/mappings.js', ['selectMapping']);
+      const near = (a, b, tol) => Math.abs(a - b) <= tol;
+
+      /** Builds `input -> EffectChain(preset) -> destination` with a test signal feeding the input. */
+      const chainWith = (preset, signal) => (ctx, dest) => {
+        const chain = new FX.EffectChain(ctx);
+        if (preset) chain.setPreset(preset);
+        chain.output.connect(dest);
+        signal(ctx).connect(chain.input);
+        return chain;
+      };
+      const sine = (freq = 220, gain = 0.3) => (ctx) => {
+        const osc = new OscillatorNode(ctx, { frequency: freq });
+        const g = new GainNode(ctx, { gain });
+        osc.connect(g);
+        osc.start(0);
+        return g;
+      };
+      const burst = (ctx) => {
+        const buf = ctx.createBuffer(1, Math.floor(0.01 * RATE), RATE);
+        const ch = buf.getChannelData(0);
+        for (let i = 0; i < ch.length; i++) ch[i] = Math.sin((2 * Math.PI * 440 * i) / RATE) * 0.5;
+        const src = new AudioBufferSourceNode(ctx, { buffer: buf });
+        src.start(0);
+        return src;
+      };
+
+      await s.section('presets (R3.6, design 5)', () => {
+        check('EFFECT_ORDER is clean, crunch, epic', () => [...FX.EFFECT_ORDER], ['clean', 'crunch', 'epic']);
+        check('EFFECT_PRESETS has the three presets', () => Object.keys(FX.EFFECT_PRESETS).sort(), ['clean', 'crunch', 'epic']);
+        check('the effect setting defaults to clean', () => ST.DEFAULTS.device.effect, 'clean');
+        const ctx = new OfflineAudioContext(1, RATE, RATE);
+        const chain = new FX.EffectChain(ctx);
+        check('a new chain is clean and adds nothing', () => [chain.preset, chain.kinds()], ['clean', []]);
+        check('crunch: drive, cabinet, reverb (no echo)', () => (chain.setPreset('crunch'), chain.kinds()), ['drive', 'cabinet', 'reverb']);
+        check('epic: drive, cabinet, echo, reverb', () => (chain.setPreset('epic'), chain.kinds()), ['drive', 'cabinet', 'echo', 'reverb']);
+        check('back to clean adds nothing again', () => (chain.setPreset('clean'), chain.kinds()), []);
+      });
+
+      await s.section('rendered chain', async () => {
+        const clean = await render(1, chainWith('clean', sine()));
+        const crunch = await render(1, chainWith('crunch', sine()));
+        const epic = await render(1, chainWith('epic', sine()));
+        const input = 20 * Math.log10(0.3 / Math.SQRT2);
+        check(`clean passes the signal unchanged (level ${db(clean.data, 0.2, 0.8).toFixed(1)} dB, input ${input.toFixed(1)} dB)`, near(db(clean.data, 0.2, 0.8), input, 0.5), true);
+        const third = (d) => toneLevel(d, 0.2, 0.8, 660) / toneLevel(d, 0.2, 0.8, 220);
+        check(`clean adds no harmonics (3rd/1st ${third(clean.data).toFixed(4)})`, third(clean.data) < 0.001, true);
+        check(`crunch and epic add harmonics (drive; 3rd/1st ${third(crunch.data).toFixed(3)}, ${third(epic.data).toFixed(3)})`, [third(crunch.data) > 0.03, third(epic.data) > third(crunch.data)], [true, true]);
+        check(`level match: crunch and epic within 6 dB of clean (${db(crunch.data, 0.2, 0.8).toFixed(1)}, ${db(epic.data, 0.2, 0.8).toFixed(1)} dB)`, () => [near(db(crunch.data, 0.2, 0.8), db(clean.data, 0.2, 0.8), 6), near(db(epic.data, 0.2, 0.8), db(clean.data, 0.2, 0.8), 6)], [true, true]);
+
+        const cleanBurst = await render(1.2, chainWith('clean', burst));
+        const crunchBurst = await render(1.2, chainWith('crunch', burst));
+        const epicBurst = await render(1.2, chainWith('epic', burst));
+        check('clean: no tail after a short burst', rms(cleanBurst.data, 0.1, 0.3) < 1e-5, true);
+        check('crunch: a reverb tail after a short burst', rms(crunchBurst.data, 0.1, 0.3) > 1e-4, true);
+        check('epic: an echo about 375 ms after the burst', rms(epicBurst.data, 0.37, 0.4) > rms(epicBurst.data, 0.32, 0.35) * 1.2, true);
+        check('crunch: no echo', rms(crunchBurst.data, 0.37, 0.4) <= rms(crunchBurst.data, 0.32, 0.35) * 1.1, true);
+        check('epic reverb lasts longer than crunch reverb', rms(epicBurst.data, 0.9, 1.1) > rms(crunchBurst.data, 0.9, 1.1), true);
+
+        const switched = await render(1, chainWith('clean', sine()), [[0.5, (chain) => chain.setPreset('crunch')]]);
+        check('switching preset keeps ringing notes (sound continues, no error)', [switched.errors, rms(switched.data, 0.6, 0.9) > 0.01], [[], true]);
+      });
+
+      await s.section('the effect field is offered for every instrument except drums', async () => {
+        const box = document.getElementById('sandbox');
+        const name = 'RedOctane Inc(c)2006  Guitar Hero X-plorer   (STANDARD GAMEPAD Vendor: 1430 Product: 4748)';
+        const detection = DET.detectController(name);
+        const device = { id: 'device:guitar:1', settingsId: 'device:guitar:1', index: 0, detection, mapping: MAP.selectMapping(detection.type, 'standard') };
+        const keyboard = { id: 'computer-keyboard', settingsId: 'computer-keyboard', index: 0, isKeyboard: true, detection: { type: 'keyboard', source: 'none' }, mapping: { name: 'keyboard', controls: {} } };
+        const shown = (dev, kind, instrument) => s.withCleanStorage(() => {
+          const p = new PANEL.SettingsPanel({ container: box, device: dev, getInstrument: () => ({ kind, instrument }), onClose: () => {}, onOpenDebug: () => {}, focus: false });
+          try { return !!p.el.querySelector('[data-key="effect"]:not([hidden])') && !p.el.querySelector('[data-key="effect"]').closest('[hidden]'); } finally { p.destroy(); }
+        });
+        const result = [await shown(device, 'guitar', 'guitar'), await shown(device, 'guitar', 'bass'), await shown(keyboard, 'keys', 'keys'), await shown(device, 'drums', 'drums')];
+        check('guitar, bass, keyboard: shown; drums: hidden', result, [true, true, true, false]);
+      });
+
+      s.finish();
+    </script>
+  </body>
+</html>

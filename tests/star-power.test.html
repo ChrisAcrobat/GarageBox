@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>Star power tests – GarageBox - Music Sandbox</title>
+    <style>
+      body { background: #0e0f12; color: #e8eaed; font: 14px/1.5 ui-monospace, monospace; padding: 16px; }
+      .pass { color: #3dd68c; }
+      .fail { color: #ff6369; }
+    </style>
+  </head>
+  <body>
+    <h1>Star power logic tests</h1>
+    <p>Star power trigger, countdown and setting through the lane instrument (R5.5, F11, design 6, 9.2). See <a href="./README.md">tests/README.md</a> for how to run the pages.</p>
+    <p id="summary"></p>
+    <ul id="results"></ul>
+    <script type="module">
+      import { createSuite, edge } from './test-runner.js';
+
+      const s = createSuite('star power tests');
+      const { check } = s;
+      const SETUP = await s.load('../src/js/instruments/setup.js', ['createInstrument']);
+      const DET = await s.load('../src/js/input/detect.js', ['detectController']);
+      const MAP = await s.load('../src/js/input/mappings.js', ['selectMapping']);
+      const ST = await s.load('../src/js/settings/store.js', ['DEFAULTS']);
+      await s.load('../src/js/visual/star-power.js', []);
+
+      const XPLORER = 'RedOctane Inc(c)2006  Guitar Hero X-plorer   (STANDARD GAMEPAD Vendor: 1430 Product: 4748)';
+      const PAD = 'Xbox 360 Controller (XInput STANDARD GAMEPAD)';
+      const device = (name, id) => { const detection = DET.detectController(name); return { id, settingsId: id, index: 0, detection, mapping: MAP.selectMapping(detection.type, 'standard') }; };
+      const settings = (extra = {}) => ({ ...ST.DEFAULTS.device, ...extra });
+      /** Builds the lane's instrument the way main.js does (setup.js), so the device's whammy/tilt and the setting count. */
+      const lane = (name = XPLORER, instrument = 'guitar', extra = {}) => SETUP.createInstrument(device(name, name === PAD ? 'device:gamepad:1' : 'device:guitar:1'), instrument, settings(extra)).instrument;
+      // Controls of one frame: whammy deflection, tilt on/off (pressed = mapped >= 0.9).
+      const ctl = (whammy, tiltValue) => ({ whammy: { value: whammy, pressed: whammy > 0.5 }, tilt: { value: tiltValue, pressed: tiltValue >= 0.9 } });
+      const stars = (events) => events.filter((e) => e.type === 'starPower').map((e) => (e.on ? 'on' : 'off'));
+      /** Runs frames every `dt` s from t0 to t1 with constant controls; returns "on@t"/"off@t" strings. */
+      function run(g, from, to, whammy, tiltValue, dt = 0.1) {
+        const out = [];
+        for (let i = 0; from + i * dt < to - 1e-9; i++) {
+          const t = Math.round((from + i * dt) * 1000) / 1000;
+          for (const e of g.handle([], ctl(whammy, tiltValue), t)) if (e.type === 'starPower') out.push(`${e.on ? 'on' : 'off'}@${t}`);
+        }
+        return out;
+      }
+
+      await s.section('start condition (R5.5)', () => {
+        check('the setting starPower defaults to on', () => ST.DEFAULTS.device.starPower, true);
+        check('tilt pressed and whammy >= 0.95 in the same frame starts it', () => stars(lane().handle([], ctl(0.95, 1), 0)), ['on']);
+        check('the event is { type, on, time } only (no countdown in it)', () => Object.keys(lane().handle([], ctl(1, 1), 0).find((e) => e.type === 'starPower') || {}).sort(), ['on', 'time', 'type']);
+        check('tilt pressed alone: nothing', () => run(lane(), 0, 2, 0, 1), []);
+        check('whammy fully pressed alone: nothing', () => run(lane(), 0, 2, 1, 0), []);
+        check('whammy 0.94 with tilt pressed: nothing', () => run(lane(), 0, 1, 0.94, 1), []);
+        check('tilt 0.85 (not pressed) with whammy 1: nothing', () => run(lane(), 0, 1, 1, 0.85), []);
+        check('tilt and whammy in different frames: nothing', () => { const g = lane(); return [...run(g, 0, 0.5, 1, 0), ...run(g, 0.5, 1, 0, 1)]; }, []);
+      });
+
+      await s.section('only on devices with whammy and tilt, independent of assignments', () => {
+        check('a gamepad (no whammy, no tilt) never starts it', () => run(lane(PAD), 0, 1, 1, 1), []);
+        check('the Xplorer playing bass starts it', () => stars(lane(XPLORER, 'bass').handle([], ctl(1, 1), 0)), ['on']);
+        check('whammy set to volume: still starts', () => stars(lane(XPLORER, 'guitar', { whammy: 'volume' }).handle([], ctl(1, 1), 0)), ['on']);
+        check('whammy set to off: still starts', () => stars(lane(XPLORER, 'guitar', { whammy: 'off' }).handle([], ctl(1, 1), 0)), ['on']);
+        check('with tilt range shifting on (Back tapped): still starts', () => {
+          const g = lane();
+          g.handle([edge('back')], ctl(0, 0), 0);
+          g.handle([edge('back', 'released')], ctl(0, 0), 0.1);
+          return stars(g.handle([], ctl(1, 1), 0.2));
+        }, ['on']);
+        check('the setting turned off: never starts', () => run(lane(XPLORER, 'guitar', { starPower: false }), 0, 1, 1, 1), []);
+        check('starting it plays no sound (no noteOn/noteOff/bend change from it)', () => {
+          const g = lane(XPLORER, 'guitar', { whammy: 'off' });
+          return g.handle([], ctl(1, 1), 0).filter((e) => ['noteOn', 'noteOff', 'holdEnd', 'glide'].includes(e.type)).length;
+        }, 0);
+      });
+
+      await s.section('staying on and the 8 s countdown', () => {
+        let g = lane();
+        check('starts at 0', () => run(g, 0, 0.1, 1, 1), ['on@0']);
+        check('stays on while tilt is pressed, whammy released (20 s)', () => run(g, 0.1, 20, 0, 1), []);
+        check('tilt released at 20: still on 7.9 s later', () => run(g, 20, 28, 0, 0), []);
+        check('ends 8 s after the release', () => run(g, 28, 28.1, 0, 0), ['off@28']);
+        check('after the end, tilt pressed alone does not restart it', () => run(g, 28.1, 30, 0, 1), []);
+        check('the start trigger restarts it', () => run(g, 30, 30.1, 1, 1), ['on@30']);
+        g = lane();
+        run(g, 0, 1, 1, 1);
+        run(g, 1, 5, 0, 0); // countdown from 1 s
+        check('pressing tilt again before the end cancels the countdown', () => run(g, 5, 15, 0, 1), []);
+        check('releasing again restarts it from 8 s', () => [run(g, 15, 22.9, 0, 0), run(g, 22.9, 23.1, 0, 0)], [[], ['off@23']]);
+      });
+
+      s.finish();
+    </script>
+  </body>
+</html>
