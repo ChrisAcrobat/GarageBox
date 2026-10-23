@@ -228,6 +228,7 @@ Status: draft, under discussion.
   - F17.3 Strum speed: a per-device number setting (R2.9.1), *Strum time*, the time the strum takes from the first to the last string, in ms. First guess: range 0–500 ms, step 5, default 30 ms (Q7). It has a short plain-language hint like the mute fade-out (R4.3.1). At 0 all notes start at once, as today; whether the line then just flashes or is not shown at all is to be tried on the real guitar (Q5).
   - F17.4 D-pad: owner idea: D-pad left/right on the guitar change the strum speed, left slower, right faster, in steps of e.g. 10 ms within the range of F17.3, with a lane message like "Strum: 30 ms". Since D-pad left/right already do the D-pad action (R4.15, default: shift range one octave), this would be a new choice *Change strum speed* for that setting, not a replacement of the octave shift, unless the owner decides otherwise (Q6).
   - F17.5 Interactions: a new strum while a strum is still passing (R4.4) drops the notes the old strum has not reached yet and starts the new strum from its own first note. Strum hold (R4.7.2) works as today, from each note's own start. Muting a fret (R4.3) before the strum has reached it means it is not played by that strum.
+- F18 A better bass sound (R3.4.1): the generated bass sound passed the owner's hardware test (2026-10-24), but he sees room for improvement, e.g. a more realistic attack and tone; to be worked out with the owner when this item is started, possibly with a visual/audio experiment page first.
 
 ## Open questions
 
