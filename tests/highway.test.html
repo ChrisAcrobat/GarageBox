@@ -110,8 +110,11 @@
       });
 
       await s.section('trail width follows the bend (R5.4.5)', () => {
-        check('no bend = normal width; -1 = 75 %; full whammy -2 = 50 %; +2 = 150 %', [0, -1, -2, 2].map(HV.bendWidth), [1, 0.75, 0.5, 1.5]);
-        check('clamped to 50 % .. 150 %', [-4, 4].map(HV.bendWidth), [0.5, 1.5]);
+        const r = (x) => Math.round(x * 1000) / 1000;
+        check('bend range -2: no bend = 100 %; half whammy -1 = 55 %; full whammy -2 = 10 %', [0, -1, -2].map((b) => r(HV.bendWidth(b, -2))), [1, 0.55, 0.1]);
+        check('beyond the bend range stays at 10 %', r(HV.bendWidth(-4, -2)), 0.1);
+        check('bend range +2: full whammy +2 = 150 %, half = 125 %', [2, 1].map((b) => r(HV.bendWidth(b, 2))), [1.5, 1.25]);
+        check('bend range 0 = normal width', r(HV.bendWidth(0, 0)), 1);
       });
 
       // ---- drawing runs without errors on a real canvas ---------------------
