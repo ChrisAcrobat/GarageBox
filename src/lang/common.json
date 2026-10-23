@@ -139,5 +139,6 @@
   "gm.124": "Telephone Ring",
   "gm.125": "Helicopter",
   "gm.126": "Applause",
-  "gm.127": "Gunshot"
+  "gm.127": "Gunshot",
+  "notes.names": ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 }

@@ -1,11 +1,24 @@
 // Music theory helpers (design 4.2): note names, scales and MIDI note numbers.
 //
 // MIDI note numbers: 60 = middle C (C4), 69 = A4 (440 Hz). Note names use the
-// international letters C D E F G A B with sharps (#); they are the same in
-// every UI language (lang/common.json does not need them).
+// international letters C D E F G A B with sharps (#) unless the UI sets the
+// active list with setNoteNames() (the "Note names" setting, R6.3; the lists
+// live in lang/common.json and the language files).
 
-/** Pitch-class names, index 0 = C. */
+/** International pitch-class names, index 0 = C. */
 export const NOTE_NAMES = Object.freeze(['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']);
+
+let activeNames = NOTE_NAMES;
+
+/** Sets the active note names (12 strings, index 0 = C); anything else restores the international names. */
+export function setNoteNames(list) {
+  activeNames = Array.isArray(list) && list.length === 12 ? Object.freeze([...list]) : NOTE_NAMES;
+}
+
+/** The active note names. */
+export function activeNoteNames() {
+  return activeNames;
+}
 
 /**
  * Scales as semitone steps from the root. The five fret buttons play the first
@@ -22,13 +35,13 @@ export const SCALES = Object.freeze({
 /** "E3" for 52, "C#4" for 61. */
 export function noteName(midi) {
   const m = Math.round(midi);
-  return `${NOTE_NAMES[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`;
+  return `${activeNames[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`;
 }
 
 /** Pitch-class name without octave, e.g. "E" for 52. */
 export function pitchClassName(midi) {
   const m = Math.round(midi);
-  return NOTE_NAMES[((m % 12) + 12) % 12];
+  return activeNames[((m % 12) + 12) % 12];
 }
 
 /** Frequency in Hz of a (possibly fractional) MIDI note number. */

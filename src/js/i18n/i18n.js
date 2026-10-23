@@ -9,6 +9,8 @@ const LANG_DIR = new URL('../../lang/', import.meta.url);
 /** Languages with a lang/<code>.json file. The first one is the fallback. */
 export const SUPPORTED_LANGUAGES = Object.freeze(['en', 'sv']);
 const FALLBACK = SUPPORTED_LANGUAGES[0];
+/** Used only if common.json could not be loaded. */
+const DEFAULT_NOTE_NAMES = Object.freeze(['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']);
 
 let common = {};
 let fallback = {};
@@ -88,6 +90,32 @@ export function t(key, params) {
     text = text.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match));
   }
   return text;
+}
+
+/** The international note names (R6.3): the list `notes.names` in common.json. */
+export function internationalNoteNames() {
+  const list = common['notes.names'];
+  return Array.isArray(list) && list.length === 12 ? list : DEFAULT_NOTE_NAMES;
+}
+
+/** The current language's note names, or null when it has no list of its own (R6.3). */
+export function languageNoteNames() {
+  const list = current['notes.names'];
+  return Array.isArray(list) && list.length === 12 ? list : null;
+}
+
+/** True when the current language's note names differ from the international ones (the "Note names" select is shown). */
+export function hasLanguageNoteNames() {
+  const own = languageNoteNames();
+  return !!own && own.some((name, i) => name !== internationalNoteNames()[i]);
+}
+
+/**
+ * The active note names for the `noteNames` setting ('international' or
+ * 'language'). 'language' has no effect in a language without its own list.
+ */
+export function noteNameList(choice) {
+  return (choice === 'language' && languageNoteNames()) || internationalNoteNames();
 }
 
 /**
