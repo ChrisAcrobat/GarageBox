@@ -15,7 +15,7 @@
 // passed in with setAudioContext(context, destination) instead, so audio
 // starts with the same click as everything else (design 5, 7.1).
 //
-// Experiment E, tilt glide: the guitar sends a per-voice pitch offset
+// Tilt glide (R4.14): the guitar sends a per-voice pitch offset
 // ('glide' events, and `glide` on noteOn). It is NOT sent as MIDI pitch bend
 // (that is one value per channel and limited to the bend range, while a chord
 // glides by different amounts per string and the offset can be several
@@ -27,8 +27,6 @@
 
 const SCRIPT_URL = new URL('../../vendor/webaudio-tinysynth/webaudio-tinysynth.js', import.meta.url);
 const DRUM_CHANNEL = 9;
-/** Vibrato rate (experiment B); the synth's own modulation LFO is set to this. */
-const VIBRATO_RATE_HZ = 5.5;
 
 let scriptPromise = null;
 let EmbeddedSynth = null;
@@ -100,10 +98,9 @@ export class MidiSource {
     this.synth = null;
     this.queue = [];
     this.voices = new Map(); // voiceId -> MIDI note
-    // Experiment E: voiceId -> { nt (the synth's note entry), cents (glide) },
+    // Tilt glide: voiceId -> { nt (the synth's note entry), cents (glide) },
     // kept through the release tail until the synth drops the note.
     this.glides = new Map();
-    this.vibratoCents = 0;
     this.disposed = false;
     this.ready = loadTinySynth()
       .then(() => {
@@ -149,7 +146,7 @@ export class MidiSource {
     this._do(() => {
       this.synth.send(msg);
       if (this.params.drums) return;
-      // Experiment E: remember the synth's note entry for per-voice detune.
+      // Tilt glide: remember the synth's note entry for per-voice detune.
       this._pruneGlides();
       const tab = this.synth.notetab || [];
       const nt = tab[tab.length - 1];
@@ -180,7 +177,7 @@ export class MidiSource {
     const range = Math.max(1, Math.abs(this.params.bendRange));
     const value = Math.max(0, Math.min(16383, Math.round(8192 + (8192 * semitones) / range)));
     this._send([0xe0 | this.channel, value & 127, value >> 7]);
-    // Experiment E: the synth set every note's detune to the channel bend; add the glides again.
+    // The synth set every note's detune to the channel bend; add the glides again.
     this._do(() => {
       if (!this.glides.size) return;
       this._pruneGlides();
@@ -188,7 +185,7 @@ export class MidiSource {
     });
   }
 
-  /** Experiment E (tilt glide): one voice's pitch offset in semitones, on top of the bend. */
+  /** Tilt glide (R4.14): one voice's pitch offset in semitones, on top of the bend. */
   glide(voiceId, semitones) {
     if (this.params.drums) return;
     this._do(() => {
@@ -227,32 +224,13 @@ export class MidiSource {
   }
 
   /**
-   * Vibrato depth in cents (0 = off). Uses the synth's built-in modulation
-   * path: one sine LFO per synth instance -> a gain node per channel -> the
-   * detune of every oscillator of that channel (also notes started later).
-   * The bend sets the detune value itself, so the two add up in cents. The
-   * depth is ramped (setTargetAtTime) to avoid zipper noise.
+   * Strum hold (R4.7.2) has no effect on the MIDI source: a note lasts until
+   * its noteOff or its program's own envelope (R4.7.1).
    */
-  vibrato(cents) {
-    if (this.params.drums) return;
-    this.vibratoCents = Math.max(0, Number(cents) || 0);
-    this._do(() => {
-      const s = this.synth;
-      if (s.lfo) s.lfo.frequency.value = VIBRATO_RATE_HZ;
-      const g = s.chmod?.[this.channel]?.gain;
-      if (g) g.setTargetAtTime(this.vibratoCents, this.context.currentTime, 0.03);
-    });
-  }
+  holdEnd() {}
 
   dispose() {
     this.disposed = true;
-    if (this.synth && this.vibratoCents) {
-      const g = this.synth.chmod?.[this.channel]?.gain;
-      if (g) {
-        g.cancelScheduledValues(0);
-        g.value = 0;
-      }
-    }
     this.glides.clear();
     if (this.synth) returnSynth(this.context, this.synth, this.destination);
     this.synth = null;
