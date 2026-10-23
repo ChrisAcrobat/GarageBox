@@ -7,18 +7,31 @@
     <style>
       body { background: #0e0f12; color: #e8eaed; font: 14px/1.6 system-ui, sans-serif; padding: 16px; }
       a { color: #3e8ef7; }
+      code { color: #c9d1d9; }
     </style>
   </head>
   <body>
     <h1>GarageBox - Music Sandbox tests</h1>
-    <p>Serve the repository folder (e.g. <code>python3 -m http.server</code>) and open each page. A page's title starts with PASS or FAIL.</p>
+    <p>
+      Developer pages, not part of the app (design 9.2). A page's title starts with PASS or FAIL when it is done.
+      Browsers do not load ES modules from <code>file://</code>, so for these pages serve the repository folder
+      (e.g. <code>python3 -m http.server</code>) and open <code>/tests/</code>, or run them all headless with
+      <code>node tests/run-headless.mjs</code>. See <a href="./README.md">tests/README.md</a>.
+    </p>
+    <h2>Logic</h2>
     <ul>
-      <li><a href="detect.test.html">Controller detection and mappings</a></li>
-      <li><a href="guitar.test.html">Guitar logic</a> (R4, R2.10)</li>
+      <li><a href="detect.test.html">Controller detection, mappings and settings keys</a> (R2.5 – R2.7)</li>
+      <li><a href="guitar.test.html">Guitar logic</a> (R4, R4.5.2 – R4.5.7, R4.7, R4.7.2, R4.11 – R4.11.3, R4.13 – R4.15, R5.4.2, R5.7, R5.8)</li>
       <li><a href="drums.test.html">Drum logic</a> (R4b)</li>
-      <li><a href="menu-nav.test.html">Gamepad menu navigation</a> (design 7.4)</li>
-      <li><a href="keys.test.html">Keys logic and keyboard input</a> (R4c)</li>
-      <li><a href="pluck.test.html">Plucked string sound</a> (offline render of the AudioWorklet)</li>
+      <li><a href="keys.test.html">Keys logic, keyboard drums and keyboard input</a> (R4c, R4c.12 – R4c.15)</li>
+      <li><a href="menu-nav.test.html">Gamepad menu navigation and settings panel fields</a> (R2.9, R2.12, R4.7.1, R4.14, design 7.2, 7.4)</li>
+      <li><a href="star-power.test.html">Star power trigger and countdown</a> (R5.5, F11)</li>
+    </ul>
+    <h2>Sound (offline rendering)</h2>
+    <ul>
+      <li><a href="pluck.test.html">Plucked string</a> (R3.4, R4.7.2)</li>
+      <li><a href="bass.test.html">Bass source</a> (R3.4.1, R4.7.2)</li>
+      <li><a href="effects.test.html">Effects chain</a> (R3.6)</li>
     </ul>
   </body>
 </html>
