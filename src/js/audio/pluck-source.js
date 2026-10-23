@@ -55,7 +55,10 @@ export class PluckSource {
     Object.assign(this.params, params);
   }
 
-  /** `event.glide` (experiment E): start the voice that many semitones away from midi. */
+  /**
+   * `event.glide` (R4.14): start the voice that many semitones away from midi.
+   * `event.hold` (R4.7.2): the voice stays at full level until holdEnd().
+   */
   noteOn(voiceId, midi, velocity, event) {
     this._post({
       type: 'noteOn',
@@ -65,10 +68,16 @@ export class PluckSource {
       decay: this.params.decay,
       brightness: this.params.brightness,
       ...(event?.glide ? { glide: event.glide } : {}),
+      ...(event?.hold ? { hold: true } : {}),
     });
   }
 
-  /** Experiment E (tilt glide): one voice's pitch offset in semitones, on top of the bend. */
+  /** Strum hold released (R4.7.2): the voice starts its ring-time decay now. */
+  holdEnd(voiceId) {
+    this._post({ type: 'holdEnd', id: voiceId });
+  }
+
+  /** Tilt glide (R4.14): one voice's pitch offset in semitones, on top of the bend. */
   glide(voiceId, semitones) {
     this._post({ type: 'glide', id: voiceId, semitones });
   }
@@ -83,11 +92,6 @@ export class PluckSource {
 
   bend(semitones) {
     this._post({ type: 'bend', semitones });
-  }
-
-  /** Vibrato depth in cents (0 = off); the worklet runs the LFO and adds it to the bend. */
-  vibrato(cents) {
-    this._post({ type: 'vibrato', cents });
   }
 
   dispose() {

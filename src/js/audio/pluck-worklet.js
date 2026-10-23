@@ -11,31 +11,39 @@
 //
 // Messages from the main thread (pluck-source.js):
 //   { type: 'noteOn', id, frequency, velocity (0..1), decay (s to -60 dB), brightness (0..1),
-//     glide (semitones, optional) }
-//   { type: 'glide', id, semitones }   experiment E: one voice's pitch offset
-//                                      (tilt glide), smoothed over ~15 ms;
-//                                      multiplied with the bend/vibrato ratio
+//     glide (semitones, optional), hold (optional) }
+//   { type: 'glide', id, semitones }   tilt glide (R4.14): one voice's pitch offset,
+//                                      smoothed over ~15 ms; multiplied with the bend ratio
+//   { type: 'holdEnd', id }            strum hold (R4.7.2): the held voice starts its decay
 //   { type: 'noteOff', id, fade }      linear fade to silence over `fade` s (R4.3.1)
 //   { type: 'allOff', fade }
 //   { type: 'bend', semitones }        applies to all voices, smoothed over ~10 ms
-//   { type: 'vibrato', cents }         sine LFO (VIBRATO_RATE_HZ) on the pitch of all
-//                                      voices, depth ± cents, smoothed over ~30 ms;
-//                                      multiplied with the bend ratio (adds in cents)
 // The processor posts { type: 'ended', id } when a voice has gone silent.
+//
+// Strum hold (R4.7.2, design 5): a voice started with `hold` runs with loop
+// gain 1 (no ring-time loss; only the loop low-pass takes energy) and a
+// make-up gain that keeps its output at its level between 50 and 100 ms
+// (HOLD_REFERENCE_START, HOLD_REFERENCE_SECONDS), at most x4 (MAX_MAKEUP). On holdEnd the make-up
+// freezes and the ring-time loop gain applies again, so the note falls 60 dB
+// in the ring time from the level it had at the release.
 
 const BUFFER_SIZE = 8192; // power of two; enough for ~6 Hz at 48 kHz
 const MASK = BUFFER_SIZE - 1;
 const MAX_VOICES = 24;
 const SILENCE = 1e-4;
 const OUTPUT_GAIN = 1.2; // about as loud as the MIDI guitar at the same velocity
-const VIBRATO_RATE_HZ = 5.5;
-const CENTS_TO_LN = Math.LN2 / 1200;
+// The reference level of a held voice is its RMS from HOLD_REFERENCE_START for
+// HOLD_REFERENCE_SECONDS, i.e. after the bright attack has died down.
+const HOLD_REFERENCE_START = 0.05;
+const HOLD_REFERENCE_SECONDS = 0.05;
+const HOLD_FOLLOW_SECONDS = 0.02; // smoothing of the level follower and the make-up gain
+const MAX_MAKEUP = 4; // +12 dB
 
 class StringVoice {
-  constructor(id, frequency, velocity, decay, brightness, bendRatio, sampleRate, glideSemitones = 0) {
+  constructor(id, frequency, velocity, decay, brightness, bendRatio, sampleRate, glideSemitones = 0, hold = false) {
     this.id = id;
     this.frequency = frequency;
-    // Experiment E: per-voice glide ratio (1 = none), smoothed towards the target.
+    // Tilt glide (R4.14): per-voice glide ratio (1 = none), smoothed towards the target.
     this.glide = Math.pow(2, (glideSemitones || 0) / 12);
     this.glideTarget = this.glide;
     this.decay = Math.max(0.1, decay);
@@ -47,6 +55,15 @@ class StringVoice {
     this.fadeStep = 0;
     this.quietBlocks = 0;
     this.done = false;
+    // Strum hold: held flag, make-up gain, reference level measurement.
+    this.held = !!hold;
+    this.makeup = 1;
+    this.refStart = Math.round(HOLD_REFERENCE_START * sampleRate);
+    this.refEnd = this.refStart + Math.round(HOLD_REFERENCE_SECONDS * sampleRate);
+    this.age = 0; // samples rendered
+    this.refSum = 0; // sum of squares over the reference window
+    this.ref = 0; // reference RMS (0 = not measured yet)
+    this.meanSquare = 0; // running mean square (one-pole, HOLD_FOLLOW_SECONDS)
 
     // Excitation: noise, low-passed more for darker sounds, written as one period.
     const period = sampleRate / (frequency * bendRatio * this.glide);
@@ -84,9 +101,11 @@ class StringVoice {
     let peak = 0;
     const c = this.c;
     // Loop gain per period so that the level falls 60 dB in `decay` seconds
-    // (computed once per block; the bend changes slowly).
-    const g = Math.pow(0.001, 1 / (this.decay * this.frequency * bendRatios[0] * this.glide));
+    // (computed once per block; the bend changes slowly). A held voice does
+    // not lose energy through the loop gain.
+    const g = this.held ? 1 : Math.pow(0.001, 1 / (this.decay * this.frequency * bendRatios[0] * this.glide));
     const kg = 1 - Math.exp(-1 / (0.015 * sampleRate));
+    const kh = 1 - Math.exp(-1 / (HOLD_FOLLOW_SECONDS * sampleRate));
     for (let n = 0; n < out.length; n++) {
       if (this.glide !== this.glideTarget) {
         this.glide += (this.glideTarget - this.glide) * kg;
@@ -98,7 +117,8 @@ class StringVoice {
       const y = g * ((1 - c) * this.read(pos) + c * this.read(pos - 1));
       this.buf[this.w & MASK] = y;
       this.w++;
-      const s = y * this.amp;
+      if (this.held) this._followHold(y, kh);
+      const s = y * this.amp * this.makeup;
       out[n] += s;
       const abs = s < 0 ? -s : s;
       if (abs > peak) peak = abs;
@@ -117,6 +137,32 @@ class StringVoice {
     }
   }
 
+  /**
+   * While held: measures the reference level over the first
+   * HOLD_REFERENCE_SECONDS, then moves the make-up gain towards
+   * reference / current RMS (1 .. MAX_MAKEUP).
+   */
+  _followHold(y, k) {
+    const sq = y * y;
+    if (this.age < this.refEnd) {
+      if (this.age >= this.refStart) this.refSum += sq;
+      if (++this.age === this.refEnd) {
+        this.ref = Math.sqrt(this.refSum / (this.refEnd - this.refStart));
+        this.meanSquare = this.ref * this.ref;
+      }
+      return;
+    }
+    this.meanSquare += (sq - this.meanSquare) * k;
+    const level = Math.sqrt(this.meanSquare);
+    const target = level > 0 ? Math.max(1, Math.min(MAX_MAKEUP, this.ref / level)) : MAX_MAKEUP;
+    this.makeup += (target - this.makeup) * k;
+  }
+
+  /** Ends the strum hold: the make-up gain freezes and the ring-time decay starts. */
+  endHold() {
+    this.held = false;
+  }
+
   fadeOut(seconds, sampleRate) {
     const samples = Math.max(1, seconds * sampleRate);
     this.fadeStep = Math.max(this.fadeStep, this.amp / samples);
@@ -130,9 +176,6 @@ class PluckProcessor extends AudioWorkletProcessor {
     this.bendTarget = 1;
     this.bend = 1;
     this.bendRatios = new Float32Array(128);
-    this.vibratoTarget = 0; // cents
-    this.vibrato = 0; // smoothed depth in cents
-    this.lfoPhase = 0; // radians
     this.dcX = 0;
     this.dcY = 0;
     this.port.onmessage = (e) => this.onMessage(e.data);
@@ -146,7 +189,17 @@ class PluckProcessor extends AudioWorkletProcessor {
           this.port.postMessage({ type: 'ended', id: oldest.id });
         }
         this.voices.push(
-          new StringVoice(msg.id, msg.frequency, msg.velocity, msg.decay, msg.brightness, this.bendRatios[0] || this.bend, sampleRate, msg.glide),
+          new StringVoice(
+            msg.id,
+            msg.frequency,
+            msg.velocity,
+            msg.decay,
+            msg.brightness,
+            this.bendRatios[0] || this.bend,
+            sampleRate,
+            msg.glide,
+            msg.hold,
+          ),
         );
         break;
       }
@@ -158,6 +211,11 @@ class PluckProcessor extends AudioWorkletProcessor {
       case 'allOff':
         for (const v of this.voices) v.fadeOut(msg.fade, sampleRate);
         break;
+      case 'holdEnd': {
+        const v = this.voices.find((x) => x.id === msg.id);
+        if (v) v.endHold();
+        break;
+      }
       case 'glide': {
         const v = this.voices.find((x) => x.id === msg.id);
         if (v) v.glideTarget = Math.pow(2, (Number(msg.semitones) || 0) / 12);
@@ -165,9 +223,6 @@ class PluckProcessor extends AudioWorkletProcessor {
       }
       case 'bend':
         this.bendTarget = Math.pow(2, msg.semitones / 12);
-        break;
-      case 'vibrato':
-        this.vibratoTarget = Math.max(0, Number(msg.cents) || 0);
         break;
       default:
         break;
@@ -180,17 +235,9 @@ class PluckProcessor extends AudioWorkletProcessor {
     if (this.bendRatios.length !== out.length) this.bendRatios = new Float32Array(out.length);
     // Smooth pitch bend over ~10 ms to avoid zipper noise.
     const k = 1 - Math.exp(-1 / (0.01 * sampleRate));
-    // Vibrato depth is smoothed over ~30 ms so whammy steps do not click.
-    const kv = 1 - Math.exp(-1 / (0.03 * sampleRate));
-    const dPhase = (2 * Math.PI * VIBRATO_RATE_HZ) / sampleRate;
     for (let n = 0; n < out.length; n++) {
       this.bend += (this.bendTarget - this.bend) * k;
-      this.vibrato += (this.vibratoTarget - this.vibrato) * kv;
-      this.lfoPhase += dPhase;
-      if (this.lfoPhase > 2 * Math.PI) this.lfoPhase -= 2 * Math.PI;
-      // Bend and vibrato combine additively in cents (ratios multiply).
-      this.bendRatios[n] =
-        this.vibrato > 1e-3 ? this.bend * Math.exp(this.vibrato * CENTS_TO_LN * Math.sin(this.lfoPhase)) : this.bend;
+      this.bendRatios[n] = this.bend;
     }
     if (!this.voices.length) return true;
     for (const v of this.voices) v.render(out, this.bendRatios, sampleRate);
