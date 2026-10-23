@@ -155,38 +155,80 @@ export function prefersReducedMotion() {
   return !!reducedMotionQuery?.matches;
 }
 
-/** Steepness of the strip snap (R5.7.2); a first guess, to be tried on the real guitar. */
-export const STRIP_SNAP_STEEPNESS = 20;
+/** Duration of the strip's animated jump to a new step (R5.7.2); a first guess, to be tried on the real guitar. */
+export const STRIP_JUMP_MS = 150;
 
-/**
- * Strip snap (R5.7.2): an S-shaped curve f^k / (f^k + (1 - f)^k) for f in
- * 0..1. Flat near 0 and 1, steepest at 0.5, symmetric; k = 1 is linear.
- */
-export function stripSnap(frac, steepness = STRIP_SNAP_STEEPNESS) {
-  if (frac <= 0) return 0;
-  if (frac >= 1) return 1;
-  const a = frac ** steepness;
-  return a / (a + (1 - frac) ** steepness);
+/** Ease-in-out of the strip jump: smoothstep 3t² − 2t³, t clamped to 0..1. */
+export function stripEase(t) {
+  const x = Math.max(0, Math.min(1, t));
+  return x * x * (3 - 2 * x);
 }
 
 /**
- * The note-name strip of a guitar (R5.7): six labels starting at the
- * whole part of the display offset and the fraction to scroll by. While tilt
- * is on the offset follows the tilt continuously (guitar.displaySteps());
- * with reduced motion, or tilt off, it is the whole-step offset the sound
- * uses, so the strip jumps/snaps per step. Without tilt glide the fraction
- * snaps towards the nearest step (stripSnap, R5.7.2); `offset` stays raw.
+ * The shown position of a note strip, in steps (R5.7.2). update() moves it
+ * to `target` in one eased move of `durationMs`, whatever the distance; a new
+ * target during a move starts a new move from the position shown now. The
+ * first value, and every `instant` update, is shown at once.
  */
-export function guitarLabelStrip(guitar, reducedMotion = prefersReducedMotion()) {
-  const offset = !reducedMotion && guitar.displaySteps ? guitar.displaySteps() : guitar.rangeSteps ? guitar.rangeSteps() : 0;
-  const split = splitOffset(offset);
-  const { whole } = split;
-  const frac = guitar.glideActive?.() ? split.frac : stripSnap(split.frac);
+export class StripAnimator {
+  constructor(durationMs = STRIP_JUMP_MS) {
+    this.durationMs = durationMs;
+    this.from = null;
+    this.to = null;
+    this.start = 0;
+  }
+
+  /** The position shown at `nowMs` (the current move, without retargeting). */
+  _shown(nowMs) {
+    return this.from + (this.to - this.from) * stripEase((nowMs - this.start) / this.durationMs);
+  }
+
+  update(target, nowMs, { instant = false } = {}) {
+    if (instant || this.to === null) {
+      this.from = this.to = target;
+      this.start = nowMs;
+      return target;
+    }
+    if (Math.abs(target - this.to) > 1e-9) {
+      this.from = this._shown(nowMs);
+      this.to = target;
+      this.start = nowMs;
+    }
+    return this._shown(nowMs);
+  }
+}
+
+/** One strip animator per guitar, shared by every view that draws its strip. */
+const stripAnimators = new WeakMap();
+
+function stripAnimatorFor(guitar) {
+  let animator = stripAnimators.get(guitar);
+  if (!animator) {
+    animator = new StripAnimator();
+    stripAnimators.set(guitar, animator);
+  }
+  return animator;
+}
+
+/**
+ * The note-name strip of a guitar (R5.7): six labels starting at the whole
+ * part of the shown offset and the fraction to scroll by. The strip heads for
+ * `target`: with tilt glide the continuous displaySteps() (followed at once,
+ * R5.7.1), otherwise the step the sound uses, rangeSteps(), reached with an
+ * animated jump (R5.7.2). With reduced motion the target is always
+ * rangeSteps(), even with glide on, and every change is shown at once, so the
+ * strip moves in whole steps (R5.7).
+ */
+export function guitarLabelStrip(guitar, reducedMotion = prefersReducedMotion(), nowMs = performance.now()) {
+  const glide = !!guitar.glideActive?.();
+  const target = glide && !reducedMotion && guitar.displaySteps ? guitar.displaySteps() : guitar.rangeSteps ? guitar.rangeSteps() : 0;
+  const offset = stripAnimatorFor(guitar).update(target, nowMs, { instant: reducedMotion || glide });
+  const { whole, frac } = splitOffset(offset);
   const midis = [0, 1, 2, 3, 4, 5].map((j) => guitar.noteFor(j, whole));
   const labels = midis.map((midi) => (midi >= 0 && midi <= 127 ? noteName(midi) : ''));
   const refMidi = guitar.referenceMidi ? guitar.referenceMidi() : null;
   const bars = midis.map((midi) => orientationBars(midi, refMidi));
-  return { labels, midis, bars, frac, offset, refMidi };
+  return { labels, midis, bars, frac, offset, target, refMidi };
 }
 
 /** Lays out labelled pills left to right, wrapping lines. Returns the next y. */
