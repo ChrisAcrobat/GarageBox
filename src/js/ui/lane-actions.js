@@ -8,12 +8,7 @@
 import { t, noteNameList } from '../i18n/i18n.js';
 import { CHOICES, getGlobalSettings } from '../settings/store.js';
 import { soundCycle, DEFAULT_PROGRAMS } from '../instruments/setup.js';
-import { formatSteps } from '../visual/simple-view.js';
-
-/** A signed number with a proper minus sign, e.g. "+1", "0", "−2". */
-function signed(n) {
-  return n > 0 ? `+${n}` : n < 0 ? `\u2212${-n}` : '0';
-}
+import { formatSteps, signedNumber } from '../visual/simple-view.js';
 
 /**
  * The range was moved to `base` steps (D-pad octave). Saves it as the
@@ -24,7 +19,7 @@ export function rangeShiftedChange(base, scaleLength, stored) {
   const value = Math.max(-36, Math.min(36, Math.round(base)));
   const changes = value === stored ? {} : { rangeOffset: value };
   const length = Math.max(1, scaleLength);
-  const toast = value % length === 0 ? t('lane.octave', { value: signed(value / length) }) : t('lane.range', { steps: formatSteps(t, value) });
+  const toast = value % length === 0 ? t('lane.octave', { value: signedNumber(value / length) }) : t('lane.range', { steps: formatSteps(t, value) });
   return { changes, toast };
 }
 

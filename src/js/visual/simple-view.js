@@ -73,7 +73,7 @@ export function drawFretRow(ctx, frets, x, y, w, maxRadius = 30, strip = null) {
     ctx.strokeStyle = color;
     ctx.stroke();
     if (fret.label && !strip) {
-      ctx.font = `700 ${Math.round(Math.max(10, Math.min(16, r * 0.62)))}px system-ui, sans-serif`;
+      ctx.font = `700 ${fretLabelSize(r)}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillStyle = fret.level > 0.01 || fret.held ? '#ffffff' : 'rgba(255, 255, 255, 0.7)';
@@ -114,12 +114,16 @@ function drawOrientationBars(ctx, count, cx, y, labelSize) {
   for (let k = 0; k < count; k++) ctx.fillRect(Math.round(cx - w / 2), Math.round(y + k * (h + gap)), Math.round(w), h);
 }
 
+/** Font size (px) of the note names under fret buttons of radius `r`. */
+function fretLabelSize(r) {
+  return Math.round(Math.max(10, Math.min(16, r * 0.62)));
+}
+
 /** The sliding note-name strip (R5.7) under the fret buttons (see drawFretRow). */
 function drawLabelStrip(ctx, frets, strip, x, y, r, spacing) {
   const { labels, frac } = strip;
   const bars = strip.bars || [];
-  const size = Math.round(Math.max(10, Math.min(16, r * 0.62)));
-  ctx.font = `700 ${size}px system-ui, sans-serif`;
+  ctx.font = `700 ${fretLabelSize(r)}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   const first = x + r;
@@ -215,13 +219,17 @@ export function drawPills(ctx, items, x, y, w, color) {
   return cy + h + 14;
 }
 
+/** A signed number with a proper minus sign, e.g. "+1", "0", "−2". */
+export function signedNumber(n) {
+  return n > 0 ? `+${n}` : n < 0 ? `\u2212${-n}` : '0';
+}
+
 /**
  * A range offset in scale steps (R5.6) as text, e.g. "+2 steps",
  * "−1 step", "0 steps" (proper minus sign, + for positive numbers).
  */
 export function formatSteps(t, steps) {
-  const value = steps > 0 ? `+${steps}` : steps < 0 ? `−${-steps}` : '0';
-  return t(Math.abs(steps) === 1 ? 'unit.step' : 'unit.steps', { value });
+  return t(Math.abs(steps) === 1 ? 'unit.step' : 'unit.steps', { value: signedNumber(steps) });
 }
 
 /**
