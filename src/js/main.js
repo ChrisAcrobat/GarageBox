@@ -286,13 +286,18 @@ function menuInput(ui, nowMs) {
   if (startActive) {
     // The start screen only needs Start, so it is not rotated.
     for (const intent of intents) startScreen.navigate(intent);
-    return edges.filter((e) => !MENU_CONTROLS.has(e.name) && e.name !== 'start');
+    return instrumentEdges(edges);
   }
   const rotated = menuRotated(ui.device);
   for (const intent of intents) {
     // A previous intent may have closed or replaced the menu (Back, a button).
     [ui.panel, ui.debug].find((m) => m?.gamepadMenu)?.navigate(rotated ? rotateIntent(intent) : intent);
   }
+  return instrumentEdges(edges);
+}
+
+/** The edges an open menu leaves for the instrument: not the menu controls, not Start. */
+function instrumentEdges(edges) {
   return edges.filter((e) => !MENU_CONTROLS.has(e.name) && e.name !== 'start');
 }
 
@@ -535,29 +540,26 @@ function frame() {
 // ---------------------------------------------------------------------------
 // Language
 
-function fillLanguageSelect() {
-  const current = getGlobalSettings().language;
-  languageSelect.replaceChildren(
-    ...['auto', ...SUPPORTED_LANGUAGES].map((code) => {
+/** Replaces the options of a top-bar select; `selected` is the chosen value. */
+function fillSelect(select, values, textOf, selected) {
+  select.replaceChildren(
+    ...values.map((value) => {
       const option = document.createElement('option');
-      option.value = code;
-      option.textContent = t(`lang.${code}`);
-      option.selected = code === current;
+      option.value = value;
+      option.textContent = textOf(value);
+      option.selected = value === selected;
       return option;
     }),
   );
 }
 
+function fillLanguageSelect() {
+  const current = getGlobalSettings().language;
+  fillSelect(languageSelect, ['auto', ...SUPPORTED_LANGUAGES], (code) => t(`lang.${code}`), current);
+}
+
 function fillViewSelect() {
-  viewSelect.replaceChildren(
-    ...CHOICES.view.map((value) => {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = t(`view.${value}`);
-      option.selected = value === visualStyle;
-      return option;
-    }),
-  );
+  fillSelect(viewSelect, CHOICES.view, (value) => t(`view.${value}`), visualStyle);
 }
 
 /**
@@ -570,15 +572,7 @@ function applyNoteNames() {
   noteNamesPicker.hidden = !hasLanguageNoteNames();
   const naturals = (list) => [0, 2, 4, 5, 7, 9, 11].map((i) => list[i]).join(' ');
   const lists = { international: internationalNoteNames(), language: languageNoteNames() || internationalNoteNames() };
-  noteNamesSelect.replaceChildren(
-    ...CHOICES.noteNames.map((value) => {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = naturals(lists[value]);
-      option.selected = value === choice;
-      return option;
-    }),
-  );
+  fillSelect(noteNamesSelect, CHOICES.noteNames, (value) => naturals(lists[value]), choice);
   for (const ui of laneUis.values()) ui.panel?.refresh();
 }
 
