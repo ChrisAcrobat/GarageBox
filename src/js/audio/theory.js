@@ -34,8 +34,7 @@ export const SCALES = Object.freeze({
 
 /** "E3" for 52, "C#4" for 61. */
 export function noteName(midi) {
-  const m = Math.round(midi);
-  return `${activeNames[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`;
+  return `${pitchClassName(midi)}${Math.floor(Math.round(midi) / 12) - 1}`;
 }
 
 /** Pitch-class name without octave, e.g. "E" for 52. */
