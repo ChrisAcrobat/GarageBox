@@ -13,6 +13,8 @@ The test pages check the app's logic and sounds in a real browser (design 9.2). 
 | `pluck.test.html` | Karplus-Strong string rendered offline, strum hold (R3.4, R4.7.2) |
 | `bass.test.html` | Bass source rendered offline, strum hold (R3.4.1, R4.7.2) |
 | `effects.test.html` | Effect presets Clean, Crunch, Epic (R3.6) |
+| `highway.test.html` | The highway view on its own (notes end and are removed without the simple view), draw order, trail width, lane drawing on a real canvas without errors (R5.4 – R5.4.5, R5.7, R5.8) |
+| `app-smoke.test.html` | Loads `src/index.html` in a frame, starts it with the keyboard, plays and switches view, language and keyboard mode; fails on any uncaught error, rejection or `console.error` |
 
 Shared helpers: `test-runner.js` (checks, sections, safe module loading, PASS/FAIL title) and `offline-audio.js` (OfflineAudioContext rendering and level/pitch measures).
 
