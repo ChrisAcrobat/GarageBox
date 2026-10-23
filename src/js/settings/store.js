@@ -121,18 +121,16 @@ export function clampNumber(key, value) {
 /** Brightness names -> 0..1 for the plucked string. */
 export const BRIGHTNESS_VALUES = Object.freeze({ dark: 0.15, warm: 0.35, normal: 0.55, bright: 0.85 });
 
-/** Validators for settings that are neither enumerations nor plain values. */
 /** A plain object (stored drum maps; their entries are checked when used). */
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
+/** Validators for settings that are neither enumerations nor plain values. */
 const VALIDATORS = {
   program: (v) => Number.isInteger(v) && v >= -1 && v <= 127,
   // +-3 octaves of a 12-note scale is the most any scale allows.
   rangeOffset: (v) => Number.isInteger(v) && Math.abs(v) <= 36,
   drumMap: (v) =>
-    !!v &&
-    typeof v === 'object' &&
-    !Array.isArray(v) &&
+    isPlainObject(v) &&
     Object.values(v).every((n) => Number.isInteger(n) && (n === 0 || (n >= 35 && n <= 81))),
   // Entry by entry: an invalid entry falls back to that key's default (design 4.4).
   keysDrumMap: isPlainObject,
