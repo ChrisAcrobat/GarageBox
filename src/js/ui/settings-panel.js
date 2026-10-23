@@ -33,7 +33,9 @@ function fieldDefinitions(device) {
   const has = (name) => name in device.mapping.controls;
   const guitarPart = (c) => c.kind === 'guitar' || c.kind === 'keys';
   const guitarLane = (c) => c.kind === 'guitar' && !device.isKeyboard;
-  const plucked = (c) => (c.kind === 'guitar' && c.source === 'pluck') || c.kind === 'keys';
+  // Ring time and tone apply to the generated sources (pluck, bass); the
+  // keyboard always has them for its plucked guitar emulation.
+  const plucked = (c) => (c.kind === 'guitar' && (c.source === 'pluck' || c.source === 'bass')) || c.kind === 'keys';
   const fields = [];
   if (!device.isKeyboard) {
     fields.push({

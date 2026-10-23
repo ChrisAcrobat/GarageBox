@@ -5,10 +5,11 @@
 // the start screen calls unlockAudio() from such an event (7.1).
 //
 // Routing: every instrument gets a Channel with its own gain node (for
-// 'volume' events), all channels feed one master gain and a light limiter
+// 'volume' events) and, for melodic instruments, an effect chain (R3.6,
+// effects.js); all channels feed one master gain and a light limiter
 // (DynamicsCompressorNode) so many ringing notes do not clip:
 //
-//   source -> channel gain -> master gain -> limiter -> destination
+//   source -> channel gain -> effect chain -> master gain -> limiter -> destination
 //
 // Each Channel also keeps a VoiceTracker: a simple per-voice level estimate
 // (envelope model) on the main thread, used by the visuals to fade the
@@ -17,6 +18,8 @@
 
 import { PluckSource } from './pluck-source.js';
 import { MidiSource } from './midi-source.js';
+import { BassSource } from './bass-source.js';
+import { EffectChain } from './effects.js';
 
 let context = null;
 let engine = null;
@@ -75,19 +78,57 @@ export function getEngine() {
 /** A voice counts as silent below this level and is dropped. */
 export const SILENT_LEVEL = 0.02;
 
+/** Seconds a decaying MIDI voice takes to fall 60 dB in the level model (R4.7.1). */
+const MIDI_DECAY_SECONDS = 12;
+/** Seconds a drum hit takes to fall 60 dB in the level model. */
+const DRUM_DECAY_SECONDS = 0.6;
+/** Release of a MIDI voice after noteOff in the level model, before the fade (R4.7.1). */
+const MIDI_RELEASE_SECONDS = 0.3;
+
 /**
- * Envelope models (levels 0..1, before channel volume):
- *   pluck: exponential decay reaching -60 dB after `decay` seconds (R4.7)
- *   sustained: slow decay while held (MIDI melodic instruments)
- *   oneShot: short decay, no note-off needed (drums)
- * After a noteOff the level additionally falls linearly to 0 over `fade`.
+ * General MIDI programs (0-based) whose notes sound as long as they are held
+ * (R4.7.1): organs, bowed strings and ensembles, brass, reeds, pipes, synth
+ * leads and pads. Pizzicato strings (45), harp (46), timpani (47) and
+ * orchestra hit (55) decay like plucked or struck sounds.
+ */
+export function isSustainingProgram(program) {
+  const p = Number(program) || 0;
+  if (p >= 16 && p <= 23) return true; // organs, accordion, harmonica
+  if (p >= 40 && p <= 44) return true; // violin .. tremolo strings
+  if (p >= 48 && p <= 54) return true; // ensembles, synth strings, choir, voice
+  return p >= 56 && p <= 95; // brass, reeds, pipes, synth leads, synth pads
+}
+
+/**
+ * Level model of a channel's sound configuration (design 5 "Tracker"):
+ *   pluck: plucked string and bass sources, -60 dB in the ring time `decay`
+ *   sustained: MIDI programs that sustain (full level until noteOff)
+ *   decaying: other MIDI melodic programs (-60 dB after 12 s)
+ *   oneShot: drums
+ */
+export function trackerConfig(sound = {}) {
+  if (sound.drums || sound.model === 'oneShot') return { model: 'oneShot' };
+  if (sound.source === 'midi') {
+    return { model: isSustainingProgram(sound.program) ? 'sustained' : 'decaying', release: MIDI_RELEASE_SECONDS };
+  }
+  return { model: 'pluck', decay: sound.decay || 10 };
+}
+
+/**
+ * Per-voice level estimate (levels 0..1, before channel volume), see
+ * trackerConfig() for the models. A pluck voice started with `hold`
+ * (strum hold, R4.7.2) stays at its peak until holdEnd(), then decays from
+ * there. After a noteOff the level additionally falls linearly to 0 over
+ * the note's fade (pluck) or the release plus the fade (MIDI).
  */
 export class VoiceTracker {
-  constructor({ model = 'pluck', decay = 4, release = 0.3 } = {}) {
+  constructor({ model = 'pluck', decay = 10, release = MIDI_RELEASE_SECONDS } = {}) {
     this.configure({ model, decay, release });
-    /** @type {Map<number, {voiceId:number, midi:number, column:number, start:number, peak:number, offAt:number|null, fade:number, oneShot:boolean}>} */
+    /** @type {Map<number, {voiceId:number, midi:number, column:number, start:number, peak:number, offAt:number|null, fade:number, oneShot:boolean, hold:boolean, holdEndAt:number|null}>} */
     this.voices = new Map();
     this.gain = 1;
+    /** Current pitch bend in semitones (shown as trail width, R5.4.5). */
+    this.bend = 0;
   }
 
   configure({ model, decay, release } = {}) {
@@ -106,14 +147,23 @@ export class VoiceTracker {
       offAt: null,
       fade: 0,
       oneShot: !!e.oneShot,
+      hold: !!e.hold,
+      holdEndAt: null,
     });
+  }
+
+  /** Strum released (R4.7.2): a held pluck voice starts its decay at `now`. */
+  holdEnd(e, now) {
+    const v = this.voices.get(e.voiceId);
+    if (v && v.hold && v.holdEndAt === null) v.holdEndAt = Math.max(now, v.start);
   }
 
   noteOff(e, now) {
     const v = this.voices.get(e.voiceId);
     if (!v || v.offAt !== null) return;
     v.offAt = now;
-    v.fade = this.model === 'pluck' ? Math.max(0.001, e.fade ?? 0.08) : this.release;
+    const fade = Math.max(0.001, e.fade ?? 0.08);
+    v.fade = this.model === 'pluck' ? fade : this.release + fade;
   }
 
   allOff(now, fade) {
@@ -131,9 +181,14 @@ export class VoiceTracker {
   _envelope(v, now) {
     const age = Math.max(0, now - v.start);
     let env;
-    if (v.oneShot || this.model === 'oneShot') env = Math.pow(0.001, age / 0.6);
-    else if (this.model === 'sustained') env = Math.pow(0.001, age / 12);
-    else env = Math.pow(0.001, age / this.decay);
+    if (v.oneShot || this.model === 'oneShot') env = Math.pow(0.001, age / DRUM_DECAY_SECONDS);
+    else if (this.model === 'sustained') env = 1;
+    else if (this.model === 'decaying') env = Math.pow(0.001, age / MIDI_DECAY_SECONDS);
+    else if (v.hold) {
+      // Held until holdEnd (or until the note is stopped), then the ring-time decay.
+      const from = v.holdEndAt ?? now;
+      env = Math.pow(0.001, Math.max(0, now - from) / this.decay);
+    } else env = Math.pow(0.001, age / this.decay);
     if (v.offAt !== null) env *= Math.max(0, 1 - (now - v.offAt) / v.fade);
     return env * v.peak;
   }
@@ -179,8 +234,9 @@ export class AudioEngine {
 
   /**
    * Creates a channel for one instrument (or one part of an instrument).
-   * @param {{source:'pluck'|'midi', model:'pluck'|'sustained'|'oneShot', decay?:number,
-   *   brightness?:number, drums?:boolean, program?:number, bendRange?:number}} config
+   * @param {{source:'pluck'|'bass'|'midi', model?:'oneShot', decay?:number,
+   *   brightness?:number, drums?:boolean, program?:number, bendRange?:number,
+   *   effect?:string}} config
    */
   createChannel(config) {
     const ch = new Channel(this, config);
@@ -195,9 +251,8 @@ export class Channel {
     this.config = { ...config };
     this.tracker = new VoiceTracker(trackerConfig(this.config));
     this.gainNode = null;
+    this.effects = null; // EffectChain, not for drums (R3.6)
     this.source = null;
-    // Last vibrato depth in cents, re-applied when the source is rebuilt.
-    this.vibratoCents = 0;
     this.disposed = false;
     if (engine.context) this._build();
   }
@@ -208,11 +263,17 @@ export class Channel {
     if (!this.gainNode) {
       this.gainNode = ctx.createGain();
       this.gainNode.gain.value = this.tracker.gain;
-      this.gainNode.connect(this.engine.master);
+      if (this.config.drums) {
+        this.gainNode.connect(this.engine.master);
+      } else {
+        this.effects = new EffectChain(ctx);
+        this.effects.setPreset(this.config.effect || 'clean');
+        this.gainNode.connect(this.effects.input);
+        this.effects.output.connect(this.engine.master);
+      }
     }
     this.source?.dispose();
     this.source = createSource(ctx, this.gainNode, this.config);
-    if (this.vibratoCents) this.source?.vibrato?.(this.vibratoCents);
   }
 
   /** Applies a new configuration; rebuilds the source when its type changed. */
@@ -221,6 +282,9 @@ export class Channel {
     this.config = { ...old, ...config };
     this.tracker.configure(trackerConfig(this.config));
     if (!this.engine.context) return;
+    if (this.effects && this.effects.preset !== (this.config.effect || 'clean')) {
+      this.effects.setPreset(this.config.effect || 'clean');
+    }
     if (!this.source || sourceKey(old) !== sourceKey(this.config)) this._build();
     else this.source.configure(this.config);
   }
@@ -233,19 +297,20 @@ export class Channel {
         t.noteOn(event, now);
         this.source?.noteOn(event.voiceId, event.midi, event.velocity, event);
         break;
+      case 'holdEnd': // strum released (R4.7.2)
+        t.holdEnd(event, now);
+        this.source?.holdEnd?.(event.voiceId);
+        break;
       case 'noteOff':
         t.noteOff(event, now);
         this.source?.noteOff(event.voiceId, event.fade);
         break;
       case 'bend':
+        t.bend = event.semitones;
         this.source?.bend(event.semitones);
         break;
-      case 'glide': // experiment E: per-voice pitch offset (tilt glide)
+      case 'glide': // tilt glide (R4.14): per-voice pitch offset
         this.source?.glide?.(event.voiceId, event.semitones);
-        break;
-      case 'vibrato':
-        this.vibratoCents = event.cents;
-        this.source?.vibrato?.(event.cents);
         break;
       case 'volume':
         t.gain = event.gain;
@@ -271,9 +336,15 @@ export class Channel {
     this.source = null;
     if (this.gainNode) {
       const node = this.gainNode;
-      setTimeout(() => node.disconnect(), 200);
+      const effects = this.effects;
+      // After the voices' fade (and a short part of an effect tail).
+      setTimeout(() => {
+        node.disconnect();
+        effects?.dispose();
+      }, 200);
     }
     this.gainNode = null;
+    this.effects = null;
     this.engine.channels.delete(this);
   }
 }
@@ -283,14 +354,12 @@ function sourceKey(config) {
   return `${config.source}:${config.drums ? 'drums' : 'melodic'}`;
 }
 
-function trackerConfig(config) {
-  return { model: config.model || 'pluck', decay: config.decay || 4 };
-}
-
 function createSource(ctx, destination, config) {
   switch (config.source) {
     case 'pluck':
       return new PluckSource(ctx, destination, config);
+    case 'bass':
+      return new BassSource(ctx, destination, config);
     case 'midi':
       return new MidiSource(ctx, destination, config);
     default:

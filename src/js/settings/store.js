@@ -43,8 +43,9 @@ export const DEFAULTS = Object.freeze({
     octave: 0,
     // Mute fade-out in milliseconds (R4.3.1, number field R2.9.1).
     fadeMs: 1000,
-    // Plucked string: seconds until a note has died away (R4.7), and tone color.
-    decay: 4,
+    // Ring time of the plucked string and bass sources: seconds until a note
+    // has died away (R4.7), and tone color.
+    decay: 10,
     brightness: 'normal',
     // Sound source: 'auto' = the instrument's default (R3.5), or 'pluck' / 'bass' / 'midi'.
     source: 'auto',

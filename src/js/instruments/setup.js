@@ -21,7 +21,7 @@ export const DEFAULT_PROGRAMS = Object.freeze({
 /** Default sound source per instrument (R3.5, R4c.11). */
 export const DEFAULT_SOURCES = Object.freeze({
   guitar: 'pluck',
-  bass: 'pluck',
+  bass: 'bass',
   drums: 'midi',
   keys: 'midi',
 });
@@ -33,13 +33,6 @@ export const SOURCES_FOR = Object.freeze({
   drums: ['midi'],
   keys: ['midi', 'pluck'],
 });
-
-/**
- * Generated sources that are not built yet and the source that plays in their
- * place. The generated bass source (R3.4.1, bass-source.js) is added in a
- * separate build; until then a stored 'bass' source plays the plucked string.
- */
-const STAND_IN_SOURCES = Object.freeze({ bass: 'pluck' });
 
 /**
  * The sounds D-pad "sound" steps through for an instrument (R4.15): the
@@ -68,8 +61,7 @@ export function instrumentKind(instrument) {
 
 export function resolveSource(settings, instrument) {
   const allowed = SOURCES_FOR[instrument] || ['midi'];
-  const source = allowed.includes(settings.source) ? settings.source : DEFAULT_SOURCES[instrument];
-  return STAND_IN_SOURCES[source] ?? source;
+  return allowed.includes(settings.source) ? settings.source : DEFAULT_SOURCES[instrument];
 }
 
 export function resolveProgram(settings, instrument) {
@@ -106,19 +98,21 @@ export function canStarPower(device) {
 }
 
 /**
- * Sound configuration of a guitar-like instrument. The bass sound is the
- * same plucked string with a darker tone and a longer decay.
+ * Sound configuration of a guitar-like instrument. A bass on the plucked
+ * string gets a darker tone and a longer ring time (x1.5); the bass source
+ * (R3.4.1) uses the settings as they are. The MIDI source has no ring time
+ * (R4.7.1): its notes last until noteOff or the program's own envelope.
  */
 export function guitarSound(settings, instrument, source = resolveSource(settings, instrument)) {
-  const bass = instrument === 'bass';
+  const pluckedBass = instrument === 'bass' && source === 'pluck';
   const brightness = BRIGHTNESS_VALUES[settings.brightness] ?? 0.55;
   return {
     source,
-    model: 'pluck',
-    decay: settings.decay * (bass ? 1.5 : 1),
-    brightness: bass ? brightness * 0.6 : brightness,
+    ...(source === 'midi' ? {} : { decay: settings.decay * (pluckedBass ? 1.5 : 1) }),
+    brightness: pluckedBass ? brightness * 0.6 : brightness,
     program: resolveProgram(settings, instrument),
     bendRange: Math.abs(settings.bendRange ?? 2) || 2,
+    effect: settings.effect ?? 'clean',
   };
 }
 
@@ -127,11 +121,11 @@ export function keysSound(settings) {
   const source = resolveSource(settings, 'keys');
   return {
     source,
-    model: source === 'pluck' ? 'pluck' : 'sustained',
-    decay: settings.decay,
+    ...(source === 'midi' ? {} : { decay: settings.decay }),
     brightness: BRIGHTNESS_VALUES[settings.brightness] ?? 0.55,
     program: resolveProgram(settings, 'keys'),
     bendRange: 2,
+    effect: settings.effect ?? 'clean',
   };
 }
 
