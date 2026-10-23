@@ -12,14 +12,18 @@ import { computeLanes, drawLaneFrame } from './visual/lanes.js';
 import { drawSimpleView } from './visual/simple-view.js';
 import { HighwayState, drawHighway, placeNote } from './visual/highway-view.js';
 import { StartScreen } from './ui/start-screen.js';
-import { SettingsPanel } from './ui/settings-panel.js';
+import { SettingsPanel, settingsIdOf } from './ui/settings-panel.js';
 import { DebugView } from './ui/debug-view.js';
-import { MenuInput, MENU_CONTROLS } from './ui/menu-nav.js';
+import { MenuInput, MENU_CONTROLS, menuRotated, rotateIntent } from './ui/menu-nav.js';
+import { rangeShiftedChange, dpadChange } from './ui/lane-actions.js';
 import { CHOICES, getGlobalSettings, setGlobalSetting, getDeviceSettings, setDeviceSetting, resetDeviceSettings, onSettingsChange } from './settings/store.js';
 import { BackHold } from './input/back-hold.js';
-import { SUPPORTED_LANGUAGES, applyTranslations, onLanguageChange, setLanguage, t } from './i18n/i18n.js';
+import { SUPPORTED_LANGUAGES, applyTranslations, onLanguageChange, setLanguage, t, noteNameList, internationalNoteNames, languageNoteNames, hasLanguageNoteNames } from './i18n/i18n.js';
 import { getAudioContext, getEngine, keepAudioAlive, unlockAudio } from './audio/audio-engine.js';
+import { setNoteNames } from './audio/theory.js';
 import { createInstrument, instrumentKind } from './instruments/setup.js';
+import { StarPowerVisual } from './visual/star-power.js';
+import { prefersReducedMotion } from './visual/simple-view.js';
 
 const stage = document.getElementById('stage');
 const canvas = document.getElementById('lanes');
@@ -28,13 +32,16 @@ const overlayLayer = document.getElementById('lane-overlays');
 const languageSelect = document.getElementById('language-select');
 const keyboardToggle = document.getElementById('keyboard-toggle');
 const viewSelect = document.getElementById('view-select');
+const noteNamesPicker = document.getElementById('note-names-picker');
+const noteNamesSelect = document.getElementById('note-names-select');
 const startKeyboardButton = document.getElementById('start-keyboard');
 
 /**
  * Per-device state, keyed by device index (gamepad.index, or KEYBOARD_INDEX):
  * { device, el, gear, instrument (name), kind, logic (Instrument|null),
  *   channels: { main: Channel, guitar?: Channel }, highway: HighwayState,
- *   panel: SettingsPanel|null, debug: DebugView|null, menuInput: MenuInput }
+ *   panel: SettingsPanel|null, debug: DebugView|null, menuInput: MenuInput,
+ *   backHold: BackHold, starPower: StarPowerVisual }
  */
 const laneUis = new Map();
 let lanes = [];
@@ -66,7 +73,7 @@ function allDevices() {
 /** Instrument used by a device: the stored manual choice, else the detected default (R2.6, R2.7). */
 function effectiveInstrument(device) {
   if (device.isKeyboard) return 'keys';
-  const stored = getDeviceSettings(device.id).instrument;
+  const stored = getDeviceSettings(settingsIdOf(device)).instrument;
   return stored === 'auto' ? defaultInstrumentFor(device.detection) : stored;
 }
 
@@ -99,9 +106,10 @@ function createLaneUi(device) {
     panel: null,
     debug: null,
     menuInput: new MenuInput(),
-    // Experiment E: Back hold (5 s = reset settings) for instruments that do
-    // not handle Back themselves (the guitar does, see guitar.js).
+    // Back holds (5 s / 10 s resets, R4.11.2, R4.11.3) for instruments that
+    // do not handle Back themselves (the guitar does, see guitar.js).
     backHold: new BackHold(),
+    starPower: new StarPowerVisual(prefersReducedMotion()),
   };
   laneUis.set(device.index, ui);
   translateLaneUi(ui);
@@ -194,6 +202,7 @@ function nowSeconds() {
 
 function releaseInstrument(ui) {
   const now = nowSeconds();
+  ui.starPower?.set(false, now);
   for (const channel of Object.values(ui.channels)) {
     channel.allOff(now);
     channel.dispose();
@@ -209,7 +218,7 @@ function releaseInstrument(ui) {
  */
 function setupInstrument(ui) {
   const name = effectiveInstrument(ui.device);
-  const settings = getDeviceSettings(ui.device.id);
+  const settings = getDeviceSettings(settingsIdOf(ui.device));
   const created = createInstrument(ui.device, name, settings);
   if (ui.logic && ui.instrument === name && created) {
     ui.logic.configure(created.instrument.options);
@@ -231,11 +240,12 @@ function setupInstrument(ui) {
  * screen (any controller), or this lane's settings panel or device
  * information view (only this lane's controller) when it was opened with the
  * controller (a gamepad menu; a panel opened with the mouse leaves the
- * controller playing as usual). Returns the control edges
- * that are left for the instrument: while a menu is open the D-pad (and on a
- * guitar the strum bar, which is the same raw buttons) and Back only
- * navigate. Start is left to the instrument, which toggles the panel as
- * before (R4.10).
+ * controller playing as usual). Returns the control edges that are left for
+ * the instrument: while a menu is open the D-pad (and on a guitar the strum
+ * bar, which is the same raw buttons), Back and, in a gamepad menu, Start
+ * only navigate (Start activates the control under the cursor, R2.12). With
+ * no gamepad menu Start reaches the instrument, which asks to open the
+ * settings (R4.10). On a guitar controller the lane's menus are rotated.
  */
 function menuInput(ui, nowMs) {
   const edges = ui.device.controlEdges;
@@ -246,21 +256,22 @@ function menuInput(ui, nowMs) {
     ui.menuInput.reset();
     return edges;
   }
-  // Experiment E: while a menu owns Back, no Back hold or tilt toggle may be
-  // pending; the release of a Back press that closed a menu then does nothing.
+  // While a menu owns Back, no Back hold or tilt toggle may be pending; the
+  // release of a Back press that closed a menu then does nothing (R4.11.1).
   ui.logic?.cancelBackHold?.();
   ui.backHold.cancel();
   const intents = ui.menuInput.update(edges, ui.device.controls, nowMs);
   if (startActive) {
+    // The start screen only needs Start, so it is not rotated.
     for (const intent of intents) startScreen.navigate(intent);
     return edges.filter((e) => !MENU_CONTROLS.has(e.name) && e.name !== 'start');
   }
+  const rotated = menuRotated(ui.device);
   for (const intent of intents) {
-    if (intent === 'start') continue;
     // A previous intent may have closed or replaced the menu (Back, a button).
-    [ui.panel, ui.debug].find((m) => m?.gamepadMenu)?.navigate(intent);
+    [ui.panel, ui.debug].find((m) => m?.gamepadMenu)?.navigate(rotated ? rotateIntent(intent) : intent);
   }
-  return edges.filter((e) => !MENU_CONTROLS.has(e.name));
+  return edges.filter((e) => !MENU_CONTROLS.has(e.name) && e.name !== 'start');
 }
 
 /** Feeds one frame of input to every instrument and routes its events. */
@@ -275,13 +286,11 @@ function playInstruments() {
     if (!ui.logic.handlesBackHold) events.push(...genericBackHold(ui, edges, now));
     for (const event of events) {
       if (event.type === 'action') {
-        if (event.action === 'openSettings') toggleSettings(ui.device.index, { byGamepad: !ui.device.isKeyboard });
-        else if (event.action === 'tiltToggled') {
-          // Experiment E: no toast (owner feedback); locking (tilt off) saves
-          // the new base with the device settings.
-          if (!event.enabled && !ui.device.isKeyboard) saveRangeOffset(ui, event.base);
-        }
-        else if (event.action === 'resetSettings') resetLaneSettings(ui);
+        laneAction(ui, event);
+        continue;
+      }
+      if (event.type === 'starPower') {
+        ui.starPower.set(event.on, now); // visual only (R5.5)
         continue;
       }
       const channel = ui.channels[event.part || 'main'] || ui.channels.main;
@@ -294,41 +303,97 @@ function playInstruments() {
   }
 }
 
+/** Acts on an instrument's 'action' event. */
+function laneAction(ui, event) {
+  const id = settingsIdOf(ui.device);
+  switch (event.action) {
+    case 'openSettings':
+      openSettingsByStart(ui);
+      break;
+    case 'tiltToggled':
+      // No toast; locking (tilt off) saves the new base (R4.5.6).
+      if (!event.enabled && !ui.device.isKeyboard) saveChanges(ui, rangeShiftedChange(event.base, scaleLengthOf(ui), getDeviceSettings(id).rangeOffset).changes);
+      break;
+    case 'rangeShifted': {
+      // D-pad octave (R4.15): saved like a range locked with Back.
+      const result = rangeShiftedChange(event.base, scaleLengthOf(ui), getDeviceSettings(id).rangeOffset);
+      saveChanges(ui, result.changes);
+      showLaneToast(ui, result.toast);
+      break;
+    }
+    case 'dpad': {
+      // D-pad effect / key / sound (R4.15): a normal settings change.
+      const action = getDeviceSettings(id).dpadAction;
+      const result = dpadChange(action, event.dir, getDeviceSettings(id), ui.instrument);
+      saveChanges(ui, result.changes);
+      if (result.toast) showLaneToast(ui, result.toast);
+      break;
+    }
+    case 'resetSettings':
+      resetLaneSettings(ui, !!event.full);
+      break;
+  }
+}
+
+function scaleLengthOf(ui) {
+  return ui.logic?.options?.scale?.length || 1;
+}
+
+/** Saves device settings `changes` ({ key: value }) of a lane. */
+function saveChanges(ui, changes) {
+  for (const [key, value] of Object.entries(changes)) setDeviceSetting(settingsIdOf(ui.device), key, value);
+}
+
 /**
- * Experiment E: Back held 5 s on an instrument without its own Back handling
- * (drums, ...): the same 'resetSettings' action as the guitar emits.
+ * Start without a gamepad menu (R4.10, R2.14): opens the settings as a
+ * gamepad menu; an open plain (mouse-opened) panel becomes a gamepad menu.
+ * The keyboard's Backspace/Start has no menu navigation, so it toggles.
+ */
+function openSettingsByStart(ui) {
+  const index = ui.device.index;
+  if (ui.device.isKeyboard) {
+    toggleSettings(index);
+    return;
+  }
+  if (ui.panel?.gamepadMenu) return;
+  if (ui.panel) closeSettings(index);
+  toggleSettings(index, { byGamepad: true });
+}
+
+/**
+ * Back held on an instrument without its own Back handling (drums, ...): the
+ * same 'resetSettings' actions as the guitar emits (5 s, and 10 s with full).
  */
 function genericBackHold(ui, edges, now) {
+  const out = [];
+  const add = (result) => {
+    if (result === 'hold' || result === 'fullReset') out.push({ type: 'action', action: 'resetSettings', full: result === 'fullReset', time: now });
+  };
   for (const e of edges) {
     if (e.name !== 'back') continue;
     if (e.type === 'pressed') ui.backHold.press(now);
-    else if (e.type === 'released' && ui.backHold.release(now) === 'hold') return [{ type: 'action', action: 'resetSettings', time: now }];
+    else if (e.type === 'released') add(ui.backHold.release(now));
   }
-  return ui.backHold.update(now) === 'hold' ? [{ type: 'action', action: 'resetSettings', time: now }] : [];
-}
-
-/** Experiment E: stores the guitar's locked range offset as a device setting (survives a reload). */
-function saveRangeOffset(ui, base) {
-  if (!Number.isInteger(base) || getDeviceSettings(ui.device.id).rangeOffset === base) return;
-  setDeviceSetting(ui.device.id, 'rangeOffset', Math.max(-36, Math.min(36, base)));
+  add(ui.backHold.update(now));
+  return out;
 }
 
 /**
- * Experiment E: resets this controller's stored settings to the defaults
- * (only this device; global settings such as language and view stay). The
- * settings listener then rebuilds or reconfigures the instrument and
- * refreshes an open panel. Ringing guitar notes were already muted by the
- * guitar itself.
+ * Resets this controller's stored settings (only this device; global
+ * settings such as language and view stay). Back held 5 s keeps the chosen
+ * instrument (R4.11.2); 10 s resets it too (R4.11.3). The settings listener
+ * then rebuilds or reconfigures the instrument and refreshes an open panel.
+ * Ringing guitar notes were already muted by the guitar itself.
  */
-function resetLaneSettings(ui) {
-  resetDeviceSettings(ui.device.id);
-  showLaneToast(ui, t('lane.settingsReset'));
+function resetLaneSettings(ui, full) {
+  resetDeviceSettings(settingsIdOf(ui.device), full ? undefined : { keepInstrument: true });
+  showLaneToast(ui, t(full ? 'lane.fullReset' : 'lane.settingsReset'));
 }
 
 /**
- * Experiment D/E: a short message in the lane (experiment E: only "Settings
- * reset" after a 5 s Back hold). One toast per lane; a new one replaces the old
- * one and restarts its timer. It fades out after about 1.2 s.
+ * A short message in the lane (resets, D-pad actions). One toast per lane; a
+ * new one replaces the old one and restarts its timer. It fades out after
+ * about 1.2 s.
  */
 const TOAST_MS = 1200;
 function showLaneToast(ui, text) {
@@ -404,7 +469,9 @@ function draw() {
   for (const lane of lanes) {
     const ui = laneUis.get(lane.device.index);
     if (!ui) continue;
-    const area = drawLaneFrame(ctx, lane, {
+    // Star power replaces the lane color with its glow (R5.5).
+    const color = ui.starPower.color(lane.color, now);
+    const area = drawLaneFrame(ctx, { ...lane, color }, {
       number: laneNumber(lane.device),
       title: t(`instrument.${ui.instrument}`),
     });
@@ -412,7 +479,7 @@ function draw() {
     if (ui.debug) continue;
     const view = {
       device: ui.device,
-      color: lane.color,
+      color,
       kind: ui.kind,
       instrument: ui.logic,
       channels: ui.channels,
@@ -424,6 +491,7 @@ function draw() {
       ui.highway.update(now);
       drawSimpleView(ctx, view, area, t, now);
     }
+    if (ui.starPower.visible) ui.starPower.draw(ctx, lane, now);
   }
 }
 
@@ -469,11 +537,34 @@ function fillViewSelect() {
   );
 }
 
+/**
+ * Note names (R6.3): the select is shown only when the language has its own
+ * names; the active list goes to theory.js for every note name drawn.
+ */
+function applyNoteNames() {
+  const choice = getGlobalSettings().noteNames;
+  setNoteNames(noteNameList(choice));
+  noteNamesPicker.hidden = !hasLanguageNoteNames();
+  const naturals = (list) => [0, 2, 4, 5, 7, 9, 11].map((i) => list[i]).join(' ');
+  const lists = { international: internationalNoteNames(), language: languageNoteNames() || internationalNoteNames() };
+  noteNamesSelect.replaceChildren(
+    ...CHOICES.noteNames.map((value) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = naturals(lists[value]);
+      option.selected = value === choice;
+      return option;
+    }),
+  );
+  for (const ui of laneUis.values()) ui.panel?.refresh();
+}
+
 function onLanguageChanged() {
   document.title = t('app.title');
   applyTranslations(document);
   fillLanguageSelect();
   fillViewSelect();
+  applyNoteNames();
   for (const ui of laneUis.values()) {
     translateLaneUi(ui);
     ui.panel?.refresh();
@@ -498,6 +589,10 @@ async function main() {
     setGlobalSetting('view', viewSelect.value);
     viewSelect.blur();
   });
+  noteNamesSelect.addEventListener('change', () => {
+    setGlobalSetting('noteNames', noteNamesSelect.value);
+    noteNamesSelect.blur();
+  });
   keyboardToggle.addEventListener('change', () => {
     setGlobalSetting('keyboard', keyboardToggle.checked);
     keyboardToggle.blur();
@@ -507,13 +602,14 @@ async function main() {
     if (change.scope === 'global') {
       if (change.key === 'language') setLanguage(change.value);
       else if (change.key === 'keyboard') applyKeyboardSetting();
+      else if (change.key === 'noteNames') applyNoteNames();
       else if (change.key === 'view') {
         visualStyle = change.value;
         fillViewSelect();
       }
     } else if (change.scope === 'device') {
       for (const ui of laneUis.values()) {
-        if (ui.device.id === change.id) {
+        if (settingsIdOf(ui.device) === change.id) {
           setupInstrument(ui);
           ui.panel?.refresh();
         }

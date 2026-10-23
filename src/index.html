@@ -11,7 +11,6 @@
   <body>
     <header class="topbar">
       <h1 class="app-title" data-i18n="app.title"></h1>
-      <span class="experiment-badge" title="Experiment E: whammy = pitch bend; Back toggles tilt on/off; while on, tilt moves the fret range by scale steps (0.1 tilt = 1 step); hold Back 5 s to reset this controller's settings; yellow bars under the middle note of the key (the yellow fret's note at the start position), one more per octave away">Experiment E</span>
       <p class="topbar-hint" data-i18n="topbar.hint"></p>
       <label class="language-picker">
         <span data-i18n="topbar.view"></span>
@@ -20,6 +19,10 @@
       <label class="topbar-toggle">
         <input type="checkbox" id="keyboard-toggle" />
         <span data-i18n="topbar.keyboard"></span>
+      </label>
+      <label class="language-picker" id="note-names-picker" hidden>
+        <span data-i18n="topbar.noteNames"></span>
+        <select id="note-names-select"></select>
       </label>
       <label class="language-picker">
         <span data-i18n="topbar.language"></span>
