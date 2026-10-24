@@ -103,6 +103,24 @@ export async function render(seconds, make, steps = []) {
   return { data, errors };
 }
 
+/**
+ * Makes `Math.random` in the context's AudioWorkletGlobalScope a seeded
+ * generator (mulberry32), so a worklet that draws random numbers (the pluck
+ * noise burst) renders the same samples for the same seed. All worklet
+ * modules of one context share that scope, so this must be awaited before
+ * the source loads its own module (i.e. at the start of `make`). Every
+ * OfflineAudioContext has its own scope, so each render needs its own call.
+ */
+export async function seedWorkletRandom(ctx, seed) {
+  const code = `{ let a = ${seed >>> 0}; Math.random = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }`;
+  const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+  try {
+    await ctx.audioWorklet.addModule(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /** Amplitude of one frequency between two times (Goertzel); about the sine amplitude for a pure tone. */
 export function toneLevel(data, from, to, freq) {
   const a = Math.floor(from * RATE);

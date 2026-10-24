@@ -16,7 +16,7 @@ The test pages check the app's logic and sounds in a real browser (design 9.2). 
 | `highway.test.html` | The highway view on its own (notes end and are removed without the simple view), draw order, trail width, lane drawing on a real canvas without errors (R5.4 – R5.4.5, R5.7, R5.8) |
 | `app-smoke.test.html` | Loads `src/index.html` in a frame, starts it with the keyboard, plays and switches view, language and keyboard mode; fails on any uncaught error, rejection or `console.error` |
 
-Shared helpers: `test-runner.js` (checks, sections, safe module loading, PASS/FAIL title) and `offline-audio.js` (OfflineAudioContext rendering and level/pitch measures).
+Shared helpers: `test-runner.js` (checks, sections, safe module loading, PASS/FAIL title) and `offline-audio.js` (OfflineAudioContext rendering and level/pitch measures, and `seedWorkletRandom(ctx, seed)`, which seeds `Math.random` in a context's worklet scope so random noise bursts render the same in every run).
 
 ## How a page reports
 
