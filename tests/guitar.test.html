@@ -654,7 +654,7 @@
         tilt(g, 0.665);
         check('+2.25 display while the sound is +2 (strip at rest: first label A3)', () => [+g.displaySteps().toFixed(2), g.rangeSteps(), (SV.guitarLabelStrip(g, false, 1e7), SV.guitarLabelStrip(g, false, 1e7 + 200).labels[0])], [2.25, 2, 'A3']);
         tapBack(g, 0.665);
-        check('tilt off: the strip snaps to the locked step (frac 0)', () => [g.displaySteps(), SV.guitarLabelStrip(g, false, 2e7).frac], [2, 0]);
+        check('tilt off: the strip settles on the locked step (frac 0)', () => [g.displaySteps(), SV.guitarLabelStrip(g, false, 2e7).frac], [2, 0]);
         tilt(g, 0.9);
         check('tilt off: tilting does not move the strip', g.displaySteps(), 2);
       });
