@@ -31,7 +31,7 @@ Some defaults (e.g. sounds) are marked *provisional* in the [design](docs/design
 - Several controllers at once become several instruments, one per controller.
 - Sound is either MIDI tones or synthesized sounds, possibly selectable.
 - The screen shows which notes are being played.
-- Planned (not scheduled yet): a phone opening the page can be an instrument itself, e.g. maracas (shake the phone) or a microphone, and a phone can be paired with a computer by scanning a QR code to act as a remote controller there; and strum spread, where a strum plays its notes one after another, shown as a line sweeping across the notes, with an adjustable strum speed; a better bass sound; and a whammy that only bends the notes whose fret buttons are still held ([F15, F16, F17, F18, F19](docs/requirements.md#future-work-out-of-scope-for-now)).
+- Planned (not scheduled yet): a phone opening the page can be an instrument itself, e.g. maracas (shake the phone) or a microphone, and a phone can be paired with a computer by scanning a QR code to act as a remote controller there; and strum spread, where a strum plays its notes one after another, shown as a line sweeping across the notes, with an adjustable strum speed; a better bass sound; and a whammy that only bends the notes whose fret buttons are still held; and a versus mode where two players compete on the same song ([F15, F16, F17, F18, F19, F20](docs/requirements.md#future-work-out-of-scope-for-now)).
 
 ## Documentation
 
