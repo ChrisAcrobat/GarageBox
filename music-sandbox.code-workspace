@@ -14,7 +14,8 @@
     }
   ],
   "settings": {
-    "livePreview.defaultPreviewPath": "index.html",
+    "livePreview.defaultPreviewPath": "/index.html",
+    "livePreview.openPreviewTarget": "External Browser",
     "task.allowAutomaticTasks": "on"
   },
   "extensions": {
