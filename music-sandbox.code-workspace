@@ -1,21 +1,20 @@
 {
   "folders": [
     {
-      "name": "Repo",
-      "path": "."
-    },
-    {
       "name": "App",
       "path": "src"
     },
     {
       "name": "Blueprints",
       "path": "docs/blueprints"
+    },
+    {
+      "name": "Repo",
+      "path": "."
     }
   ],
   "settings": {
-    "livePreview.defaultPreviewPath": "/index.html",
-    "livePreview.openPreviewTarget": "External Browser",
+    "livePreview.openPreviewTarget": "Embedded Preview",
     "task.allowAutomaticTasks": "on"
   },
   "extensions": {

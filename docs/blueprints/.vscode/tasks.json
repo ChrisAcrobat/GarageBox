@@ -2,8 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Open Live Preview (blueprints)",
-      "command": "${command:livePreview.start}",
+      "label": "Live Preview server (Blueprints)",
+      "type": "Live Preview",
+      "workspacePath": "${workspaceFolder}",
       "problemMatcher": [],
       "presentation": {
         "reveal": "silent",
