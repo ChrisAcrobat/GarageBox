@@ -1,0 +1,24 @@
+{
+  "folders": [
+    {
+      "name": "Repo",
+      "path": "."
+    },
+    {
+      "name": "App",
+      "path": "src"
+    },
+    {
+      "name": "Blueprints",
+      "path": "docs/blueprints"
+    }
+  ],
+  "settings": {
+    "livePreview.defaultPreviewPath": "index.html"
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-vscode.live-server"
+    ]
+  }
+}
