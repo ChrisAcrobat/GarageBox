@@ -16,13 +16,31 @@
       }
     },
     {
-      "label": "Open App and Blueprints in editor",
+      "label": "Open App in external browser",
       "dependsOn": [
         "Wait until App and Blueprints listen"
       ],
       "dependsOrder": "sequence",
       "type": "shell",
-      "command": "echo \"${input:openApp}${input:openBlueprints}${input:openApp}\"",
+      "command": "python3 -c \"import webbrowser; webbrowser.open('http://127.0.0.1:5500/')\"",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "never",
+        "echo": false,
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "close": true
+      }
+    },
+    {
+      "label": "Open Blueprints in editor",
+      "dependsOn": [
+        "Open App in external browser"
+      ],
+      "dependsOrder": "sequence",
+      "type": "shell",
+      "command": "echo \"${input:openBlueprints}\"",
       "problemMatcher": [],
       "presentation": {
         "reveal": "never",
@@ -38,16 +56,6 @@
     }
   ],
   "inputs": [
-    {
-      "id": "openApp",
-      "type": "command",
-      "command": "workbench.action.browser.open",
-      "args": {
-        "url": "http://127.0.0.1:5500/",
-        "openToSide": false,
-        "reuseUrlFilter": "http://127.0.0.1:5500/**"
-      }
-    },
     {
       "id": "openBlueprints",
       "type": "command",
