@@ -343,7 +343,7 @@ export function controlPills(device, t, skip = new Set(), instrument = null) {
         : t(isTiltOff ? 'lane.tiltPillOff' : 'lane.tiltPillOn', { label: t(`control.${n}`), steps: formatSteps(t, instrument.rangeSteps()) });
       return {
         label,
-        pressed: isTiltOff ? false : device.controls[n].pressed,
+        pressed: device.controls[n].pressed,
         value: isTiltOff ? 0 : device.controls[n].value,
         analog: ANALOG_CONTROLS.has(n),
         showValue: n === 'whammy',
