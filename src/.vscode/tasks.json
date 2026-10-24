@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Serve App :5501",
+      "label": "Serve App :5500",
       "type": "shell",
-      "command": "python3 -m http.server 5501 --bind 127.0.0.1",
+      "command": "python3 -m http.server 5500 --bind 127.0.0.1",
       "isBackground": true,
       "problemMatcher": {
         "owner": "http-server",

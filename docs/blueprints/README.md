@@ -6,10 +6,11 @@ Visual and audio experiment and reference pages for GarageBox - Music Sandbox. L
 
 **Preferred:** open [`music-sandbox.code-workspace`](../../music-sandbox.code-workspace). On start:
 
-- Servers: App `http://127.0.0.1:5501/`, Blueprints `http://127.0.0.1:5502/` (own web roots; start without opening pages by themselves)
+- Servers: App `http://127.0.0.1:5500/`, Blueprints `http://127.0.0.1:5501/` (own web roots; start without opening pages by themselves)
 - Editor: both pages open in Group 1 (App then Blueprints; App focused). If a tab for that port is already open, it is reused instead of duplicated
+- Sound: the integrated browser often has no audio — use “Open in browser” when you need Web Audio
 
-**This folder alone:** `python3 -m http.server 5502 --bind 127.0.0.1 --directory docs/blueprints` (from the repo root), then open `http://127.0.0.1:5502/`.
+**This folder alone:** `python3 -m http.server 5501 --bind 127.0.0.1 --directory docs/blueprints` (from the repo root), then open `http://127.0.0.1:5501/`.
 
 ## Catalog
 

@@ -4,7 +4,7 @@
     {
       "label": "Wait until App and Blueprints listen",
       "type": "shell",
-      "command": "for i in $(seq 1 40); do curl -sf -o /dev/null http://127.0.0.1:5501/ && curl -sf -o /dev/null http://127.0.0.1:5502/ && exit 0; sleep 0.25; done; exit 0",
+      "command": "for i in $(seq 1 40); do curl -sf -o /dev/null http://127.0.0.1:5500/ && curl -sf -o /dev/null http://127.0.0.1:5501/ && exit 0; sleep 0.25; done; exit 0",
       "problemMatcher": [],
       "presentation": {
         "reveal": "never",
@@ -43,9 +43,9 @@
       "type": "command",
       "command": "workbench.action.browser.open",
       "args": {
-        "url": "http://127.0.0.1:5501/",
+        "url": "http://127.0.0.1:5500/",
         "openToSide": false,
-        "reuseUrlFilter": "http://127.0.0.1:5501/**"
+        "reuseUrlFilter": "http://127.0.0.1:5500/**"
       }
     },
     {
@@ -53,9 +53,9 @@
       "type": "command",
       "command": "workbench.action.browser.open",
       "args": {
-        "url": "http://127.0.0.1:5502/",
+        "url": "http://127.0.0.1:5501/",
         "openToSide": false,
-        "reuseUrlFilter": "http://127.0.0.1:5502/**"
+        "reuseUrlFilter": "http://127.0.0.1:5501/**"
       }
     }
   ]
