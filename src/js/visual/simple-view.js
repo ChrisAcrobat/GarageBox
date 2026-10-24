@@ -155,7 +155,7 @@ export function prefersReducedMotion() {
   return !!reducedMotionQuery?.matches;
 }
 
-/** Duration of the strip's animated jump to a new step (R5.7.2); a first guess, to be tried on the real guitar. */
+/** Duration of the strip's animated jump to a new step (R5.7.2); chosen after a hardware test (2026-10-24). */
 export const STRIP_JUMP_MS = 150;
 
 /** Ease-in-out of the strip jump: smoothstep 3t² − 2t³, t clamped to 0..1. */
@@ -164,10 +164,10 @@ export function stripEase(t) {
   return x * x * (3 - 2 * x);
 }
 
-/** Largest strip nudge towards the next step, in steps (R5.7.2.1); a first guess. */
+/** Largest strip nudge towards the next step, in steps (R5.7.2.1); chosen after a hardware test (2026-10-24). */
 export const STRIP_NUDGE_MAX = 1 / 6;
 
-/** Fraction of the way to the switch point where the nudge starts (R5.7.2.1); a first guess. */
+/** Fraction of the way to the switch point where the nudge starts (R5.7.2.1); chosen after a hardware test (2026-10-24). */
 export const STRIP_NUDGE_START = 0.5;
 
 /**

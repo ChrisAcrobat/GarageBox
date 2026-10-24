@@ -30,7 +30,7 @@ const SAMPLE_INTERVAL = 1 / 40;
 /**
  * How much thinner the trail gets at full whammy when bending down (R5.4.5):
  * width = 1 - FULL_WHAMMY_THINNING x d, so 0.8 gives 20 % at full whammy.
- * A first guess; change it here to try other thicknesses.
+ * Chosen by the owner after a hardware test (2026-10-24).
  */
 export const FULL_WHAMMY_THINNING = 0.8;
 /** How much wider the trail gets at full whammy when bending up (150 %). */

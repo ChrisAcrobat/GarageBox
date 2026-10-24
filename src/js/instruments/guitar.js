@@ -284,9 +284,10 @@ export class Guitar extends Instrument {
   }
 
   /**
-   * The fractional range offset for the note
-   * strip. While tilt is on it follows the smoothed tilt continuously; while
-   * it is off it is the locked whole-step offset (so the strip snaps).
+   * The fractional range offset, used by the note strip (its position with
+   * tilt glide, R5.7.1, and its nudge, R5.7.2.1). While tilt is on it follows
+   * the smoothed tilt continuously; while it is off it is the locked
+   * whole-step offset.
    */
   displaySteps() {
     if (!this.tiltEnabled || this.tiltRef === null || this.smoothedTilt === null) return this.rangeSteps();
@@ -520,7 +521,7 @@ export class Guitar extends Instrument {
   toggleTilt(time) {
     if (this.tiltEnabled) {
       // With glide the sound is at the continuous offset, so lock the nearest
-      // whole step to it (the strip snaps there too) and let ringing notes
+      // whole step to it (the strip jumps there, R5.7.2) and let ringing notes
       // settle on it. Without glide: the step the sound uses.
       this.stepBase = this.options.tiltGlide ? this._clampSteps(Math.round(this.displaySteps())) : this.rangeSteps();
       if (this.options.tiltGlide) this._settleGlide(this.stepBase, time);
