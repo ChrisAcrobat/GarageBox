@@ -88,20 +88,21 @@
 
         // The noise burst is random, so single renders differ by about 1 dB (sd) even without hold, and
         // 0.5 dB cannot be checked reliably. Compare the mean of 16 renders each, every level relative to the
-        // render's own 0.05-0.15 s level, within 1 dB (decision 4-pluck-hold-tolerance).
+        // render's own 0.05-0.15 s level, within 1 dB (decision 4-pluck-hold-tolerance). The bursts are seeded
+        // (seeds 1-16, the same for both sides), so the check is deterministic and both means use the same 16 bursts.
         const N = 16;
         const relative = async (withHold) => {
           let sum = 0;
-          for (let i = 0; i < N; i++) {
+          for (let seed = 1; seed <= N; seed++) {
             const steps = withHold ? [[0, (src) => src.noteOn(1, 52, 100, hold)], [0.005, (src) => src.holdEnd(1)]] : [[0, (src) => src.noteOn(1, 52, 100)]];
-            const { data } = await render(1.2, pluck({ decay: 2, brightness: 0.3 }), steps);
+            const { data } = await render(1.2, seededPluck(seed, { decay: 2, brightness: 0.3 }), steps);
             sum += db(data, 0.5, 1.0) - db(data, 0.05, 0.15);
           }
           return sum / N;
         };
         const lq = await relative(true);
         const lp = await relative(false);
-        check(`a holdEnd at 5 ms renders like a voice without hold, within 1 dB (${lq.toFixed(2)} vs ${lp.toFixed(2)} dB, mean of ${N}, relative)`, near(lq, lp, 1), true);
+        check(`a holdEnd at 5 ms renders like a voice without hold, within 1 dB (${lq.toFixed(2)} vs ${lp.toFixed(2)} dB, mean of ${N} seeded bursts, relative)`, near(lq, lp, 1), true);
 
         const off = await render(2, pluck(params), [
           [0, (src) => src.noteOn(1, 52, 100, hold)],
