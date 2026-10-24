@@ -22,7 +22,7 @@
       ],
       "dependsOrder": "sequence",
       "type": "shell",
-      "command": "echo \"${input:openApp}${input:openBlueprints}\"",
+      "command": "echo \"${input:openApp}${input:openBlueprints}${input:focusApp}\"",
       "problemMatcher": [],
       "presentation": {
         "reveal": "never",
@@ -56,6 +56,16 @@
         "url": "http://127.0.0.1:5502/",
         "openToSide": false,
         "reuseUrlFilter": "http://127.0.0.1:5502/**"
+      }
+    },
+    {
+      "id": "focusApp",
+      "type": "command",
+      "command": "workbench.action.browser.open",
+      "args": {
+        "url": "http://127.0.0.1:5501/",
+        "openToSide": false,
+        "reuseUrlFilter": "http://127.0.0.1:5501/**"
       }
     }
   ]
