@@ -1,0 +1,11 @@
+{
+  "blueprints": [
+    {
+      "name": "placeholder",
+      "title": "Placeholder",
+      "comment": "Temporary test entry until the first real blueprint exists.",
+      "tags": ["test"],
+      "ready": true
+    }
+  ]
+}

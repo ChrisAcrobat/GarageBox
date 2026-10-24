@@ -1,0 +1,95 @@
+/* Shared look of the blueprint pages (docs/blueprints/, served as the site root). */
+:root {
+  --bg: #121318;
+  --panel: #1b1d24;
+  --border: #2c2f3a;
+  --text: #e6e7eb;
+  --muted: #9a9fad;
+  --accent: #f5a524;
+  --ready: #3dd68c;
+  --draft: #8a8f9c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+h1, h2, h3 { line-height: 1.25; margin: 0 0 0.5em; }
+h1 { font-size: 1.9rem; }
+h1 .accent { color: var(--accent); }
+p { margin: 0 0 1em; }
+.lead { color: var(--muted); }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover, a:focus-visible { text-decoration: underline; }
+
+code {
+  font: 0.9em ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+/* Catalog */
+.catalog { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 12px; }
+
+.card {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--draft);
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: inherit;
+}
+.card.ready { border-left-color: var(--ready); }
+.card:hover, .card:focus-visible { border-color: var(--accent); text-decoration: none; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.card-title { font-size: 1.15rem; font-weight: 650; color: var(--text); }
+.card-comment { color: var(--muted); margin: 6px 0 10px; }
+
+.status {
+  flex: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  color: var(--draft);
+}
+.status.ready { color: var(--ready); }
+
+.tags { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.tag {
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: #23262f;
+  border-radius: 4px;
+  padding: 1px 8px;
+}
+
+.notice {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: var(--muted);
+}
+.notice.error { border-color: #ff6369; color: #ffb3b6; }
+
+.back { display: inline-block; margin-bottom: 20px; }

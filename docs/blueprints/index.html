@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Blueprints – GarageBox - Music Sandbox</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1><span class="accent">Blueprints</span> · GarageBox - Music Sandbox</h1>
+      <p class="lead">Visual and audio experiments and reference pages, tried here before something is built into the app. Local only, not published.</p>
+      <ul class="catalog" id="catalog" aria-live="polite"></ul>
+      <p class="notice" id="status">Loading <code>/meta.json</code>…</p>
+    </main>
+    <script type="module">
+      const list = document.getElementById('catalog');
+      const status = document.getElementById('status');
+
+      function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      function card(bp) {
+        const ready = bp.ready === true;
+        const item = el('li');
+        const link = el('a', `card${ready ? ' ready' : ''}`);
+        link.href = `/${encodeURIComponent(bp.name)}/`;
+        const head = el('div', 'card-head');
+        head.append(el('span', 'card-title', bp.title || bp.name), el('span', `status${ready ? ' ready' : ''}`, ready ? 'Ready' : 'Draft'));
+        link.append(head);
+        if (bp.comment) link.append(el('p', 'card-comment', bp.comment));
+        const tags = Array.isArray(bp.tags) ? bp.tags : [];
+        if (tags.length) {
+          const ul = el('ul', 'tags');
+          for (const t of tags) ul.append(el('li', 'tag', String(t)));
+          link.append(ul);
+        }
+        item.append(link);
+        return item;
+      }
+
+      try {
+        const response = await fetch('/meta.json', { cache: 'no-cache' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const meta = await response.json();
+        const blueprints = Array.isArray(meta.blueprints) ? meta.blueprints.filter((bp) => bp && typeof bp.name === 'string' && bp.name) : [];
+        list.replaceChildren(...blueprints.map(card));
+        if (blueprints.length) status.remove();
+        else status.textContent = 'No blueprints yet.';
+      } catch (err) {
+        status.classList.add('error');
+        status.textContent = `Could not load /meta.json (${err.message}). Serve docs/blueprints/ as the web root, see README.md.`;
+      }
+    </script>
+  </body>
+</html>
