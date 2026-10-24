@@ -207,7 +207,6 @@ export function setGlobalSetting(key, value) {
   notify({ scope: 'global', key, value });
 }
 
-/** Returns the settings of one device (keyed by its settings id), merged with defaults. */
 /**
  * Number of resets of each device's settings in this page session (not
  * saved). getDeviceSettings() puts it under the RESET_COUNT symbol, so an
@@ -218,6 +217,7 @@ export function setGlobalSetting(key, value) {
 export const RESET_COUNT = Symbol('resetCount');
 const resetCounts = new Map();
 
+/** Returns the settings of one device (keyed by its settings id), merged with defaults. */
 export function getDeviceSettings(id) {
   const all = readJson(DEVICES_KEY) || {};
   const settings = mergeWithDefaults(DEFAULTS.device, all[id]);
