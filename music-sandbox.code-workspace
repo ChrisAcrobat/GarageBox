@@ -14,13 +14,6 @@
     }
   ],
   "settings": {
-    "livePreview.openPreviewTarget": "Embedded Preview",
-    "livePreview.useIntegratedBrowser": true,
     "task.allowAutomaticTasks": "on"
-  },
-  "extensions": {
-    "recommendations": [
-      "ms-vscode.live-server"
-    ]
   }
 }
