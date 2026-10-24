@@ -29,3 +29,5 @@ How a piece of work goes from the docs to a finished build. The design bot write
 ## 4. Done
 
 When QA and the owner test pass, the developer bots set their status to "Färdig, redo att tas bort". Only the owner deletes bots.
+
+Changes made during the owner test (tuning, small additions) go through refactoring and QA too. Do this as soon as the owner has answered all test questions that concern a bot's work, without waiting for the rest of the protocol: the refactoring bot reviews the src commits made since the last refactoring, the design bot runs QA, and if neither finds more work for that bot, it sets "Färdig, redo att tas bort" (owner decision 2026-10-24).
