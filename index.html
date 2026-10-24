@@ -12,23 +12,26 @@
       .muted { color: #9aa3b2; }
     </style>
     <script>
-      // Open Blueprints in a new tab, then continue this tab to the app under /src/.
-      // Works when Live Preview (or any static server) uses the repository root as web root.
-      (function () {
-        const blueprints = '/docs/blueprints/';
-        const app = '/src/';
-        try { window.open(blueprints, '_blank', 'noopener'); } catch (_) {}
-        location.replace(app);
+      const APP = 'http://127.0.0.1:5501/';
+      const BLUEPRINTS = 'http://127.0.0.1:5502/';
+
+      async function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+      (async function () {
+        // App (:5501) and Blueprints (:5502) are started as folderOpen tasks.
+        await wait(1200);
+        try { window.open(BLUEPRINTS, '_blank', 'noopener'); } catch (_) {}
+        location.replace(APP);
       })();
     </script>
   </head>
   <body>
     <h1>Opening local pages…</h1>
-    <p class="muted">Blueprints should open in a new tab. This tab goes to the app.</p>
-    <p>If nothing happens (popup blocked), use:
-      <a href="/docs/blueprints/" target="_blank" rel="noopener">Blueprints</a>
+    <p class="muted">Blueprints on <code>:5502</code> (new tab), then this tab goes to the app on <code>:5501</code>.</p>
+    <p>If a popup is blocked, use:
+      <a id="bp" href="http://127.0.0.1:5502/" target="_blank" rel="noopener">Blueprints</a>
       ·
-      <a href="/src/">App</a>
+      <a id="app" href="http://127.0.0.1:5501/">App</a>
     </p>
   </body>
 </html>

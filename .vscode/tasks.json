@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Open Live Preview (Repo launcher)",
+      "label": "Open Live Preview (launcher)",
       "command": "${command:livePreview.start}",
       "problemMatcher": [],
       "presentation": {

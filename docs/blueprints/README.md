@@ -4,10 +4,14 @@ Visual and audio experiment and reference pages for GarageBox - Music Sandbox. L
 
 ## Open
 
-**Preferred (Live Preview):** open [`music-sandbox.code-workspace`](../../music-sandbox.code-workspace). On start, the repo root launcher (`/index.html`) opens this catalog in a new tab and sends the first tab to the app at `/src/`.
+**Preferred:** open [`music-sandbox.code-workspace`](../../music-sandbox.code-workspace). On start:
 
-**This folder alone:** serve it as the web root, e.g. `python3 -m http.server 8000 --directory docs/blueprints`, then open `http://127.0.0.1:8000/`. Paths are relative (`css/style.css`, `meta.json`), so both modes work.
+- App: `http://127.0.0.1:5501/` (own web root)
+- Blueprints: `http://127.0.0.1:5502/` (own web root)
+- The repo launcher (Live Preview) opens Blueprints in a new tab and sends the first tab to the app
+
+**This folder alone:** `python3 -m http.server 5502 --bind 127.0.0.1 --directory docs/blueprints` (from the repo root), then open `http://127.0.0.1:5502/`.
 
 ## Catalog
 
-`index.html` reads `meta.json` (`blueprints` array: `name`, `title`, `comment`, `tags`, `ready`). Each blueprint lives in `{name}/`.
+`index.html` reads `meta.json` (`blueprints` array: `name`, `title`, `comment`, `tags`, `ready`). Each blueprint lives in `{name}/`. Paths are relative so the catalog works on its own port and under a repo-root server.
