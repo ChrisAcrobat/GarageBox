@@ -37,6 +37,7 @@ Some defaults (e.g. sounds) are marked *provisional* in the [design](docs/design
 
 - [Requirements](docs/requirements.md) – core requirements and open questions.
 - [Design](docs/design.md) – architecture, file structure and module design.
+- [Blueprints](docs/blueprints/) – local visual and audio experiment and reference pages, tried before something is built into the app; not published (serve `docs/blueprints/` as the web root, see [docs/process.md §5](docs/process.md#5-blueprints)).
 
 ## Decision review
 

@@ -31,3 +31,23 @@ How a piece of work goes from the docs to a finished build. The design bot write
 When QA and the owner test pass, the developer bots set their status to "Färdig, redo att tas bort". Only the owner deletes bots.
 
 Changes made during the owner test (tuning, small additions) go through refactoring and QA too. Do this as soon as the owner has answered all test questions that concern a bot's work, without waiting for the rest of the protocol: the refactoring bot reviews the src commits made since the last refactoring, the design bot runs QA, and if neither finds more work for that bot, it sets "Färdig, redo att tas bort" (owner decision 2026-10-24).
+
+## 5. Blueprints
+
+Blueprints are visual and audio experiment and reference pages: a look, a sound or an interaction is tried out and agreed on in a blueprint before it is built into the app (owner decision 2026-10-25).
+
+- **Location:** `docs/blueprints/`. Only `src/` is published to GitHub Pages, so blueprints are never published; they are opened locally.
+- **Own web root:** when served, `docs/blueprints/` is the site root (e.g. `python3 -m http.server 8000 --directory docs/blueprints`). Absolute paths start there: `/css/style.css`, `/meta.json`, `/placeholder/`.
+- **Catalog:** `index.html` lists the entries of `meta.json`, each as a link to `/{name}/` with its title, comment, tags and whether it is ready or a draft.
+- **`meta.json`:** `{ "blueprints": [ … ] }`, one object per blueprint with
+  - `name`: the exact folder name;
+  - `title`: shown in the catalog;
+  - `comment`: a short description;
+  - `tags`: an array of strings;
+  - `ready`: `true` when ready, `false` while it is a draft (there is no separate status text).
+- **One folder each:** a blueprint lives in `docs/blueprints/{name}/`, normally with its own `index.html`. A new blueprint gets its folder and a `meta.json` entry in the same commit.
+- **Standalone:** a blueprint imports nothing from `src/`; code it needs is copied or written into its folder. The shared look comes from `/css/style.css` under the blueprints root. Fetching anything from GitHub (or other outside sources) needs the owner's approval first.
+- **Language:** English by default, no i18n; exceptions are allowed when a blueprint needs them.
+- **Who writes them:** the design bot owns `docs/blueprints/` (as all of `docs/`). Developer bots do not write blueprints unless asked.
+- The `placeholder` blueprint is only there to test the catalog and is removed when the first real blueprint is added.
+
