@@ -37,7 +37,8 @@ Changes made during the owner test (tuning, small additions) go through refactor
 Blueprints are visual and audio experiment and reference pages: a look, a sound or an interaction is tried out and agreed on in a blueprint before it is built into the app (owner decision 2026-10-25).
 
 - **Location:** `docs/blueprints/`. Only `src/` is published to GitHub Pages, so blueprints are never published; they are opened locally.
-- **Own web root:** when served, `docs/blueprints/` is the site root. Absolute paths start there: `/css/style.css`, `/meta.json`, `/placeholder/`. Locally: open `music-sandbox.code-workspace` and preview from the **Blueprints** root with Live Preview (`ms-vscode.live-server`), or run e.g. `python3 -m http.server 8000 --directory docs/blueprints`. The **App** root in the same workspace serves `src/` the same way.
+- **Own web root:** `docs/blueprints/` can be served as its own site root (e.g. `python3 -m http.server 8000 --directory docs/blueprints`). Paths in blueprint pages are **root-relative to that folder** using relative URLs (`css/style.css`, `meta.json`, `./name/`), so the same files also work when the **repository root** is the server (Live Preview on **Repo**) at `/docs/blueprints/`.
+- **Local Live Preview:** open `music-sandbox.code-workspace`. **Repo** is first and auto-starts Live Preview on the repo `index.html` launcher, which opens Blueprints in a new tab (`/docs/blueprints/`) and continues this tab to the app (`/src/`). The app’s asset links are relative, so `/src/` works. Popup blockers may block the Blueprints tab; use the links on the launcher if that happens.
 - **Catalog:** `index.html` lists the entries of `meta.json`, each as a link to `/{name}/` with its title, comment, tags and whether it is ready or a draft.
 - **`meta.json`:** `{ "blueprints": [ … ] }`, one object per blueprint with
   - `name`: the exact folder name;

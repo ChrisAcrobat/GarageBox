@@ -2,9 +2,8 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Live Preview server (Blueprints)",
-      "type": "Live Preview",
-      "workspacePath": "${workspaceFolder}",
+      "label": "Open Live Preview (Repo launcher)",
+      "command": "${command:livePreview.start}",
       "problemMatcher": [],
       "presentation": {
         "reveal": "silent",

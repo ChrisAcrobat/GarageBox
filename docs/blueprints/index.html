@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="data:," />
     <title>Blueprints – GarageBox - Music Sandbox</title>
-    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
     <main>
@@ -29,7 +29,7 @@
         const ready = bp.ready === true;
         const item = el('li');
         const link = el('a', `card${ready ? ' ready' : ''}`);
-        link.href = `/${encodeURIComponent(bp.name)}/`;
+        link.href = `./${encodeURIComponent(bp.name)}/`;
         const head = el('div', 'card-head');
         head.append(el('span', 'card-title', bp.title || bp.name), el('span', `status${ready ? ' ready' : ''}`, ready ? 'Ready' : 'Draft'));
         link.append(head);
@@ -45,7 +45,7 @@
       }
 
       try {
-        const response = await fetch('/meta.json', { cache: 'no-cache' });
+        const response = await fetch('meta.json', { cache: 'no-cache' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const meta = await response.json();
         const blueprints = Array.isArray(meta.blueprints) ? meta.blueprints.filter((bp) => bp && typeof bp.name === 'string' && bp.name) : [];
@@ -54,7 +54,7 @@
         else status.textContent = 'No blueprints yet.';
       } catch (err) {
         status.classList.add('error');
-        status.textContent = `Could not load /meta.json (${err.message}). Serve docs/blueprints/ as the web root, see README.md.`;
+        status.textContent = `Could not load meta.json (${err.message}). Serve docs/blueprints/ as the web root, or open /docs/blueprints/ from the repo root; see README.md.`;
       }
     </script>
   </body>

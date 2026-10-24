@@ -1,13 +1,13 @@
 # Blueprints
 
-Local visual and audio experiment and reference pages (see [docs/process.md §5](../process.md#5-blueprints)); they are not published. To open them, serve this folder as the web root, e.g. `python3 -m http.server 8000 --directory docs/blueprints` from the repository root, and open http://localhost:8000/. The catalog (`index.html`) lists the entries in `meta.json`; each blueprint lives in its own folder, `/{name}/`.
+Visual and audio experiment and reference pages for GarageBox - Music Sandbox. Local only; not published to GitHub Pages.
 
-## Live Preview (VS Code)
+## Open
 
-Open [`music-sandbox.code-workspace`](../../music-sandbox.code-workspace) in VS Code/Cursor (File → Open Workspace from File…). That workspace has three roots: **Repo**, **App** (`src/`), and **Blueprints** (this folder). Microsoft [Live Preview](https://marketplace.visualstudio.com/items?itemName=ms-vscode.live-server) (`ms-vscode.live-server`) starts a separate server for each root you preview from, so `/` in App is `src/` and `/` here is `docs/blueprints/`.
+**Preferred (Live Preview):** open [`music-sandbox.code-workspace`](../../music-sandbox.code-workspace). On start, the repo root launcher (`/index.html`) opens this catalog in a new tab and sends the first tab to the app at `/src/`.
 
-Preview any `index.html` under **App** or **Blueprints** (preview button, or Command Palette → “Live Preview: Show Preview”). Hover the Live Preview status-bar item to see which ports belong to which root.
+**This folder alone:** serve it as the web root, e.g. `python3 -m http.server 8000 --directory docs/blueprints`, then open `http://127.0.0.1:8000/`. Paths are relative (`css/style.css`, `meta.json`), so both modes work.
 
-On workspace open, **App** opens in Live Preview’s **embedded** (internal) browser (`livePreview.start`, `openPreviewTarget`: Embedded Preview, `defaultPreviewPath`: `index.html`). App is the first folder in `music-sandbox.code-workspace` so the preview is not resolved against Repo (that caused `/endpoint_unsaved/index.html`). **Blueprints** starts its own Live Preview server on folder open; open `index.html` under Blueprints and use the preview button (or Command Palette → “Live Preview: Show Preview”) to show it in the internal browser — a second automatic `livePreview.start` would still target App, which is the first workspace folder.
+## Catalog
 
-
+`index.html` reads `meta.json` (`blueprints` array: `name`, `title`, `comment`, `tags`, `ready`). Each blueprint lives in `{name}/`.
