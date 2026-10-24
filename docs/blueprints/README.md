@@ -8,7 +8,7 @@ Visual and audio experiment and reference pages for GarageBox - Music Sandbox. L
 
 - App: `http://127.0.0.1:5501/` (own web root)
 - Blueprints: `http://127.0.0.1:5502/` (own web root)
-- The repo launcher (Live Preview) opens Blueprints in a new tab and sends the first tab to the app
+- The repo launcher (Live Preview) opens App in a new tab and sends the first tab to Blueprints
 
 **This folder alone:** `python3 -m http.server 5502 --bind 127.0.0.1 --directory docs/blueprints` (from the repo root), then open `http://127.0.0.1:5502/`.
 
