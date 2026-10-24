@@ -128,14 +128,6 @@ function identity(el) {
 }
 
 /**
- * A gamepad cursor over the controls of one menu element (R2.12).
- * D-pad up/down moves between controls (wrapping), left/right changes the
- * value (selects cycle their options, number/range inputs step and stop at
- * their min/max) and Start activates the control: it toggles a checkbox or
- * presses a button. Each action has one button: left/right do nothing on
- * checkboxes and buttons, Start does nothing on selects and number fields.
- */
-/**
  * Remembered highlight (R2.12.1): memory key → identity of the control last
  * under the cursor. Page session only (never saved), so a reload starts at
  * the top; a settings reset does not touch it.
@@ -152,6 +144,14 @@ export function clearRememberedControls() {
   rememberedControls.clear();
 }
 
+/**
+ * A gamepad cursor over the controls of one menu element (R2.12).
+ * D-pad up/down moves between controls (wrapping), left/right changes the
+ * value (selects cycle their options, number/range inputs step and stop at
+ * their min/max) and Start activates the control: it toggles a checkbox or
+ * presses a button. Each action has one button: left/right do nothing on
+ * checkboxes and buttons, Start does nothing on selects and number fields.
+ */
 export class MenuNavigator {
   /**
    * @param {HTMLElement} root the menu element
@@ -165,7 +165,7 @@ export class MenuNavigator {
     this.key = null;
     this.index = 0;
     const list = this.controls();
-    const remembered = this.memoryKey !== null ? rememberedControls.get(this.memoryKey) : undefined;
+    const remembered = rememberedControl(this.memoryKey); // undefined without a memory key
     const start = (remembered !== undefined && list.find((el) => identity(el) === remembered)) || (initial ? root.querySelector(initial) : null);
     if (start && list.includes(start)) this._set(list, list.indexOf(start));
     else if (list.length) this._set(list, 0);
