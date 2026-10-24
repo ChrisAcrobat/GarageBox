@@ -14,11 +14,35 @@
     }
   ],
   "settings": {
-    "livePreview.defaultPreviewPath": "index.html"
+    "livePreview.defaultPreviewPath": "index.html",
+    "task.allowAutomaticTasks": "on"
   },
   "extensions": {
     "recommendations": [
       "ms-vscode.live-server"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Live Preview: App",
+        "type": "Live Preview",
+        "workspacePath": "${workspaceFolder:App}",
+        "problemMatcher": [],
+        "runOptions": {
+          "runOn": "folderOpen"
+        }
+      },
+      {
+        "label": "Live Preview: Blueprints",
+        "type": "Live Preview",
+        "workspacePath": "${workspaceFolder:Blueprints}",
+        "problemMatcher": [],
+        "runOptions": {
+          "runOn": "folderOpen"
+        }
+      }
     ]
   }
 }

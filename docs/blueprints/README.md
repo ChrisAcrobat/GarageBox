@@ -8,3 +8,5 @@ Open [`music-sandbox.code-workspace`](../../music-sandbox.code-workspace) in VS 
 
 Preview any `index.html` under **App** or **Blueprints** (preview button, or Command Palette → “Live Preview: Show Preview”). Hover the Live Preview status-bar item to see which ports belong to which root.
 
+On workspace open, Live Preview tasks start automatically for **App** and **Blueprints** (`runOn: folderOpen` in the workspace and in each folder’s `.vscode/tasks.json`). The first time, allow automatic tasks if VS Code/Cursor asks (or use Command Palette → “Tasks: Manage Automatic Tasks”).
+
