@@ -2,7 +2,68 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Serve App :5500",
+      "type": "shell",
+      "command": "python3 -m http.server 5500 --bind 127.0.0.1 --directory \"${workspaceFolder:App}\"",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "http-server",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Serving HTTP"
+        }
+      },
+      "presentation": {
+        "reveal": "never",
+        "echo": false,
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "close": false
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    },
+    {
+      "label": "Serve Blueprints :5501",
+      "type": "shell",
+      "command": "python3 -m http.server 5501 --bind 127.0.0.1 --directory \"${workspaceFolder:Blueprints}\"",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "http-server",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Serving HTTP"
+        }
+      },
+      "presentation": {
+        "reveal": "never",
+        "echo": false,
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "close": false
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    },
+    {
       "label": "Wait until App and Blueprints listen",
+      "dependsOn": [
+        "Serve App :5500",
+        "Serve Blueprints :5501"
+      ],
+      "dependsOrder": "parallel",
       "type": "shell",
       "command": "for i in $(seq 1 40); do curl -sf -o /dev/null http://127.0.0.1:5500/ && curl -sf -o /dev/null http://127.0.0.1:5501/ && exit 0; sleep 0.25; done; exit 0",
       "problemMatcher": [],
