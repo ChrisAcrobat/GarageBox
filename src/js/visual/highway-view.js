@@ -41,6 +41,11 @@ const KEYS_HIGH = 91;
 /** Share of the keyboard road (Piano mode) taken by the numpad drum column at its right edge (R4c.15). */
 const KEYS_DRUM_COLUMN = 0.06;
 
+/** One trail sample: time, level and the channel's bend and bend range (R5.4.5). */
+function historySample(tracker, t, level) {
+  return { t, level, bend: tracker.bend || 0, range: tracker.bendRange || 0 };
+}
+
 export class HighwayState {
   constructor() {
     /** { voiceId, x (0..1 across the road), color, start, end, oneShot, velocity, midi, tracker, history: [{t, level, bend, range}] } */
@@ -65,7 +70,7 @@ export class HighwayState {
       velocity: event.velocity ?? 100,
       midi: event.midi,
       tracker,
-      history: [{ t: now, level: tracker.level(event.voiceId, now) || (event.velocity ?? 100) / 127, bend: tracker.bend || 0, range: tracker.bendRange || 0 }],
+      history: [historySample(tracker, now, tracker.level(event.voiceId, now) || (event.velocity ?? 100) / 127)],
     });
   }
 
@@ -76,7 +81,7 @@ export class HighwayState {
       const alive = n.tracker.voices.has(n.voiceId);
       const level = alive ? n.tracker.level(n.voiceId, now) : 0;
       const last = n.history[n.history.length - 1];
-      if (now - last.t >= SAMPLE_INTERVAL) n.history.push({ t: now, level, bend: n.tracker.bend || 0, range: n.tracker.bendRange || 0 });
+      if (now - last.t >= SAMPLE_INTERVAL) n.history.push(historySample(n.tracker, now, level));
       if (!alive) n.end = now;
     }
     this.notes = this.notes.filter((n) => n.end === null || now - n.end < HIGHWAY_SECONDS);
