@@ -4,7 +4,7 @@
     {
       "label": "Free preview ports",
       "type": "shell",
-      "command": "for p in 5500 5502 5501; do fuser -k ${p}/tcp 2>/dev/null || true; done; sleep 0.3; exit 0",
+      "command": "for p in 5500 5501; do fuser -k ${p}/tcp 2>/dev/null || true; done; sleep 0.3; exit 0",
       "problemMatcher": [],
       "presentation": {
         "reveal": "never",
@@ -48,9 +48,9 @@
       "dependsOrder": "sequence"
     },
     {
-      "label": "Serve Blueprints :5502",
+      "label": "Serve Blueprints :5501",
       "type": "shell",
-      "command": "python3 -m http.server 5502 --bind 127.0.0.1 --directory \"docs/blueprints\"",
+      "command": "python3 -m http.server 5501 --bind 127.0.0.1 --directory \"docs/blueprints\"",
       "options": {
         "cwd": "${workspaceFolder:Repo}"
       },
@@ -83,11 +83,11 @@
       "label": "Wait until App and Blueprints listen",
       "dependsOn": [
         "Serve App :5500",
-        "Serve Blueprints :5502"
+        "Serve Blueprints :5501"
       ],
       "dependsOrder": "parallel",
       "type": "shell",
-      "command": "for i in $(seq 1 50); do curl -sf http://127.0.0.1:5500/ | grep -q \"GarageBox\" && curl -sf http://127.0.0.1:5502/ | grep -q \"Blueprints\" && exit 0; sleep 0.2; done; echo \"Preview servers did not serve the expected pages\" >&2; exit 1",
+      "command": "for i in $(seq 1 50); do curl -sf http://127.0.0.1:5500/ | grep -q \"GarageBox\" && curl -sf http://127.0.0.1:5501/ | grep -q \"Blueprints\" && exit 0; sleep 0.2; done; echo \"Preview servers did not serve the expected pages\" >&2; exit 1",
       "problemMatcher": [],
       "presentation": {
         "reveal": "never",
@@ -126,9 +126,9 @@
       "type": "command",
       "command": "workbench.action.browser.open",
       "args": {
-        "url": "http://127.0.0.1:5502/",
+        "url": "http://127.0.0.1:5501/",
         "openToSide": false,
-        "reuseUrlFilter": "http://127.0.0.1:5502/**"
+        "reuseUrlFilter": "http://127.0.0.1:5501/**"
       }
     }
   ]
