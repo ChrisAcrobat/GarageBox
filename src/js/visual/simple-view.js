@@ -233,12 +233,13 @@ function stripAnimatorFor(guitar) {
 /**
  * The nudge of a guitar's strip (R5.7.2.1): towards the next step as the
  * tilt nears the switch point, only with tilt on and glide off, and not
- * towards a direction the range limit blocks.
+ * towards a direction the range limit blocks. `steps` is the step the sound
+ * uses (guitar.rangeSteps()).
  */
-function guitarStripNudge(guitar) {
+function guitarStripNudge(guitar, steps) {
   if (!guitar.tiltEnabled || !guitar.displaySteps || !guitar.rangeSteps) return 0;
-  const d = guitar.displaySteps() - guitar.rangeSteps();
-  if (guitar.stepLimit && Math.abs(guitar.rangeSteps() + Math.sign(d)) > guitar.stepLimit()) return 0;
+  const d = guitar.displaySteps() - steps;
+  if (guitar.stepLimit && Math.abs(steps + Math.sign(d)) > guitar.stepLimit()) return 0;
   return stripNudge(d);
 }
 
@@ -254,9 +255,10 @@ function guitarStripNudge(guitar) {
  */
 export function guitarLabelStrip(guitar, reducedMotion = prefersReducedMotion(), nowMs = performance.now()) {
   const glide = !!guitar.glideActive?.();
-  const target = glide && !reducedMotion && guitar.displaySteps ? guitar.displaySteps() : guitar.rangeSteps ? guitar.rangeSteps() : 0;
+  const steps = guitar.rangeSteps ? guitar.rangeSteps() : 0;
+  const target = glide && !reducedMotion && guitar.displaySteps ? guitar.displaySteps() : steps;
   const instant = reducedMotion || glide;
-  const nudge = instant ? 0 : guitarStripNudge(guitar);
+  const nudge = instant ? 0 : guitarStripNudge(guitar, steps);
   const offset = stripAnimatorFor(guitar).update(target, nowMs, { instant, nudge });
   const { whole, frac } = splitOffset(offset);
   const midis = [0, 1, 2, 3, 4, 5].map((j) => guitar.noteFor(j, whole));
