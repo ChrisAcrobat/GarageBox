@@ -6,7 +6,7 @@ How a piece of work goes from the docs to a finished build. The design bot write
 
 - The design bot asks the owner whether the build is **attended** or **unattended**.
   - **Attended:** the owner can answer questions. Unclear points are asked to the owner (one question at a time), and work on that point waits for the answer.
-  - **Unattended:** nobody can answer questions for now. The bot that hits an unclear point does not stop: it takes the most reasonable decision, logs it as a decision file in [`decisions-review/`](../decisions-review/README.md) (decision, why, alternatives, where, importance) and commits it right away. The owner reviews and confirms these decisions afterwards.
+  - **Unattended:** nobody can answer questions for now. The bot that hits an unclear point does not stop: it takes the most reasonable decision, logs it as a decision file in [`docs/decisions-review/`](decisions-review/README.md) (decision, why, alternatives, where, importance) and commits it right away. The owner reviews and confirms these decisions afterwards.
 - The default is attended: when in doubt, ask the owner.
 
 ## 2. Steps
@@ -24,7 +24,7 @@ How a piece of work goes from the docs to a finished build. The design bot write
    - An unclear or contradictory doc is the design bot's defect: it fixes the doc, and if that needs a new decision it asks the owner (attended) or decides and logs it (unattended).
 3. **Fix.** The bot sets its status to "Åtgärdar QA-fel", fixes the defect, adds a test that catches it where possible, runs all tests and sets "Väntar på QA" again.
 4. **Re-test.** The design bot re-tests the failed points and runs the whole test suite to make sure nothing else broke.
-5. **Limit.** If the same point still fails after **5 rounds**, the design bot takes it to the owner (attended). In an unattended build the work may go on up to **10 rounds**; after that the design bot decides how to proceed (e.g. a different approach or a simpler requirement), logs the decision in `decisions-review/` and the point is reviewed with the owner afterwards.
+5. **Limit.** If the same point still fails after **5 rounds**, the design bot takes it to the owner (attended). In an unattended build the work may go on up to **10 rounds**; after that the design bot decides how to proceed (e.g. a different approach or a simpler requirement), logs the decision in `docs/decisions-review/` and the point is reviewed with the owner afterwards.
 
 ## 4. Done
 

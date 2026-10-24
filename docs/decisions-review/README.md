@@ -16,8 +16,8 @@ Each file has the decision text verbatim (Decision / Why / Alternatives / Where)
 ## Rules
 
 - This folder is committed. Each decision file is committed when the decision is taken, so the history shows what was decided and when, also if a decision later turns out to be wrong.
-- Once a decision has been reviewed and written into the docs (`docs/requirements.md`, `docs/design.md`), its file is deleted in the same commit as the doc change; the file stays in the git history.
-- Decisions taken by a bot during an unattended build (see [docs/process.md](../docs/process.md)) are logged here like any other decision and reviewed afterwards.
+- Once a decision has been reviewed and written into the docs ([requirements.md](../requirements.md), [design.md](../design.md)), its file is deleted in the same commit as the doc change; the file stays in the git history.
+- Decisions taken by a bot during an unattended build (see [process.md](../process.md)) are logged here like any other decision and reviewed afterwards.
 
 ## Original header of the old `decisions-review.md`
 
