@@ -3,20 +3,55 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="data:," />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <title>Blueprints – GarageBox - Music Sandbox</title>
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
     <main>
-      <h1><span class="accent">Blueprints</span> · GarageBox - Music Sandbox</h1>
-      <p class="lead">Visual and audio experiments and reference pages, tried here before something is built into the app. Local only, not published.</p>
+      <h1>
+        <img class="mark" src="favicon.svg" alt="" width="32" height="32" />
+        <span class="accent">Blueprints</span>
+        <span>· GarageBox - Music Sandbox</span>
+      </h1>
+      <p class="lead">Visual and audio experiments and reference pages, tried here before something is built into the app. Local only, not published. The app needs an external browser for Web Audio — copy its link below.</p>
+      <div class="toolbar" role="region" aria-label="App link">
+        <button type="button" class="btn" id="copy-app" data-url="http://127.0.0.1:5500/">Copy App link</button>
+        <span class="app-url">App: <code id="app-url">http://127.0.0.1:5500/</code></span>
+        <span class="btn-hint" id="copy-hint" aria-live="polite"></span>
+      </div>
       <ul class="catalog" id="catalog" aria-live="polite"></ul>
-      <p class="notice" id="status">Loading <code>/meta.json</code>…</p>
+      <p class="notice" id="status">Loading <code>meta.json</code>…</p>
     </main>
     <script type="module">
+      const APP_URL = 'http://127.0.0.1:5500/';
       const list = document.getElementById('catalog');
       const status = document.getElementById('status');
+      const copyBtn = document.getElementById('copy-app');
+      const hint = document.getElementById('copy-hint');
+
+      async function copyAppLink() {
+        const url = copyBtn.dataset.url || APP_URL;
+        try {
+          await navigator.clipboard.writeText(url);
+          copyBtn.dataset.state = 'copied';
+          copyBtn.textContent = 'Copied';
+          hint.textContent = 'Paste in an external browser for sound.';
+          setTimeout(() => {
+            copyBtn.dataset.state = '';
+            copyBtn.textContent = 'Copy App link';
+            hint.textContent = '';
+          }, 2000);
+        } catch (_) {
+          hint.textContent = 'Could not copy — select the URL and copy manually.';
+          const range = document.createRange();
+          range.selectNodeContents(document.getElementById('app-url'));
+          const sel = getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
+      copyBtn.addEventListener('click', copyAppLink);
 
       function el(tag, className, text) {
         const node = document.createElement(tag);
@@ -48,7 +83,9 @@
         const response = await fetch('meta.json', { cache: 'no-cache' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const meta = await response.json();
-        const blueprints = Array.isArray(meta.blueprints) ? meta.blueprints.filter((bp) => bp && typeof bp.name === 'string' && bp.name) : [];
+        const blueprints = Array.isArray(meta.blueprints)
+          ? meta.blueprints.filter((bp) => bp && typeof bp.name === 'string' && bp.name)
+          : [];
         list.replaceChildren(...blueprints.map(card));
         if (blueprints.length) status.remove();
         else status.textContent = 'No blueprints yet.';

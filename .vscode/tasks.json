@@ -16,27 +16,9 @@
       }
     },
     {
-      "label": "Open App in external browser",
-      "dependsOn": [
-        "Wait until App and Blueprints listen"
-      ],
-      "dependsOrder": "sequence",
-      "type": "shell",
-      "command": "python3 -c \"import webbrowser; webbrowser.open('http://127.0.0.1:5500/')\"",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "never",
-        "echo": false,
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "close": true
-      }
-    },
-    {
       "label": "Open Blueprints in editor",
       "dependsOn": [
-        "Open App in external browser"
+        "Wait until App and Blueprints listen"
       ],
       "dependsOrder": "sequence",
       "type": "shell",
