@@ -888,6 +888,50 @@
         check('both hints are translated', () => [I18N.t('settings.fadeHint') !== 'settings.fadeHint', I18N.t('settings.decayHint') !== 'settings.decayHint'], [true, true]);
       }));
 
+      await s.section('tilt pill shows the tilt press while tilt is off (R5.6, R5.5)', async () => {
+        const PV = await s.load('../src/js/visual/simple-view.js', ['controlPills', 'drawPills']);
+        if (!PV.controlPills) return;
+        const t = (key, params) => (params ? `${key}${JSON.stringify(params)}` : key);
+        const device = (tilt) => ({
+          mapping: { controls: { whammy: {}, tilt: {}, start: {} } },
+          controls: { whammy: { value: 0.25, pressed: false }, tilt, start: { value: 0, pressed: false } },
+        });
+        const guitar = (tiltEnabled) => ({ rangeSteps: () => 2, reverse: { whammy: 'whammy', tilt: 'tilt', start: 'start' }, tiltEnabled });
+        const pill = (tilt, tiltEnabled) => PV.controlPills(device(tilt), t, new Set(), guitar(tiltEnabled)).find((p) => p.label.startsWith('lane.tiltPill'));
+        const state = (p) => [p?.dimmed, p?.pressed, p?.value];
+        const steps = t('unit.steps', { value: '+2' });
+        const offLabel = t('lane.tiltPillOff', { label: t('control.tilt'), steps });
+        const onLabel = t('lane.tiltPillOn', { label: t('control.tilt'), steps });
+        const offIdle = pill({ value: 0.4, pressed: false }, false);
+        check('tilt off, not pressed: dimmed, not pressed, value 0', state(offIdle), [true, false, 0]);
+        const offUp = pill({ value: 1, pressed: true }, false);
+        check('tilt off, pressed (neck up, value 1): dimmed, pressed (lit outline), value 0 (no fill)', state(offUp), [true, true, 0]);
+        const onUp = pill({ value: 0.95, pressed: true }, true);
+        check('tilt on, pressed: not dimmed, pressed, value as the control', state(onUp), [false, true, 0.95]);
+        check('tilt on, not pressed: not dimmed, not pressed, value as the control', state(pill({ value: 0.4, pressed: false }, true)), [false, false, 0.4]);
+        check('the tilt pill labels stay as they are (off / on, label and steps)', [offIdle?.label, offUp?.label, onUp?.label], [offLabel, offLabel, onLabel]);
+        check('the tilt pill stays an analog pill (never fully lit by the press)', [offUp?.analog, onUp?.analog], [true, true]);
+        const others = PV.controlPills(device({ value: 1, pressed: true }), t, new Set(), guitar(false)).filter((p) => !p.label.startsWith('lane.tiltPill'));
+        check('other pills are unchanged while tilt is off', others.map((p) => [p.label, p.pressed, p.value, p.dimmed]), [['control.whammy', false, 0.25, false], ['control.start', false, 0, false]]);
+
+        // drawPills (reference): a pressed, dimmed analog pill with value 0 gets the lane-colour outline,
+        // the unlit background, no fill bar and the dimmed text.
+        if (PV.drawPills) {
+          const log = [];
+          const ctx = new Proxy({ measureText: (s) => ({ width: s.length * 6 }) }, {
+            get: (o, k) => (k in o ? o[k] : typeof k === 'string' && /^[a-z]/.test(k) && !['font', 'textBaseline', 'textAlign', 'fillStyle', 'strokeStyle', 'lineWidth'].includes(k) ? (...a) => log.push([k, ...a.map((v) => (typeof v === 'number' ? Math.round(v) : v))]) : o[k]),
+            set: (o, k, v) => { o[k] = v; if (k === 'fillStyle' || k === 'strokeStyle') log.push([k, v]); return true; },
+          });
+          PV.drawPills(ctx, [{ label: 'Tilt', pressed: true, value: 0, analog: true, showValue: false, dimmed: true }], 0, 0, 300, '#ff0000');
+          const at = (name) => log.findIndex((e) => e[0] === name);
+          const styleBefore = (i, prop) => [...log.slice(0, i)].reverse().find((e) => e[0] === prop)?.[1];
+          check('drawPills: the outline of the pressed dimmed pill is the lane colour', styleBefore(at('stroke'), 'strokeStyle'), '#ff0000');
+          check('drawPills: its background is not lit', styleBefore(at('fill'), 'fillStyle'), 'rgba(255, 255, 255, 0.06)');
+          check('drawPills: no fill bar (width 0)', log.filter((e) => e[0] === 'fillRect').map((e) => e[3]), [0]);
+          check('drawPills: the text stays dimmed (white at 35 %)', styleBefore(at('fillText'), 'fillStyle'), 'rgba(255, 255, 255, 0.35)');
+        }
+      });
+
       s.finish();
     </script>
   </body>
