@@ -11,27 +11,14 @@
       code { font-size: 0.9em; }
       .muted { color: #9aa3b2; }
     </style>
-    <script>
-      const APP = 'http://127.0.0.1:5501/';
-      const BLUEPRINTS = 'http://127.0.0.1:5502/';
-
-      async function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
-
-      (async function () {
-        // App (:5501) and Blueprints (:5502) are started as folderOpen tasks.
-        await wait(1200);
-        try { window.open(APP, '_blank', 'noopener'); } catch (_) {}
-        location.replace(BLUEPRINTS);
-      })();
-    </script>
   </head>
   <body>
-    <h1>Opening local pages…</h1>
-    <p class="muted">App on <code>:5501</code> (new tab), then this tab goes to Blueprints on <code>:5502</code>.</p>
-    <p>If a popup is blocked, use:
-      <a id="app" href="http://127.0.0.1:5501/" target="_blank" rel="noopener">App</a>
+    <h1>Local pages</h1>
+    <p class="muted">Opened automatically when you open the workspace (Group 1). Servers stay up without new tabs if the pages are already open.</p>
+    <p>
+      <a href="http://127.0.0.1:5501/">App</a> <code>:5501</code>
       ·
-      <a id="bp" href="http://127.0.0.1:5502/">Blueprints</a>
+      <a href="http://127.0.0.1:5502/">Blueprints</a> <code>:5502</code>
     </p>
   </body>
 </html>

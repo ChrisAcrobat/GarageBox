@@ -2,18 +2,60 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Open Live Preview (launcher)",
-      "command": "${command:livePreview.start}",
+      "label": "Wait until App and Blueprints listen",
+      "type": "shell",
+      "command": "for i in $(seq 1 40); do curl -sf -o /dev/null http://127.0.0.1:5501/ && curl -sf -o /dev/null http://127.0.0.1:5502/ && exit 0; sleep 0.25; done; exit 0",
       "problemMatcher": [],
       "presentation": {
-        "reveal": "silent",
+        "reveal": "never",
         "echo": false,
         "focus": false,
         "panel": "shared",
-        "showReuseMessage": false
+        "showReuseMessage": false,
+        "close": true
+      }
+    },
+    {
+      "label": "Open App and Blueprints in editor",
+      "dependsOn": [
+        "Wait until App and Blueprints listen"
+      ],
+      "dependsOrder": "sequence",
+      "type": "shell",
+      "command": "echo \"${input:openApp}${input:openBlueprints}\"",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "never",
+        "echo": false,
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "close": true
       },
       "runOptions": {
         "runOn": "folderOpen"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "openApp",
+      "type": "command",
+      "command": "workbench.action.browser.open",
+      "args": {
+        "url": "http://127.0.0.1:5501/",
+        "openToSide": false,
+        "reuseUrlFilter": "http://127.0.0.1:5501/**"
+      }
+    },
+    {
+      "id": "openBlueprints",
+      "type": "command",
+      "command": "workbench.action.browser.open",
+      "args": {
+        "url": "http://127.0.0.1:5502/",
+        "openToSide": false,
+        "reuseUrlFilter": "http://127.0.0.1:5502/**"
       }
     }
   ]

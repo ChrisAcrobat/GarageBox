@@ -18,11 +18,12 @@
         }
       },
       "presentation": {
-        "reveal": "silent",
+        "reveal": "never",
         "echo": false,
         "focus": false,
         "panel": "dedicated",
-        "showReuseMessage": false
+        "showReuseMessage": false,
+        "close": false
       },
       "runOptions": {
         "runOn": "folderOpen"
