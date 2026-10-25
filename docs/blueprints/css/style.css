@@ -259,3 +259,10 @@ code {
 .notice.error { border-color: #d95555; color: #8a2424; background: #fff5f5; }
 
 .back { display: inline-block; margin-bottom: 20px; font-weight: 600; }
+
+.filter-tag.inactive,
+.filter-tag:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}

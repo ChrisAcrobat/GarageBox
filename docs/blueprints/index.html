@@ -33,8 +33,8 @@
         <aside class="filter" id="filter" aria-labelledby="filter-heading">
           <h2 id="filter-heading">Filter by tag</h2>
           <div class="filter-mode" id="filter-mode" role="radiogroup" aria-label="Tag match mode">
-            <button type="button" class="filter-mode-btn" role="radio" data-mode="or" aria-checked="true">Match any (OR)</button>
-            <button type="button" class="filter-mode-btn" role="radio" data-mode="and" aria-checked="false">Match all (AND)</button>
+            <button type="button" class="filter-mode-btn" role="radio" data-mode="or" aria-checked="true">Match any</button>
+            <button type="button" class="filter-mode-btn" role="radio" data-mode="and" aria-checked="false">Match all</button>
           </div>
           <ul class="filter-list" id="filter-list"></ul>
           <button type="button" class="btn btn-secondary filter-clear" id="filter-clear" hidden>Clear filters</button>
@@ -135,9 +135,22 @@
       function render() {
         const shown = selected.size ? blueprints.filter(matches) : blueprints;
         list.replaceChildren(...shown.map(card));
-        for (const btn of filterList.querySelectorAll('.filter-tag')) {
-          btn.setAttribute('aria-pressed', String(selected.has(btn.dataset.tag)));
+        // Match all: tags that would empty the result are inactive and sorted last.
+        const andActive = matchMode === 'and' && selected.size > 0;
+        const items = [...filterList.children];
+        for (const li of items) {
+          const btn = li.querySelector('.filter-tag');
+          const t = btn.dataset.tag;
+          const isSel = selected.has(t);
+          const inactive = andActive && !isSel && !shown.some((bp) => tagsOf(bp).includes(t));
+          btn.setAttribute('aria-pressed', String(isSel));
+          btn.classList.toggle('inactive', inactive);
+          btn.disabled = inactive;
+          li.dataset.inactive = inactive ? '1' : '';
         }
+        items.sort((a, b) => (a.dataset.inactive ? 1 : 0) - (b.dataset.inactive ? 1 : 0)
+          || a.querySelector('.filter-tag').dataset.tag.localeCompare(b.querySelector('.filter-tag').dataset.tag, 'en', { sensitivity: 'base' }));
+        filterList.append(...items);
         clearBtn.hidden = selected.size === 0;
         if (!blueprints.length) {
           status.textContent = 'No blueprints yet.';
