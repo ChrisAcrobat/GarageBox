@@ -3,7 +3,7 @@
   "tasks": [
     {
       "label": "Live Preview: App",
-      "detail": "Live Preview server for this workspace folder (started by the Repo folderOpen task).",
+      "detail": "Live Preview server for this workspace folder (manual use; the Repo folderOpen chain starts servers via relative livePreview.start.preview.atFileString, not this task).",
       "type": "Live Preview",
       "workspacePath": "${workspaceFolder}",
       "isBackground": true,
