@@ -4,7 +4,10 @@
     {
       "label": "Free preview ports",
       "type": "shell",
-      "command": "for p in 5500 5501; do fuser -k ${p}/tcp 2>/dev/null || true; done; sleep 0.3; exit 0",
+      "command": "for p in 5500 5501 5502 5503; do for pid in $(fuser ${p}/tcp 2>/dev/null); do if tr '\\0' ' ' < /proc/$pid/cmdline 2>/dev/null | grep -Eq 'extensionHost|--type=|vscode|code-server|electron'; then echo \"Port $p is held by an editor process ($pid); stop that Live Preview server first.\" >&2; else kill $pid 2>/dev/null || true; fi; done; done; sleep 0.3; exit 0",
+      "options": {
+        "cwd": "${workspaceFolder:Repo}"
+      },
       "problemMatcher": [],
       "presentation": {
         "reveal": "never",
@@ -16,78 +19,12 @@
       }
     },
     {
-      "label": "Serve App :5500",
+      "label": "Start App Live Preview :5500",
       "type": "shell",
-      "command": "python3 -m http.server 5500 --bind 127.0.0.1 --directory \"src\"",
+      "command": "echo \"${input:startAppServer}\" >/dev/null; for i in $(seq 1 100); do (exec 3<>/dev/tcp/127.0.0.1/5500) 2>/dev/null && (exec 3<>/dev/tcp/127.0.0.1/5501) 2>/dev/null && exit 0; sleep 0.2; done; echo 'Live Preview App server did not start on 5500 (HTTP) / 5501 (WS). Is the ms-vscode.live-server extension installed?' >&2; exit 1",
       "options": {
         "cwd": "${workspaceFolder:Repo}"
       },
-      "isBackground": true,
-      "problemMatcher": {
-        "owner": "http-server",
-        "pattern": {
-          "regexp": "^$"
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".",
-          "endsPattern": "Serving HTTP"
-        }
-      },
-      "presentation": {
-        "reveal": "never",
-        "echo": false,
-        "focus": false,
-        "panel": "dedicated",
-        "showReuseMessage": false,
-        "close": false
-      },
-      "dependsOn": [
-        "Free preview ports"
-      ],
-      "dependsOrder": "sequence"
-    },
-    {
-      "label": "Serve Blueprints :5501",
-      "type": "shell",
-      "command": "python3 -m http.server 5501 --bind 127.0.0.1 --directory \"docs/blueprints\"",
-      "options": {
-        "cwd": "${workspaceFolder:Repo}"
-      },
-      "isBackground": true,
-      "problemMatcher": {
-        "owner": "http-server",
-        "pattern": {
-          "regexp": "^$"
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".",
-          "endsPattern": "Serving HTTP"
-        }
-      },
-      "presentation": {
-        "reveal": "never",
-        "echo": false,
-        "focus": false,
-        "panel": "dedicated",
-        "showReuseMessage": false,
-        "close": false
-      },
-      "dependsOn": [
-        "Free preview ports"
-      ],
-      "dependsOrder": "sequence"
-    },
-    {
-      "label": "Wait until App and Blueprints listen",
-      "dependsOn": [
-        "Serve App :5500",
-        "Serve Blueprints :5501"
-      ],
-      "dependsOrder": "parallel",
-      "type": "shell",
-      "command": "for i in $(seq 1 50); do curl -sf http://127.0.0.1:5500/ | grep -q \"GarageBox\" && curl -sf http://127.0.0.1:5501/ | grep -q \"Blueprints\" && exit 0; sleep 0.2; done; echo \"Preview servers did not serve the expected pages\" >&2; exit 1",
       "problemMatcher": [],
       "presentation": {
         "reveal": "never",
@@ -96,16 +33,61 @@
         "panel": "shared",
         "showReuseMessage": false,
         "close": true
-      }
+      },
+      "dependsOn": [
+        "Free preview ports"
+      ],
+      "dependsOrder": "sequence"
+    },
+    {
+      "label": "Start Blueprints Live Preview :5502",
+      "type": "shell",
+      "command": "echo \"${input:startBlueprintsServer}\" >/dev/null; for i in $(seq 1 100); do (exec 3<>/dev/tcp/127.0.0.1/5502) 2>/dev/null && exit 0; sleep 0.2; done; echo 'Live Preview Blueprints server did not start on 5502 (HTTP).' >&2; exit 1",
+      "options": {
+        "cwd": "${workspaceFolder:Repo}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "never",
+        "echo": false,
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "close": true
+      },
+      "dependsOn": [
+        "Start App Live Preview :5500"
+      ],
+      "dependsOrder": "sequence"
+    },
+    {
+      "label": "Wait until App and Blueprints serve GarageBox",
+      "type": "shell",
+      "command": "for i in $(seq 1 75); do curl -sf http://127.0.0.1:5500/ | grep -q 'GarageBox' && curl -sf http://127.0.0.1:5502/ | grep -q 'GarageBox' && exit 0; sleep 0.2; done; echo 'Preview check failed: http://127.0.0.1:5500/ (App) and http://127.0.0.1:5502/ (Blueprints) must both return a page containing GarageBox.' >&2; exit 1",
+      "options": {
+        "cwd": "${workspaceFolder:Repo}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "never",
+        "echo": false,
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "close": true
+      },
+      "dependsOn": [
+        "Start Blueprints Live Preview :5502"
+      ],
+      "dependsOrder": "sequence"
     },
     {
       "label": "Open Blueprints in editor",
-      "dependsOn": [
-        "Wait until App and Blueprints listen"
-      ],
-      "dependsOrder": "sequence",
       "type": "shell",
-      "command": "echo \"${input:openBlueprints}\"",
+      "command": "echo \"${input:openBlueprints}\" >/dev/null",
+      "options": {
+        "cwd": "${workspaceFolder:Repo}"
+      },
       "problemMatcher": [],
       "presentation": {
         "reveal": "never",
@@ -115,6 +97,10 @@
         "showReuseMessage": false,
         "close": true
       },
+      "dependsOn": [
+        "Wait until App and Blueprints serve GarageBox"
+      ],
+      "dependsOrder": "sequence",
       "runOptions": {
         "runOn": "folderOpen"
       }
@@ -122,13 +108,25 @@
   ],
   "inputs": [
     {
+      "id": "startAppServer",
+      "type": "command",
+      "command": "workbench.action.tasks.runTask",
+      "args": "Live Preview: App"
+    },
+    {
+      "id": "startBlueprintsServer",
+      "type": "command",
+      "command": "workbench.action.tasks.runTask",
+      "args": "Live Preview: Blueprints"
+    },
+    {
       "id": "openBlueprints",
       "type": "command",
       "command": "workbench.action.browser.open",
       "args": {
-        "url": "http://127.0.0.1:5501/",
+        "url": "http://127.0.0.1:5502/",
         "openToSide": false,
-        "reuseUrlFilter": "http://127.0.0.1:5501/**"
+        "reuseUrlFilter": "http://127.0.0.1:5502/**"
       }
     }
   ]

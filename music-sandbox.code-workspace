@@ -14,6 +14,15 @@
     }
   ],
   "settings": {
-    "task.allowAutomaticTasks": "on"
+    "task.allowAutomaticTasks": "on",
+    "livePreview.portNumber": 5500,
+    "livePreview.hostIP": "127.0.0.1",
+    "livePreview.autoRefreshPreview": "On Changes to Saved Files",
+    "livePreview.showServerStatusNotifications": false,
+    "livePreview.httpHeaders": {
+      "Accept-Ranges": "bytes",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "no-cache"
+    }
   }
 }
