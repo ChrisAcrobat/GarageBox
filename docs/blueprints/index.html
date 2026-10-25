@@ -29,13 +29,27 @@
         </div>
         <span class="btn-hint" id="copy-hint" aria-live="polite"></span>
       </div>
-      <ul class="catalog" id="catalog" aria-live="polite"></ul>
-      <p class="notice" id="status">Loading <code>meta.json</code>…</p>
+      <div class="layout">
+        <aside class="filter" id="filter" aria-labelledby="filter-heading">
+          <h2 id="filter-heading">Filter by tag</h2>
+          <ul class="filter-list" id="filter-list"></ul>
+          <button type="button" class="btn btn-secondary filter-clear" id="filter-clear" hidden>Clear filters</button>
+        </aside>
+        <div class="layout-main">
+          <ul class="catalog" id="catalog" aria-live="polite"></ul>
+          <p class="notice" id="status" aria-live="polite">Loading <code>meta.json</code>…</p>
+        </div>
+      </div>
     </main>
     <script type="module">
       const list = document.getElementById('catalog');
       const status = document.getElementById('status');
       const hint = document.getElementById('copy-hint');
+      const filterList = document.getElementById('filter-list');
+      const filterAside = document.getElementById('filter');
+      const clearBtn = document.getElementById('filter-clear');
+      const selected = new Set();
+      let blueprints = [];
 
       async function copyLink(btn, selectId, okHint) {
         const url = btn.dataset.url;
@@ -84,24 +98,79 @@
         const tags = Array.isArray(bp.tags) ? bp.tags : [];
         if (tags.length) {
           const ul = el('ul', 'tags');
-          for (const t of tags) ul.append(el('li', 'tag', String(t)));
+          for (const t of tags) ul.append(el('li', `tag${selected.has(String(t)) ? ' active' : ''}`, String(t)));
           link.append(ul);
         }
         item.append(link);
         return item;
       }
 
+      function tagsOf(bp) {
+        return Array.isArray(bp.tags) ? bp.tags.map(String) : [];
+      }
+
+      // OR filter: a blueprint matches when it has any selected tag; none selected = all.
+      function render() {
+        const shown = selected.size
+          ? blueprints.filter((bp) => tagsOf(bp).some((t) => selected.has(t)))
+          : blueprints;
+        list.replaceChildren(...shown.map(card));
+        for (const btn of filterList.querySelectorAll('.filter-tag')) {
+          btn.setAttribute('aria-pressed', String(selected.has(btn.dataset.tag)));
+        }
+        clearBtn.hidden = selected.size === 0;
+        if (!blueprints.length) {
+          status.textContent = 'No blueprints yet.';
+          status.hidden = false;
+        } else if (!shown.length) {
+          status.textContent = 'No blueprints match.';
+          status.hidden = false;
+        } else {
+          status.hidden = true;
+        }
+      }
+
+      function buildFilter() {
+        const counts = new Map();
+        for (const bp of blueprints) {
+          for (const t of new Set(tagsOf(bp))) counts.set(t, (counts.get(t) || 0) + 1);
+        }
+        const tags = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+        filterAside.hidden = tags.length === 0;
+        filterList.replaceChildren(...tags.map((t) => {
+          const li = el('li');
+          const btn = el('button', 'filter-tag');
+          btn.type = 'button';
+          btn.dataset.tag = t;
+          btn.setAttribute('aria-pressed', 'false');
+          btn.append(el('span', 'filter-name', t), el('span', 'filter-count', String(counts.get(t))));
+          btn.addEventListener('click', () => {
+            if (selected.has(t)) selected.delete(t);
+            else selected.add(t);
+            render();
+          });
+          li.append(btn);
+          return li;
+        }));
+      }
+
+      clearBtn.addEventListener('click', () => {
+        selected.clear();
+        render();
+      });
+
       try {
         const response = await fetch('meta.json', { cache: 'no-cache' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const meta = await response.json();
-        const blueprints = Array.isArray(meta.blueprints)
+        blueprints = Array.isArray(meta.blueprints)
           ? meta.blueprints.filter((bp) => bp && typeof bp.name === 'string' && bp.name)
           : [];
-        list.replaceChildren(...blueprints.map(card));
-        if (blueprints.length) status.remove();
-        else status.textContent = 'No blueprints yet.';
+        buildFilter();
+        render();
       } catch (err) {
+        filterAside.hidden = true;
+        status.hidden = false;
         status.classList.add('error');
         status.textContent = `Could not load meta.json (${err.message}). Serve docs/blueprints/ as the web root, or open /docs/blueprints/ from the repo root; see README.md.`;
       }

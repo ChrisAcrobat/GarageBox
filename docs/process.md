@@ -44,7 +44,7 @@ Blueprints are visual and audio experiment and reference pages: a look, a sound 
   - `name`: the exact folder name;
   - `title`: shown in the catalog;
   - `comment`: a short description;
-  - `tags`: an array of strings;
+  - `tags`: an array of strings; the catalog sidebar lists every tag and filters on them (match any selected). The tag `needs-audio` means the page needs an external browser for sound;
   - `ready`: `true` when ready, `false` while it is a draft (there is no separate status text).
 - **One folder each:** a blueprint lives in `docs/blueprints/{name}/`, normally with its own `index.html`. A new blueprint gets its folder and a `meta.json` entry in the same commit.
 - **Analytics:** the published app and Blueprints use the same Google Analytics tag (`G-KVKVFNN711` in `src/index.html` and `docs/blueprints/js/analytics.js`). New blueprint pages should load that script (see the catalog and `bass-sound/`).

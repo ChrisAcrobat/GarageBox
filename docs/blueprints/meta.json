@@ -4,7 +4,7 @@
       "name": "bass-sound",
       "title": "Bass sound",
       "comment": "A/B try for a fuller fingerstyle bass (F18) before changing the app.",
-      "tags": ["audio", "bass", "F18"],
+      "tags": ["needs-audio", "bass", "F18"],
       "ready": false
     },
     {
@@ -18,7 +18,7 @@
       "name": "star-power-fx",
       "title": "Star power effects",
       "comment": "Explore fireworks and crowd cheers on top of today's confetti (F11).",
-      "tags": ["visual", "audio", "F11"],
+      "tags": ["visual", "needs-audio", "F11"],
       "ready": false
     }
   ]
