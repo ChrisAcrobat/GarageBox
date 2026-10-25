@@ -35,6 +35,7 @@
           <div class="filter-mode" id="filter-mode" role="radiogroup" aria-label="Tag match mode">
             <button type="button" class="filter-mode-btn" role="radio" data-mode="or" aria-checked="true">Match any</button>
             <button type="button" class="filter-mode-btn" role="radio" data-mode="and" aria-checked="false">Match all</button>
+            <button type="button" class="filter-mode-btn" role="radio" data-mode="exclude" aria-checked="false">Exclude</button>
           </div>
           <div class="filter-mode" id="ready-mode" role="radiogroup" aria-label="Ready status">
             <button type="button" class="filter-mode-btn" role="radio" data-ready="all" aria-checked="true">All</button>
@@ -383,7 +384,8 @@
         return Array.isArray(bp.tags) ? bp.tags.map(String) : [];
       }
 
-      // Tags — OR: any selected tag matches; AND: every selected tag is required; none selected = all.
+      // Tags — OR: any selected tag matches; AND: every selected tag is required;
+      // Exclude: none of the selected tags may be present; none selected = all.
       // Ready — all / ready (ready === true) / draft (anything else). Both must pass.
       function matches(bp) {
         const isReady = bp.ready === true;
@@ -392,7 +394,9 @@
         if (!selected.size) return true;
         const tags = new Set(tagsOf(bp));
         const sel = [...selected];
-        return matchMode === 'and' ? sel.every((t) => tags.has(t)) : sel.some((t) => tags.has(t));
+        if (matchMode === 'and') return sel.every((t) => tags.has(t));
+        if (matchMode === 'exclude') return sel.every((t) => !tags.has(t));
+        return sel.some((t) => tags.has(t));
       }
 
       readyGroup.addEventListener('click', (e) => {
@@ -422,15 +426,22 @@
       function render() {
         const shown = blueprints.filter(matches);
         list.replaceChildren(...shown.map(card));
-        // Match all: tags that would empty the result are inactive (grey) and sorted last.
+        // Match all / Exclude: tags that would empty the result are inactive (grey) and sorted last.
         // Within each group: most used first (count across meta.blueprints), then alphabetical.
         const andActive = matchMode === 'and' && selected.size > 0;
+        const excludeActive = matchMode === 'exclude' && selected.size > 0;
         const items = [...filterList.children];
         for (const li of items) {
           const btn = li.querySelector('.filter-tag');
           const t = btn.dataset.tag;
           const isSel = selected.has(t);
-          const inactive = andActive && !isSel && !shown.some((bp) => tagsOf(bp).includes(t));
+          let inactive = false;
+          if (!isSel && andActive) {
+            inactive = !shown.some((bp) => tagsOf(bp).includes(t));
+          } else if (!isSel && excludeActive) {
+            // Excluding a tag every remaining card has would leave nothing.
+            inactive = shown.length > 0 && shown.every((bp) => tagsOf(bp).includes(t));
+          }
           btn.setAttribute('aria-pressed', String(isSel));
           btn.classList.toggle('inactive', inactive);
           btn.disabled = inactive;
