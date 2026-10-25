@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Google tag (gtag.js) — same as src/index.html -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-KVKVFNN711"></script>
+    <script src="../js/analytics.js"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <title>Star power effects – Blueprints</title>
+    <link rel="stylesheet" href="../css/style.css" />
+    <style>
+      /* .btn comes after .btn-secondary in style.css, so restate the secondary look here. */
+      .btn.btn-secondary { background: var(--panel-strong); color: var(--accent); }
+      .btn.btn-secondary:hover, .btn.btn-secondary:focus-visible { background: #e4f1fa; border-color: var(--accent); color: #185a9c; }
+      .layout { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 16px; align-items: start; margin: 0 0 1.25rem; }
+      @media (max-width: 640px) { .layout { grid-template-columns: 1fr; } }
+      .stage { background: #0b0e14; border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+      .stage canvas { display: block; width: 100%; height: 460px; }
+      .panel { background: var(--panel-strong); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow); margin: 0 0 12px; }
+      .panel h2 { font-size: 1rem; margin-bottom: 0.4em; }
+      .layer { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: center; padding: 6px 0; border-top: 1px solid #e1eef8; font-size: 0.92rem; }
+      .layer:first-of-type { border-top: 0; }
+      .layer small { grid-column: 2 / 4; color: var(--muted); font-size: 0.8rem; }
+      .badge { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 999px; padding: 1px 7px; border: 1px solid currentColor; white-space: nowrap; }
+      .badge.today { color: var(--ready); }
+      .badge.visual { color: var(--accent); }
+      .badge.sound { color: #b45309; }
+      .layer .btn { padding: 0.2rem 0.55rem; font-size: 0.8rem; }
+      .big { width: 100%; margin-bottom: 8px; }
+      .btn[data-on="true"] { background: #185a9c; }
+      .field { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="../">← All blueprints</a>
+      <h1>
+        <img class="mark" src="../favicon.svg" alt="" width="32" height="32" />
+        Star power effects
+      </h1>
+      <p class="lead">Explore fireworks and crowd cheers on top of today's confetti (F11). Turn layers on and off, then start star power or fire single effects.</p>
+      <p class="notice"><strong>Draft blueprint for F11 — brainstorm before requirements.</strong> This page is only for trying looks and sounds; nothing here is decided. Today star power (R5.5) is <strong>visual only</strong> (confetti + blue-white lane glow) and adds no sound of its own. Whether F11 should add sound (cheers, whistles, firework pops) is part of the brainstorm. The lane is a fake stand-in, not the real app. All sounds are generated in the page (no samples); for sound, open this page in an external browser.</p>
+
+      <div class="layout">
+        <div>
+          <div class="panel">
+            <h2>Star power</h2>
+            <button type="button" class="btn big" id="toggle" data-on="false">Start star power</button>
+            <span class="btn-hint" id="hint" aria-live="polite">Runs the checked layers until you end it.</span>
+          </div>
+          <div class="panel" role="group" aria-label="Effect layers">
+            <h2>Layers</h2>
+            <label class="layer"><input type="checkbox" id="l-confetti" checked /> Confetti rain <span class="badge today">today</span>
+              <small>~150 pieces in fret colours + white over the lane, then a trickle.</small></label>
+            <label class="layer"><input type="checkbox" id="l-glow" checked /> Lane glow <span class="badge today">today</span>
+              <small>Bright blue-white, fades in 0.3 s, out 1 s.</small></label>
+            <div class="layer"><input type="checkbox" id="l-fireworks" checked aria-label="Fireworks" /> <label for="l-fireworks">Fireworks</label> <span class="badge visual">visual</span>
+              <small>Bursts over the lane every ~0.8 s. <button type="button" class="btn btn-secondary" id="t-firework">Burst now</button></small></div>
+            <div class="layer"><input type="checkbox" id="l-cheer" aria-label="Crowd cheers" /> <label for="l-cheer">Crowd cheers</label> <span class="badge sound">sound</span>
+              <small>Noise crowd swell on start. <button type="button" class="btn btn-secondary" id="t-cheer">Cheer now</button></small></div>
+            <div class="layer"><input type="checkbox" id="l-whistle" aria-label="Whistles" /> <label for="l-whistle">Whistles</label> <span class="badge sound">sound</span>
+              <small>A few rising whistles. <button type="button" class="btn btn-secondary" id="t-whistle">Whistle now</button></small></div>
+            <div class="layer"><input type="checkbox" id="l-pop" aria-label="Firework pops" /> <label for="l-pop">Firework pops</label> <span class="badge sound">sound</span>
+              <small>A soft pop with each burst.</small></div>
+            <label class="field">Sound volume <input type="range" id="vol" min="0" max="1" step="0.05" value="0.6" /></label>
+            <label class="field"><input type="checkbox" id="reduced" /> Reduced motion</label>
+          </div>
+        </div>
+        <div class="stage"><canvas id="lane" role="img" aria-label="Fake dark lane with star power effects"></canvas></div>
+      </div>
+
+      <div class="notice">
+        <strong>Questions for the brainstorm (F11)</strong>
+        <ul>
+          <li>Which layers feel right together — fireworks instead of confetti, or on top?</li>
+          <li>Should star power get its own sound (cheers, whistles, pops), or stay visual only as today?</li>
+          <li>If sound: only at the start, or for as long as star power lasts? Following the music?</li>
+          <li>How is star power earned (today: neck up + whammy fully pressed)?</li>
+        </ul>
+      </div>
+    </main>
+    <script>
+      const FRET = ['#2fbf4a', '#e5484d', '#f5d90a', '#3e8ef7', '#f76b15'];
+      const GLOW = [190, 225, 255];
+      const LANE = [62, 142, 247];     // example lane colour (blue)
+      const $ = (id) => document.getElementById(id);
+      const on = (id) => $(id).checked;
+      const canvas = $('lane'), g = canvas.getContext('2d');
+      const mq = matchMedia('(prefers-reduced-motion: reduce)');
+      $('reduced').checked = mq.matches;
+      const reduced = () => on('reduced');
+
+      let W = 400, H = 460, lane = { x: 40, w: 320 };
+      function resize() {
+        const dpr = devicePixelRatio || 1;
+        W = canvas.clientWidth; H = canvas.clientHeight;
+        canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const w = Math.min(W - 40, 360);
+        lane = { x: (W - w) / 2, w };
+      }
+      addEventListener('resize', resize);
+
+      // ---- State
+      let active = false, startedAt = 0, endedAt = -1e9, glow = 0;
+      let confetti = [], sparks = [], rockets = [];
+      let spawnBudget = 0, nextFirework = 0, last = performance.now();
+      const rand = (a, b) => a + Math.random() * (b - a);
+
+      function startStar() {
+        active = true; startedAt = performance.now();
+        spawnBudget = reduced() ? 30 : 150;
+        nextFirework = startedAt + 150;
+        if (on('l-cheer')) cheer();
+        if (on('l-whistle')) whistles();
+        $('toggle').textContent = 'End star power'; $('toggle').dataset.on = 'true';
+        $('hint').textContent = 'Star power on.';
+      }
+      function endStar() {
+        active = false; endedAt = performance.now();
+        $('toggle').textContent = 'Start star power'; $('toggle').dataset.on = 'false';
+        $('hint').textContent = 'Star power ended (in the app: ~8 s after the neck is lowered).';
+      }
+
+      // ---- Confetti (like today: rectangles, gravity, drift, spin, only over the lane)
+      function spawnConfetti(n) {
+        for (let i = 0; i < n; i++) {
+          const c = Math.random() < 0.83 ? FRET[(Math.random() * 5) | 0] : '#ffffff';
+          confetti.push({
+            x: lane.x + Math.random() * lane.w, y: rand(-40, -4),
+            vx: rand(-20, 20), vy: reduced() ? rand(20, 40) : rand(40, 120),
+            a: Math.random() * 6.28, va: rand(-6, 6), w: rand(4, 8), h: rand(2.5, 5), c,
+          });
+        }
+      }
+
+      // ---- Fireworks: a rocket rises then bursts into sparks
+      function launch() {
+        const x = lane.x + rand(0.15, 0.85) * lane.w;
+        if (reduced()) { burst(x, rand(0.15, 0.45) * H); return; }
+        rockets.push({ x, y: H * 0.85, vy: -rand(380, 520), ty: rand(0.12, 0.42) * H, c: FRET[(Math.random() * 5) | 0] });
+      }
+      function burst(x, y) {
+        const c = Math.random() < 0.3 ? '#ffffff' : FRET[(Math.random() * 5) | 0];
+        const n = reduced() ? 18 : 70;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * 6.283 + rand(-0.05, 0.05), s = reduced() ? rand(30, 60) : rand(80, 190);
+          sparks.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: rand(0.7, 1.1), c });
+        }
+        if (on('l-pop')) pop();
+      }
+
+      // ---- Audio (generated after a user gesture)
+      let ctx = null, master = null, noise = null;
+      function audio() {
+        if (!ctx) {
+          ctx = new (window.AudioContext || window.webkitAudioContext)();
+          master = ctx.createGain(); master.gain.value = +$('vol').value;
+          const comp = ctx.createDynamicsCompressor();
+          master.connect(comp).connect(ctx.destination);
+          // 4 s of pinkish noise
+          const len = ctx.sampleRate * 4;
+          noise = ctx.createBuffer(2, len, ctx.sampleRate);
+          for (let ch = 0; ch < 2; ch++) {
+            const d = noise.getChannelData(ch);
+            let b0 = 0, b1 = 0, b2 = 0;
+            for (let i = 0; i < len; i++) {
+              const w = Math.random() * 2 - 1;
+              b0 = 0.997 * b0 + 0.029591 * w; b1 = 0.985 * b1 + 0.032534 * w; b2 = 0.95 * b2 + 0.048056 * w;
+              d[i] = (b0 + b1 + b2 + w * 0.05) * 0.9;
+            }
+          }
+        }
+        if (ctx.state === 'suspended') ctx.resume();
+        return ctx;
+      }
+
+      // Crowd: noise through vowel-ish formants, many slowly fluctuating "voices", swell then fade.
+      function cheer(dur = 3.2) {
+        audio();
+        const t = ctx.currentTime + 0.02;
+        const out = ctx.createGain();
+        out.gain.setValueAtTime(0, t);
+        out.gain.linearRampToValueAtTime(0.9, t + 0.45);
+        out.gain.setTargetAtTime(0.55, t + 0.6, 0.6);
+        out.gain.setTargetAtTime(0, t + dur - 1.2, 0.45);
+        out.connect(master);
+        const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true;
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 180;
+        src.connect(hp);
+        [[550, 1.4, 0.9], [900, 2, 0.8], [1500, 2.5, 0.5], [2600, 3, 0.25]].forEach(([f, q, lvl]) => {
+          const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * rand(0.92, 1.08); bp.Q.value = q;
+          const gg = ctx.createGain(); gg.gain.value = lvl;
+          // random level wobble = many people shouting at different times
+          const lfo = ctx.createOscillator(); lfo.frequency.value = rand(2, 6);
+          const lfoG = ctx.createGain(); lfoG.gain.value = lvl * 0.4;
+          lfo.connect(lfoG).connect(gg.gain);
+          hp.connect(bp).connect(gg).connect(out);
+          lfo.start(t); lfo.stop(t + dur + 0.5);
+        });
+        src.start(t, Math.random() * 3); src.stop(t + dur + 0.5);
+      }
+
+      // Whistles: sine with a rising glide and vibrato, a few people at random times.
+      function whistles(count = 3) {
+        audio();
+        for (let i = 0; i < count; i++) {
+          const t = ctx.currentTime + 0.05 + rand(0, 1.2);
+          const o = ctx.createOscillator(); o.type = 'sine';
+          const f = rand(1900, 2600), d = rand(0.45, 0.9);
+          o.frequency.setValueAtTime(f * 0.75, t);
+          o.frequency.exponentialRampToValueAtTime(f * 1.25, t + d * 0.6);
+          if (Math.random() < 0.5) o.frequency.exponentialRampToValueAtTime(f * 0.9, t + d);
+          const vib = ctx.createOscillator(); vib.frequency.value = rand(5, 8);
+          const vibG = ctx.createGain(); vibG.gain.value = f * 0.015;
+          vib.connect(vibG).connect(o.frequency);
+          const a = ctx.createGain(); a.gain.setValueAtTime(0, t);
+          a.gain.linearRampToValueAtTime(0.09, t + 0.04);
+          a.gain.setValueAtTime(0.09, t + d - 0.08);
+          a.gain.linearRampToValueAtTime(0, t + d);
+          o.connect(a).connect(master);
+          o.start(t); vib.start(t); o.stop(t + d + 0.05); vib.stop(t + d + 0.05);
+        }
+      }
+
+      // Firework pop: short low noise burst + a little crackle.
+      function pop() {
+        if (!ctx) return;          // only after a user gesture has created the context
+        const t = ctx.currentTime + 0.01;
+        const src = ctx.createBufferSource(); src.buffer = noise;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(1800, t); lp.frequency.exponentialRampToValueAtTime(120, t + 0.4);
+        const a = ctx.createGain(); a.gain.setValueAtTime(0.9, t); a.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+        src.connect(lp).connect(a).connect(master);
+        src.start(t, Math.random() * 3, 0.7);
+      }
+
+      // ---- Frame
+      function frame(now) {
+        const dt = Math.min(0.05, (now - last) / 1000); last = now;
+
+        // spawn
+        if (active) {
+          const el = now - startedAt;
+          if (on('l-confetti')) {
+            if (el < 1500 && spawnBudget > 0) {
+              const n = Math.min(spawnBudget, Math.ceil(((reduced() ? 30 : 150) / 1500) * dt * 1000));
+              spawnConfetti(n); spawnBudget -= n;
+            } else if (Math.random() < dt * (reduced() ? 4 : 30)) spawnConfetti(1);
+          }
+          if (on('l-fireworks') && now >= nextFirework) {
+            launch(); nextFirework = now + rand(500, 1100) * (reduced() ? 2 : 1);
+          }
+        }
+        const target = active && on('l-glow') ? 1 : 0;
+        glow += (target - glow) * Math.min(1, dt / (target > glow ? 0.1 : 0.33));
+
+        // physics
+        for (const p of confetti) { p.vy += (reduced() ? 10 : 60) * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt; }
+        confetti = confetti.filter((p) => p.y < H + 10 && p.x > lane.x - 6 && p.x < lane.x + lane.w + 6);
+        for (const r of rockets) { r.y += r.vy * dt; if (r.y <= r.ty) { r.done = true; burst(r.x, r.y); } }
+        rockets = rockets.filter((r) => !r.done);
+        for (const s of sparks) { s.vy += 90 * dt; s.vx *= 1 - 1.2 * dt; s.vy *= 1 - 1.2 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= s.decay * dt; }
+        sparks = sparks.filter((s) => s.life > 0);
+
+        draw(now);
+        requestAnimationFrame(frame);
+      }
+
+      function mix(a, b, k) { return a.map((v, i) => Math.round(v + (b[i] - v) * k)); }
+
+      function draw(now) {
+        g.fillStyle = '#0b0e14'; g.fillRect(0, 0, W, H);
+        const col = mix(LANE, GLOW, glow);
+        const rgb = `rgb(${col})`;
+        const { x, w } = lane;
+        // road
+        const bg = g.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, `rgba(${col},${0.03 + 0.08 * glow})`); bg.addColorStop(1, `rgba(${col},${0.12 + 0.25 * glow})`);
+        g.fillStyle = bg; g.fillRect(x, 0, w, H);
+        if (glow > 0.01) { g.shadowColor = rgb; g.shadowBlur = 24 * glow; }
+        g.strokeStyle = rgb; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.moveTo(x + w, 0); g.lineTo(x + w, H); g.stroke();
+        g.shadowBlur = 0;
+        // moving cross lines
+        g.strokeStyle = `rgba(${col},${0.25 + 0.3 * glow})`; g.lineWidth = 1;
+        const off = (now / 8) % 60;
+        for (let yy = off; yy < H - 90; yy += 60) { g.beginPath(); g.moveTo(x, yy); g.lineTo(x + w, yy); g.stroke(); }
+        // fret row
+        const r = Math.min(22, w / 14), sp = (w - 2 * r - 20) / 4, fy = H - 50;
+        FRET.forEach((c, i) => {
+          const fx = x + 10 + r + i * sp;
+          g.beginPath(); g.arc(fx, fy, r, 0, 6.283);
+          g.fillStyle = 'rgba(255,255,255,0.05)'; g.fill();
+          g.lineWidth = 3; g.strokeStyle = glow > 0.5 ? rgb : c; g.stroke();
+        });
+        // confetti
+        for (const p of confetti) {
+          g.save(); g.translate(p.x, p.y); g.rotate(p.a);
+          g.fillStyle = p.c; g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.a * 1.7)) + 0.5);
+          g.restore();
+        }
+        // fireworks
+        g.globalCompositeOperation = 'lighter';
+        for (const rk of rockets) { g.fillStyle = '#fff6d0'; g.fillRect(rk.x - 1.5, rk.y, 3, 10); }
+        for (const s of sparks) {
+          g.globalAlpha = Math.max(0, s.life);
+          g.fillStyle = s.c; g.beginPath(); g.arc(s.x, s.y, 2, 0, 6.283); g.fill();
+        }
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+        // caption
+        g.fillStyle = 'rgba(255,255,255,0.5)'; g.font = '12px system-ui, sans-serif'; g.textAlign = 'left';
+        g.fillText(active ? 'STAR POWER' : 'Fake lane (not the app)', 10, 18);
+      }
+
+      // ---- UI
+      $('toggle').addEventListener('click', () => { audio(); active ? endStar() : startStar(); });
+      $('t-firework').addEventListener('click', (e) => { e.preventDefault(); audio(); launch(); });
+      $('t-cheer').addEventListener('click', (e) => { e.preventDefault(); cheer(); });
+      $('t-whistle').addEventListener('click', (e) => { e.preventDefault(); whistles(); });
+      $('vol').addEventListener('input', () => { if (master) master.gain.value = +$('vol').value; });
+      mq.addEventListener?.('change', () => { $('reduced').checked = mq.matches; });
+
+      resize(); requestAnimationFrame(frame);
+    </script>
+  </body>
+</html>

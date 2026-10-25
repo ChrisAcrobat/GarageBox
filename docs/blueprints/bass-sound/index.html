@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Google tag (gtag.js) — same as src/index.html -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-KVKVFNN711"></script>
+    <script src="../js/analytics.js"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <title>Bass sound – Blueprints</title>
+    <link rel="stylesheet" href="../css/style.css" />
+    <style>
+      /* .btn comes after .btn-secondary in style.css, so restate the secondary look here. */
+      .btn.btn-secondary { background: var(--panel-strong); color: var(--accent); }
+      .btn.btn-secondary:hover, .btn.btn-secondary:focus-visible { background: #e4f1fa; border-color: var(--accent); color: #185a9c; }
+      .panel { background: var(--panel-strong); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin: 0 0 1.25rem; box-shadow: var(--shadow); }
+      .panel h2 { font-size: 1.1rem; }
+      .candidates { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+      .candidates label { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid #c5dff0; border-radius: 8px; cursor: pointer; background: var(--panel); }
+      .candidates label:has(input:checked) { border-color: var(--accent); background: #e4f1fa; }
+      .candidates small { display: block; color: var(--muted); }
+      .notes { display: flex; flex-wrap: wrap; gap: 6px; }
+      .notes .btn { min-width: 3.2rem; }
+      .notes .btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
+      .row-label { font-weight: 650; font-size: 0.9rem; color: var(--muted); margin: 10px 0 6px; }
+      .field { display: flex; align-items: center; gap: 8px; font-size: 0.92rem; }
+      .field output { min-width: 3.5rem; font-variant-numeric: tabular-nums; }
+      select { font: inherit; font-size: 0.92rem; padding: 0.3rem 0.4rem; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); }
+      kbd { font: 0.85em ui-monospace, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: #fff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="../">← All blueprints</a>
+      <h1>
+        <img class="mark" src="../favicon.svg" alt="" width="32" height="32" />
+        Bass sound
+      </h1>
+      <p class="lead">A/B try for a fuller fingerstyle bass (F18) before changing the app. Pick a candidate, play a note, switch, compare.</p>
+      <p class="notice"><strong>Draft blueprint for F18.</strong> Not wired into the app; all sounds are small stand-ins written in this page. Candidate A is a rough re-creation of today's bass source (design: saw + sub sine, soft low-pass thump, 5 ms attack, 60 dB decay over the ring time). Web Audio may not play in the integrated preview — use <em>Copy Blueprints link</em> on the catalog and open this page in an external browser.</p>
+
+      <section class="panel" aria-labelledby="cand-h">
+        <h2 id="cand-h">Candidate</h2>
+        <fieldset class="candidates" id="candidates">
+          <legend class="row-label">Choose one (<kbd>A</kbd> / <kbd>B</kbd> / <kbd>C</kbd>)</legend>
+          <label><input type="radio" name="cand" value="current" checked />
+            <span><strong>A · Current-ish</strong><small>Sawtooth + sine one octave lower (50 %), low-pass Q 0.7, cutoff 1200 Hz → tone rest in 0.25 s, attack 5 ms.</small></span></label>
+          <label><input type="radio" name="cand" value="round" />
+            <span><strong>B · Rounder attack</strong><small>Strong sine fundamental + soft triangle + a little filtered saw, slower 12 ms attack, short pitch "thump" and a low body resonance around 110 Hz.</small></span></label>
+          <label><input type="radio" name="cand" value="snappy" />
+            <span><strong>C · Brighter finger pluck</strong><small>Saw + pulse, faster filter sweep from 2600 Hz, 2 ms attack and a short finger-noise click.</small></span></label>
+        </fieldset>
+      </section>
+
+      <section class="panel" aria-labelledby="play-h">
+        <h2 id="play-h">Play</h2>
+        <div class="row-label">Open strings</div>
+        <div class="notes" id="open-notes"></div>
+        <div class="row-label">App frets (E minor pentatonic, bass octave)</div>
+        <div class="notes" id="fret-notes"></div>
+        <div class="row-label">Controls</div>
+        <div class="toolbar" style="margin:0">
+          <div class="toolbar-row">
+            <button type="button" class="btn" id="play">Play</button>
+            <button type="button" class="btn btn-secondary" id="hold" title="Press and hold: stays at full level until released, then decays (like strum hold, R4.7.2)">Hold</button>
+            <button type="button" class="btn btn-secondary" id="stop">Stop</button>
+            <button type="button" class="btn btn-secondary" id="abc">Play A → B → C</button>
+          </div>
+          <div class="toolbar-row">
+            <label class="field">Ring time <input type="range" id="ring" min="0.5" max="30" step="0.5" value="10" /> <output id="ring-out">10 s</output></label>
+            <label class="field">Tone <select id="tone">
+              <option value="250">Dark</option>
+              <option value="400">Warm</option>
+              <option value="600" selected>Normal</option>
+              <option value="900">Bright</option>
+            </select></label>
+            <label class="field">Volume <input type="range" id="vol" min="0" max="1" step="0.05" value="0.7" /></label>
+          </div>
+          <span class="btn-hint" id="hint" aria-live="polite">Click a note to select and play it. Keys: <kbd>Space</kbd> play, <kbd>Esc</kbd> stop.</span>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="q-h">
+        <h2 id="q-h">Questions for the owner</h2>
+        <ul>
+          <li>Which candidate is closest to what you want — or which parts of each (attack, body, brightness)?</li>
+          <li>Should the bass ring as long as the guitar (default 10 s), or shorter by default?</li>
+          <li>Does the tone setting (dark/warm/normal/bright) still fit, or should the new sound have its own range?</li>
+        </ul>
+      </section>
+    </main>
+    <script>
+      const OPEN = [['E1', 28], ['A1', 33], ['D2', 38], ['G2', 43]];
+      const FRETS = [['E2', 40, '#2fbf4a'], ['G2', 43, '#e5484d'], ['A2', 45, '#f5d90a'], ['B2', 47, '#3e8ef7'], ['D3', 50, '#f76b15']];
+      const $ = (id) => document.getElementById(id);
+      const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+      let ctx = null, master = null, current = 40;
+      const voices = new Set();
+
+      function audio() {
+        if (!ctx) {
+          ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const comp = ctx.createDynamicsCompressor();
+          comp.threshold.value = -12; comp.ratio.value = 4;
+          master = ctx.createGain();
+          master.gain.value = +$('vol').value;
+          master.connect(comp).connect(ctx.destination);
+        }
+        if (ctx.state === 'suspended') ctx.resume();
+        return ctx;
+      }
+
+      const cand = () => document.querySelector('input[name="cand"]:checked').value;
+      const ring = () => +$('ring').value;
+      const toneRest = () => +$('tone').value;
+
+      // Decay: falls 60 dB over the ring time from `t` (same model as the app's bass source).
+      const tau = () => ring() / Math.log(1000);
+      function decay(g, t, peak, fromHold = false) {
+        if (fromHold) { g.cancelScheduledValues(t); g.setValueAtTime(peak, t); }
+        g.setTargetAtTime(0, t, tau());
+      }
+
+      function osc(type, f, t) {
+        const o = ctx.createOscillator();
+        o.type = type; o.frequency.setValueAtTime(f, t);
+        return o;
+      }
+
+      function noiseBuffer(sec) {
+        const b = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * sec), ctx.sampleRate);
+        const d = b.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        return b;
+      }
+
+      // Each builder returns { out: GainNode (level env), peak, attack, sources: [] }.
+      const BUILDERS = {
+        current(f, t) {
+          const out = ctx.createGain(); out.gain.setValueAtTime(0, t);
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.7;
+          lp.frequency.setValueAtTime(1200, t);
+          lp.frequency.setTargetAtTime(toneRest(), t, 0.25 / 3);
+          const saw = osc('sawtooth', f, t);
+          const sub = osc('sine', f / 2, t); const subG = ctx.createGain(); subG.gain.value = 0.5;
+          saw.connect(lp); sub.connect(subG).connect(lp); lp.connect(out);
+          return { out, peak: 0.35, attack: 0.005, sources: [saw, sub] };
+        },
+        round(f, t) {
+          const out = ctx.createGain(); out.gain.setValueAtTime(0, t);
+          const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 110; body.Q.value = 1.2; body.gain.value = 5;
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.5;
+          lp.frequency.setValueAtTime(Math.max(700, toneRest() * 1.2), t);
+          lp.frequency.setTargetAtTime(toneRest() * 0.9, t, 0.12);
+          const fund = osc('sine', f, t);
+          fund.frequency.setValueAtTime(f * 1.06, t);           // tiny pitch "thump" settling in 40 ms
+          fund.frequency.exponentialRampToValueAtTime(f, t + 0.04);
+          const fundG = ctx.createGain(); fundG.gain.value = 0.9;
+          const tri = osc('triangle', f, t); const triG = ctx.createGain(); triG.gain.value = 0.35;
+          const saw = osc('sawtooth', f, t); const sawG = ctx.createGain(); sawG.gain.value = 0.18;
+          const sub = osc('sine', f / 2, t); const subG = ctx.createGain(); subG.gain.value = 0.2;
+          fund.connect(fundG).connect(body);
+          tri.connect(triG).connect(lp); saw.connect(sawG).connect(lp); lp.connect(body);
+          sub.connect(subG).connect(body);
+          body.connect(out);
+          return { out, peak: 0.4, attack: 0.012, sources: [fund, tri, saw, sub] };
+        },
+        snappy(f, t) {
+          const out = ctx.createGain(); out.gain.setValueAtTime(0, t);
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.4;
+          lp.frequency.setValueAtTime(2600, t);
+          lp.frequency.setTargetAtTime(toneRest() * 1.4, t, 0.04);
+          const saw = osc('sawtooth', f, t);
+          const sq = osc('square', f, t); const sqG = ctx.createGain(); sqG.gain.value = 0.25;
+          const sub = osc('sine', f / 2, t); const subG = ctx.createGain(); subG.gain.value = 0.35;
+          saw.connect(lp); sq.connect(sqG).connect(lp); sub.connect(subG).connect(lp); lp.connect(out);
+          // Finger click: 25 ms band-passed noise.
+          const n = ctx.createBufferSource(); n.buffer = noiseBuffer(0.03);
+          const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1500; bp.Q.value = 0.8;
+          const nG = ctx.createGain(); nG.gain.setValueAtTime(0.25, t); nG.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
+          n.connect(bp).connect(nG).connect(out);
+          return { out, peak: 0.32, attack: 0.002, sources: [saw, sq, sub, n], oneShot: [n] };
+        },
+      };
+
+      function noteOn(midi, kind = cand(), { hold = false, when = 0 } = {}) {
+        audio();
+        const t = ctx.currentTime + 0.01 + when;
+        const v = BUILDERS[kind](hz(midi), t);
+        v.out.connect(master);
+        v.out.gain.linearRampToValueAtTime(v.peak, t + v.attack);
+        if (!hold) decay(v.out.gain, t + v.attack, v.peak);
+        v.sources.forEach((s) => s.start(t));
+        v.t = t;
+        voices.add(v);
+        // Stop sources once the decay is far below hearing.
+        if (!hold) v.timer = setTimeout(() => kill(v, 0.05), (when + ring() * 1.2 + 0.2) * 1000);
+        while (voices.size > 24) kill(voices.values().next().value, 0.03);
+        return v;
+      }
+
+      function release(v) {
+        if (!voices.has(v)) return;
+        const t = Math.max(ctx.currentTime, v.t + v.attack);
+        decay(v.out.gain, t, v.peak, true);
+        v.timer = setTimeout(() => kill(v, 0.05), (ring() * 1.2 + 0.2) * 1000);
+      }
+
+      function kill(v, fade) {
+        if (!v || !voices.has(v)) return;
+        voices.delete(v); clearTimeout(v.timer);
+        const t = ctx.currentTime;
+        v.out.gain.cancelScheduledValues(t);
+        v.out.gain.setValueAtTime(v.out.gain.value, t);
+        v.out.gain.linearRampToValueAtTime(0, t + fade);
+        v.sources.forEach((s) => { try { s.stop(t + fade + 0.02); } catch (_) {} });
+        setTimeout(() => v.out.disconnect(), (fade + 0.1) * 1000);
+      }
+
+      const stopAll = () => { if (ctx) [...voices].forEach((v) => kill(v, 0.06)); };
+
+      function select(midi) {
+        current = midi;
+        document.querySelectorAll('.notes .btn').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.midi === midi)));
+      }
+
+      function addNotes(where, list) {
+        for (const [name, midi, color] of list) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'btn btn-secondary'; b.textContent = name; b.dataset.midi = midi;
+          if (color) b.style.borderBottom = `4px solid ${color}`;
+          b.addEventListener('click', () => { select(midi); stopAll(); noteOn(midi); });
+          $(where).appendChild(b);
+        }
+      }
+      addNotes('open-notes', OPEN);
+      addNotes('fret-notes', FRETS);
+      select(40);
+
+      $('play').addEventListener('click', () => { stopAll(); noteOn(current); });
+      $('stop').addEventListener('click', stopAll);
+      let held = null;
+      const holdStart = (e) => { e.preventDefault(); stopAll(); held = noteOn(current, cand(), { hold: true }); $('hold').setPointerCapture?.(e.pointerId); };
+      const holdEnd = () => { if (held) { release(held); held = null; } };
+      $('hold').addEventListener('pointerdown', holdStart);
+      $('hold').addEventListener('pointerup', holdEnd);
+      $('hold').addEventListener('pointercancel', holdEnd);
+
+      $('abc').addEventListener('click', () => {
+        stopAll();
+        const gap = 1.6;
+        ['current', 'round', 'snappy'].forEach((k, i) => {
+          const v = noteOn(current, k, { when: i * gap });
+          // Cut each one before the next so they can be compared.
+          setTimeout(() => kill(v, 0.15), ((i + 1) * gap - 0.1) * 1000);
+        });
+        $('hint').textContent = 'Playing A, then B, then C (1.6 s each).';
+      });
+
+      $('ring').addEventListener('input', () => { $('ring-out').textContent = `${$('ring').value} s`; });
+      $('vol').addEventListener('input', () => { if (master) master.gain.value = +$('vol').value; });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.target.closest('input[type="range"], select')) return;
+        const k = e.key.toLowerCase();
+        if (k === 'a' || k === 'b' || k === 'c') {
+          document.querySelector(`input[name="cand"][value="${{ a: 'current', b: 'round', c: 'snappy' }[k]}"]`).checked = true;
+        } else if (e.key === ' ') { e.preventDefault(); stopAll(); noteOn(current); }
+        else if (e.key === 'Escape') stopAll();
+      });
+    </script>
+  </body>
+</html>

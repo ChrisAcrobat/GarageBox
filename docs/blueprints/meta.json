@@ -1,11 +1,25 @@
 {
   "blueprints": [
     {
-      "name": "placeholder",
-      "title": "Placeholder",
-      "comment": "Temporary test entry until the first real blueprint exists.",
-      "tags": ["test"],
-      "ready": true
+      "name": "bass-sound",
+      "title": "Bass sound",
+      "comment": "A/B try for a fuller fingerstyle bass (F18) before changing the app.",
+      "tags": ["audio", "bass", "F18"],
+      "ready": false
+    },
+    {
+      "name": "strum-spread",
+      "title": "Strum spread",
+      "comment": "Sweep line and timing for notes struck one after another (F17).",
+      "tags": ["visual", "guitar", "F17"],
+      "ready": false
+    },
+    {
+      "name": "star-power-fx",
+      "title": "Star power effects",
+      "comment": "Explore fireworks and crowd cheers on top of today's confetti (F11).",
+      "tags": ["visual", "audio", "F11"],
+      "ready": false
     }
   ]
 }

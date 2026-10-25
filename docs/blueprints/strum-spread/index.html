@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Google tag (gtag.js) — same as src/index.html -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-KVKVFNN711"></script>
+    <script src="../js/analytics.js"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <title>Strum spread – Blueprints</title>
+    <link rel="stylesheet" href="../css/style.css" />
+    <style>
+      /* .btn comes after .btn-secondary in style.css, so restate the secondary look here. */
+      .btn.btn-secondary { background: var(--panel-strong); color: var(--accent); }
+      .btn.btn-secondary:hover, .btn.btn-secondary:focus-visible { background: #e4f1fa; border-color: var(--accent); color: #185a9c; }
+      .stage { background: #10141c; border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); margin: 0 0 1.25rem; overflow: hidden; }
+      .stage canvas { display: block; width: 100%; height: 220px; cursor: pointer; }
+      .field { display: flex; align-items: center; gap: 8px; font-size: 0.92rem; }
+      .field output { min-width: 4rem; font-variant-numeric: tabular-nums; font-weight: 650; }
+      .field input[type="range"] { width: min(320px, 60vw); }
+      fieldset.inline { border: 0; padding: 0; margin: 0; display: flex; gap: 12px; align-items: center; font-size: 0.92rem; }
+      fieldset.inline legend { float: left; margin-right: 6px; color: var(--muted); }
+      .timing { width: 100%; border-collapse: collapse; background: var(--panel-strong); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 0.92rem; font-variant-numeric: tabular-nums; margin: 0 0 1.25rem; }
+      .timing th, .timing td { padding: 6px 10px; border-bottom: 1px solid #e1eef8; text-align: left; }
+      .timing .dot { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 50%; vertical-align: -0.05em; margin-right: 6px; }
+      kbd { font: 0.85em ui-monospace, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: #fff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="../">← All blueprints</a>
+      <h1>
+        <img class="mark" src="../favicon.svg" alt="" width="32" height="32" />
+        Strum spread
+      </h1>
+      <p class="lead">Sweep line and timing for notes struck one after another (F17). A strum down goes green → orange (low to high), a strum up orange → green (F17.1); each fret flashes when the line reaches it (F17.2).</p>
+      <p class="notice"><strong>Draft blueprint for F17.</strong> Not wired into the app and not a current requirement; the lane here is a simple stand-in. Click a fret to hold or release it — only held frets take part in the strum. Open points: Q5 (what to show at 0 ms), Q7 (default strum time).</p>
+
+      <div class="stage"><canvas id="lane" aria-label="Five frets with a strum sweep line" role="img"></canvas></div>
+
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <button type="button" class="btn" id="down">Strum down ↓</button>
+          <button type="button" class="btn" id="up">Strum up ↑</button>
+          <label class="field">Strum time <input type="range" id="time" min="0" max="500" step="5" value="30" /> <output id="time-out">30 ms</output></label>
+        </div>
+        <div class="toolbar-row">
+          <fieldset class="inline">
+            <legend>At 0 ms (Q5, open):</legend>
+            <label><input type="radio" name="zero" value="flash" checked /> Short flash</label>
+            <label><input type="radio" name="zero" value="none" /> Nothing</label>
+          </fieldset>
+        </div>
+        <div class="toolbar-row">
+          <label class="field"><input type="checkbox" id="slow" /> Slow motion ×10</label>
+          <label class="field"><input type="checkbox" id="reduced" /> Reduced motion (flash instead of moving line)</label>
+          <label class="field"><input type="checkbox" id="sound" checked /> Click sound</label>
+          <label class="field">Line colour <input type="color" id="line" value="#cfe6ff" title="Design 15 suggests the lane colour; try a few" /></label>
+        </div>
+        <span class="btn-hint" id="hint" aria-live="polite">Keys: <kbd>↓</kbd> strum down, <kbd>↑</kbd> strum up, <kbd>1</kbd>–<kbd>5</kbd> hold/release a fret.</span>
+      </div>
+
+      <table class="timing" aria-label="When each held fret is struck">
+        <thead><tr><th>Fret</th><th>Note</th><th>Struck at (down)</th><th>Struck at (up)</th></tr></thead>
+        <tbody id="timing"></tbody>
+      </table>
+
+      <p class="notice">Timing follows design 15: the held notes are spread evenly from the first to the last over the strum time, so with <em>n</em> held frets note <em>i</em> starts at <code>i / (n − 1) × strum time</code>. A new strum while one is still passing drops the notes the old one has not reached (F17.5).</p>
+    </main>
+    <script>
+      const FRETS = [
+        { name: 'Green', color: '#2fbf4a', note: 'E3', midi: 52 },
+        { name: 'Red', color: '#e5484d', note: 'G3', midi: 55 },
+        { name: 'Yellow', color: '#f5d90a', note: 'A3', midi: 57 },
+        { name: 'Blue', color: '#3e8ef7', note: 'B3', midi: 59 },
+        { name: 'Orange', color: '#f76b15', note: 'D4', midi: 62 },
+      ];
+      const $ = (id) => document.getElementById(id);
+      const canvas = $('lane');
+      const g = canvas.getContext('2d');
+      const held = [true, true, true, true, true];
+      const flashAt = [-1e9, -1e9, -1e9, -1e9, -1e9];
+      let strum = null;      // { dir, start, duration, order: [fret...], struck: Set }
+      let zeroFlash = -1e9;
+      let layout = { r: 24, xs: [], y: 110, w: 600, h: 220 };
+
+      const mq = matchMedia('(prefers-reduced-motion: reduce)');
+      $('reduced').checked = mq.matches;
+      const reduced = () => $('reduced').checked;
+      const strumMs = () => +$('time').value;
+      const factor = () => ($('slow').checked ? 10 : 1);
+
+      function resize() {
+        const dpr = devicePixelRatio || 1;
+        const w = canvas.clientWidth, h = canvas.clientHeight;
+        canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const r = Math.max(14, Math.min(30, (w - 40) / 13));
+        const rowW = Math.min(w - 40, 14 * r);
+        const x0 = (w - rowW) / 2 + r, sp = (rowW - 2 * r) / 4;
+        layout = { r, w, h, y: h * 0.48, xs: FRETS.map((_, i) => x0 + i * sp) };
+      }
+      addEventListener('resize', resize);
+
+      // ---- Audio (optional, cheap): one short plucked tone per struck fret.
+      let ctx = null;
+      function pluck(midi, when) {
+        if (!$('sound').checked) return;
+        if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (ctx.state === 'suspended') ctx.resume();
+        const t = ctx.currentTime + 0.01 + when;
+        const o = ctx.createOscillator(); o.type = 'triangle';
+        o.frequency.value = 440 * Math.pow(2, (midi - 69) / 12);
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(4000, t); lp.frequency.exponentialRampToValueAtTime(900, t + 0.3);
+        const a = ctx.createGain(); a.gain.setValueAtTime(0, t);
+        a.gain.linearRampToValueAtTime(0.18, t + 0.003);
+        a.gain.setTargetAtTime(0, t + 0.003, 0.35);
+        o.connect(lp).connect(a).connect(ctx.destination);
+        o.start(t); o.stop(t + 2.5);
+      }
+
+      function doStrum(dir) {
+        const idx = FRETS.map((_, i) => i).filter((i) => held[i]);
+        if (dir === 'up') idx.reverse();
+        const now = performance.now();
+        const duration = strumMs() * factor();
+        strum = idx.length ? { dir, start: now, duration, order: idx, struck: new Set() } : null;
+        if (!idx.length) { $('hint').textContent = 'No frets held — click a fret to hold it.'; return; }
+        if (strumMs() === 0) zeroFlash = now;
+        // Schedule audio from the same timing as the line.
+        idx.forEach((f, i) => pluck(FRETS[f].midi, idx.length > 1 ? (i / (idx.length - 1)) * duration / 1000 : 0));
+        $('hint').textContent = `Strum ${dir}: ${idx.map((f) => FRETS[f].name).join(' → ')} over ${strumMs()} ms${factor() > 1 ? ' (shown ×10 slower)' : ''}.`;
+      }
+
+      function strikeTime(s, i) {
+        return s.order.length > 1 ? (i / (s.order.length - 1)) * s.duration : 0;
+      }
+
+      function rgba(hex, a) {
+        const n = parseInt(hex.slice(1), 16);
+        return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+      }
+
+      function draw(now) {
+        const LINE = $('line').value;
+        const { r, w, h, y, xs } = layout;
+        g.clearRect(0, 0, w, h);
+        // Lane stand-in
+        g.fillStyle = '#161c27'; g.fillRect(0, 0, w, h);
+        g.strokeStyle = 'rgba(255,255,255,0.06)'; g.lineWidth = 1;
+        for (let i = 0; i < 5; i++) { g.beginPath(); g.moveTo(xs[i], 0); g.lineTo(xs[i], h); g.stroke(); }
+
+        // Strike detection (struck when the line reaches the fret).
+        if (strum) {
+          const el = now - strum.start;
+          strum.order.forEach((f, i) => {
+            if (!strum.struck.has(f) && el >= strikeTime(strum, i)) { strum.struck.add(f); flashAt[f] = now; }
+          });
+        }
+
+        // Frets
+        FRETS.forEach((fr, i) => {
+          const age = now - flashAt[i];
+          const flash = Math.max(0, 1 - age / (250 * factor()));
+          g.save();
+          g.beginPath(); g.arc(xs[i], y, r, 0, Math.PI * 2);
+          g.fillStyle = held[i] ? fr.color : 'rgba(255,255,255,0.05)';
+          g.globalAlpha = held[i] ? 0.55 + 0.45 * flash : 1;
+          if (flash > 0) { g.shadowColor = fr.color; g.shadowBlur = 28 * flash; }
+          g.fill();
+          g.globalAlpha = 1; g.shadowBlur = 0;
+          g.lineWidth = 3; g.strokeStyle = fr.color; g.stroke();
+          if (flash > 0) {
+            g.beginPath(); g.arc(xs[i], y, r + 6 + 10 * (1 - flash), 0, Math.PI * 2);
+            g.strokeStyle = `rgba(255,255,255,${0.7 * flash})`; g.lineWidth = 2; g.stroke();
+          }
+          g.restore();
+          g.fillStyle = held[i] ? '#fff' : 'rgba(255,255,255,0.45)';
+          g.font = `bold ${Math.round(Math.max(11, Math.min(15, r * 0.55)))}px system-ui, sans-serif`;
+          g.textAlign = 'center'; g.textBaseline = 'top';
+          g.fillText(fr.note, xs[i], y + r + 10);
+        });
+
+        // Sweep line
+        if (strum) {
+          const el = now - strum.start;
+          const first = strum.order[0], last = strum.order[strum.order.length - 1];
+          const top = y - r - 18, bottom = y + r + 4;
+          if (strum.duration === 0 || strum.order.length === 1) {
+            // 0 ms (or a single note): Q5 — short flash across the held frets, or nothing.
+            const mode = document.querySelector('input[name="zero"]:checked').value;
+            const a = Math.max(0, 1 - el / 180);
+            if (mode === 'flash' && a > 0 && strum.order.length > 1) {
+              const x1 = Math.min(xs[first], xs[last]) - r, x2 = Math.max(xs[first], xs[last]) + r;
+              g.fillStyle = rgba(LINE, 0.35 * a); g.fillRect(x1, top, x2 - x1, bottom - top);
+            }
+            if (el > 400) strum = null;
+          } else if (reduced()) {
+            // Reduced motion: no moving line, a band flash over the span instead.
+            const a = Math.max(0, 1 - el / (strum.duration + 250 * factor()));
+            const x1 = Math.min(xs[first], xs[last]) - r, x2 = Math.max(xs[first], xs[last]) + r;
+            g.fillStyle = rgba(LINE, 0.3 * a); g.fillRect(x1, top, x2 - x1, bottom - top);
+            if (a <= 0) strum = null;
+          } else {
+            const p = Math.min(1, el / strum.duration);
+            const x = xs[first] + (xs[last] - xs[first]) * p;
+            const fade = el > strum.duration ? Math.max(0, 1 - (el - strum.duration) / (150 * factor())) : 1;
+            // trail
+            const grad = g.createLinearGradient(xs[first], 0, x, 0);
+            grad.addColorStop(0, rgba(LINE, 0)); grad.addColorStop(1, rgba(LINE, 0.25 * fade));
+            g.fillStyle = grad;
+            g.fillRect(Math.min(xs[first], x), top, Math.abs(x - xs[first]), bottom - top);
+            g.strokeStyle = LINE; g.globalAlpha = fade; g.lineWidth = 3;
+            g.shadowColor = LINE; g.shadowBlur = 12;
+            g.beginPath(); g.moveTo(x, top); g.lineTo(x, bottom); g.stroke();
+            g.globalAlpha = 1; g.shadowBlur = 0;
+            if (fade <= 0) strum = null;
+          }
+        }
+
+        // Direction label
+        g.fillStyle = 'rgba(255,255,255,0.55)'; g.font = '13px system-ui, sans-serif';
+        g.textAlign = 'left'; g.textBaseline = 'top';
+        g.fillText(`Strum time ${strumMs()} ms${factor() > 1 ? ' · slow motion ×10' : ''}${reduced() ? ' · reduced motion' : ''}`, 12, 10);
+        requestAnimationFrame(draw);
+      }
+
+      function updateTable() {
+        const idx = FRETS.map((_, i) => i).filter((i) => held[i]);
+        const n = idx.length, T = strumMs();
+        const at = (k) => (n > 1 ? Math.round((k / (n - 1)) * T) : 0);
+        $('timing').innerHTML = FRETS.map((fr, i) => {
+          const k = idx.indexOf(i);
+          const d = k < 0 ? '—' : `${at(k)} ms`;
+          const u = k < 0 ? '—' : `${at(n - 1 - k)} ms`;
+          return `<tr><td><span class="dot" style="background:${fr.color}"></span>${fr.name}${k < 0 ? ' (not held)' : ''}</td><td>${fr.note}</td><td>${d}</td><td>${u}</td></tr>`;
+        }).join('');
+      }
+
+      function toggle(i) { held[i] = !held[i]; updateTable(); }
+
+      canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left, y = e.clientY - rect.top;
+        layout.xs.forEach((fx, i) => { if (Math.hypot(x - fx, y - layout.y) <= layout.r + 6) toggle(i); });
+      });
+      $('down').addEventListener('click', () => doStrum('down'));
+      $('up').addEventListener('click', () => doStrum('up'));
+      $('time').addEventListener('input', () => { $('time-out').textContent = `${$('time').value} ms`; updateTable(); });
+      mq.addEventListener?.('change', () => { $('reduced').checked = mq.matches; });
+      document.addEventListener('keydown', (e) => {
+        if (e.target.closest('input, select')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); doStrum('down'); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); doStrum('up'); }
+        else if (/^[1-5]$/.test(e.key)) toggle(+e.key - 1);
+      });
+
+      resize(); updateTable(); requestAnimationFrame(draw);
+    </script>
+  </body>
+</html>
