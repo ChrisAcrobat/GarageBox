@@ -26,7 +26,8 @@
     },
     "livePreview.serverKeepAliveAfterEmbeddedPreviewClose": 0,
     "livePreview.openPreviewTarget": "Embedded Preview",
-    "livePreview.useIntegratedBrowser": true
+    "livePreview.useIntegratedBrowser": true,
+    "livePreview.tasks.runTaskWithExternalPreview": false
   },
   "extensions": {
     "recommendations": [
