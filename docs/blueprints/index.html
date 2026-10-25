@@ -21,11 +21,11 @@
       <div class="toolbar" role="region" aria-label="Local links">
         <div class="toolbar-row">
           <button type="button" class="btn" id="copy-app" data-url="http://127.0.0.1:5500/">Copy App link</button>
-          <span class="app-url">App: <code id="app-url">http://127.0.0.1:5500/</code></span>
+          <span class="app-url">App: <code id="app-url">http://127.0.0.1:5500/</code> <span class="link-check" id="app-check" data-state="checking" role="status" aria-busy="true">checking…</span></span>
         </div>
         <div class="toolbar-row">
-          <button type="button" class="btn btn-secondary" id="copy-bp" data-url="http://127.0.0.1:5502/" disabled>Copy Blueprints link</button>
-          <span class="app-url">Blueprints: <code id="bp-url">http://127.0.0.1:5502/</code> <span class="link-check" id="bp-check" data-state="checking">checking…</span></span>
+          <button type="button" class="btn btn-secondary" id="copy-bp" data-url="http://127.0.0.1:5502/">Copy Blueprints link</button>
+          <span class="app-url">Blueprints: <code id="bp-url">http://127.0.0.1:5502/</code> <span class="link-check" id="bp-check" data-state="checking" role="status" aria-busy="true">checking…</span></span>
         </div>
         <span class="btn-hint" id="copy-hint" aria-live="polite"></span>
       </div>
@@ -59,20 +59,21 @@
       const clearBtn = document.getElementById('filter-clear');
       const modeGroup = document.getElementById('filter-mode');
       const readyGroup = document.getElementById('ready-mode');
+      const appBtn = document.getElementById('copy-app');
       const bpBtn = document.getElementById('copy-bp');
-      const bpCheck = document.getElementById('bp-check');
       const selected = new Set();
       let matchMode = 'or';
       let readyMode = 'all';
       let blueprints = [];
-      let bpVerified = false;
-      let bpCheckTimer = null;
 
-      // The Blueprints link is only offered once that URL really serves this catalog:
-      // load its index.html and require "GarageBox" in the HTML.
+      const VERIFIED_FADE_MS = 3500;
+      const RETRY_MS = 4000;
+      const PROBE_TIMEOUT_MS = 4000;
+
+      // Blueprints is this page's own origin: load its index.html and require "GarageBox" in the HTML.
       async function servesGarageBox(url) {
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 3000);
+        const timer = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
         try {
           const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
           return res.ok && (await res.text()).includes('GarageBox');
@@ -83,23 +84,85 @@
         }
       }
 
-      async function verifyBlueprints() {
-        clearTimeout(bpCheckTimer);
-        bpCheck.dataset.state = 'checking';
-        bpCheck.textContent = 'checking…';
-        bpVerified = await servesGarageBox(bpBtn.dataset.url);
-        bpCheck.dataset.state = bpVerified ? 'ok' : 'fail';
-        bpCheck.textContent = bpVerified ? 'verified' : 'not up yet';
-        bpBtn.disabled = false;
-        // Fade the success label after a few seconds; the button stays enabled.
-        if (bpVerified) {
-          bpCheckTimer = setTimeout(() => {
-            bpCheck.dataset.state = '';
-            bpCheck.textContent = '';
-          }, 3500);
-        }
-        return bpVerified;
+      // The App runs on its own Live Preview server (another origin), which answers cross-origin
+      // fetches with 401. So load its index.html in a hidden sandboxed frame instead: Live Preview's
+      // injected script posts the page title to the parent, and that title must contain "GarageBox".
+      // Without allow-same-origin the App's module scripts are not loaded, so the app itself does not start.
+      function frameServesGarageBox(url) {
+        return new Promise((resolve) => {
+          const frame = document.createElement('iframe');
+          frame.hidden = true;
+          frame.tabIndex = -1;
+          frame.setAttribute('aria-hidden', 'true');
+          frame.setAttribute('sandbox', 'allow-scripts');
+          let done = false;
+          const finish = (ok) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            removeEventListener('message', onMessage);
+            frame.remove();
+            resolve(ok);
+          };
+          const onMessage = (e) => {
+            if (e.source !== frame.contentWindow || !e.data || e.data.command !== 'update-path') return;
+            try {
+              finish(String(JSON.parse(e.data.text).title || '').includes('GarageBox'));
+            } catch (_) {
+              finish(false);
+            }
+          };
+          const timer = setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
+          addEventListener('message', onMessage);
+          frame.src = url;
+          document.body.append(frame);
+        });
       }
+
+      // Shared link check: spinner while checking, "verified" fades after a few seconds,
+      // a red error stays and is retried in the background until the link is verified.
+      function verifyLink({ checkEl, url, probe }) {
+        let fadeTimer = null;
+        let retryTimer = null;
+        let pending = null;
+        const show = (state, text) => {
+          checkEl.dataset.state = state;
+          checkEl.textContent = text;
+          checkEl.setAttribute('aria-busy', String(state === 'checking'));
+        };
+        const check = () => {
+          if (pending) return pending;
+          clearTimeout(fadeTimer);
+          clearTimeout(retryTimer);
+          // Keep a red error visible while re-checking; only replace it once the link is up.
+          if (checkEl.dataset.state !== 'fail') show('checking', 'checking…');
+          pending = probe(url).then((ok) => {
+            pending = null;
+            if (ok) {
+              show('ok', 'verified');
+              fadeTimer = setTimeout(() => show('', ''), VERIFIED_FADE_MS);
+            } else {
+              show('fail', 'not up yet');
+              retryTimer = setTimeout(check, RETRY_MS);
+            }
+            return ok;
+          });
+          return pending;
+        };
+        check();
+        return check;
+      }
+
+      const verifyApp = verifyLink({
+        checkEl: document.getElementById('app-check'),
+        url: appBtn.dataset.url,
+        probe: frameServesGarageBox,
+      });
+      const verifyBlueprints = verifyLink({
+        checkEl: document.getElementById('bp-check'),
+        url: bpBtn.dataset.url,
+        probe: servesGarageBox,
+      });
 
       async function copyLink(btn, selectId, okHint) {
         const url = btn.dataset.url;
@@ -124,16 +187,18 @@
         }
       }
 
-      document.getElementById('copy-app').addEventListener('click', () =>
-        copyLink(document.getElementById('copy-app'), 'app-url', 'Paste in an external browser for sound.'));
-      bpBtn.addEventListener('click', async () => {
-        if (!(await verifyBlueprints())) {
-          hint.textContent = `Blueprints preview is not up yet at ${bpBtn.dataset.url} (no GarageBox page). Start Live Preview and try again.`;
-          return;
-        }
-        copyLink(bpBtn, 'bp-url', 'Blueprints link copied.');
-      });
-      verifyBlueprints();
+      // Copy only a verified link: re-check on click, and say so if it is not up.
+      function wireCopy(btn, verify, selectId, name, okHint) {
+        btn.addEventListener('click', async () => {
+          if (!(await verify())) {
+            hint.textContent = `${name} preview is not up yet at ${btn.dataset.url} (no GarageBox page). Start Live Preview and try again.`;
+            return;
+          }
+          copyLink(btn, selectId, okHint);
+        });
+      }
+      wireCopy(appBtn, verifyApp, 'app-url', 'App', 'Paste in an external browser for sound.');
+      wireCopy(bpBtn, verifyBlueprints, 'bp-url', 'Blueprints', 'Blueprints link copied.');
 
       function el(tag, className, text) {
         const node = document.createElement(tag);

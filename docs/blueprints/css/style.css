@@ -267,8 +267,32 @@ code {
   filter: grayscale(1);
 }
 
-.link-check { font-size: 0.8rem; margin-left: 0.35rem; }
+.link-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+.link-check:empty:not([data-state="checking"]) { display: none; }
 .link-check[data-state="checking"] { color: var(--muted); }
+/* Small spinner while a link is being verified. */
+.link-check[data-state="checking"]::before {
+  content: "";
+  flex: none;
+  width: 0.8em;
+  height: 0.8em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: link-check-spin 0.8s linear infinite;
+}
+@keyframes link-check-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .link-check[data-state="checking"]::before { animation-duration: 2.4s; }
+}
 .link-check[data-state="ok"] { color: var(--ready); }
 .link-check[data-state="fail"] { color: #8a2424; }
 .btn:disabled { opacity: 0.6; cursor: wait; }

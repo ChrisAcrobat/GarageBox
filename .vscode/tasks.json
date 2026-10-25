@@ -84,7 +84,7 @@
     {
       "label": "Open Blueprints in editor",
       "type": "shell",
-      "command": "echo \"${input:focusFirstGroup}${input:openBlueprints}\" >/dev/null",
+      "command": "echo \"${input:focusFirstGroup}${input:openBlueprints}${input:moveToFirstGroup}\" >/dev/null",
       "options": {
         "cwd": "${workspaceFolder:Repo}"
       },
@@ -133,6 +133,11 @@
         "openToSide": false,
         "reuseUrlFilter": "http://127.0.0.1:5502/**"
       }
+    },
+    {
+      "id": "moveToFirstGroup",
+      "type": "command",
+      "command": "workbench.action.moveEditorToFirstGroup"
     }
   ]
 }
