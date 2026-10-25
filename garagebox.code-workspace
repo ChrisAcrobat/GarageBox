@@ -23,7 +23,8 @@
       "Accept-Ranges": "bytes",
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": "no-cache"
-    }
+    },
+    "livePreview.serverKeepAliveAfterEmbeddedPreviewClose": 0
   },
   "extensions": {
     "recommendations": [
