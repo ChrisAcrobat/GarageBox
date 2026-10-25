@@ -47,9 +47,8 @@ Blueprints are visual and audio experiment and reference pages: a look, a sound 
   - `tags`: an array of strings;
   - `ready`: `true` when ready, `false` while it is a draft (there is no separate status text).
 - **One folder each:** a blueprint lives in `docs/blueprints/{name}/`, normally with its own `index.html`. A new blueprint gets its folder and a `meta.json` entry in the same commit.
-- **Analytics:** the published app and Blueprints use the same Google Analytics tag (`G-KVKVFNN711` in `src/index.html` and `docs/blueprints/js/analytics.js`). New blueprint pages should load that script (see the catalog and `placeholder/`).
+- **Analytics:** the published app and Blueprints use the same Google Analytics tag (`G-KVKVFNN711` in `src/index.html` and `docs/blueprints/js/analytics.js`). New blueprint pages should load that script (see the catalog and `bass-sound/`).
 - **Standalone:** a blueprint imports nothing from `src/`; code it needs is copied or written into its folder. The shared look comes from `/css/style.css` under the blueprints root. Fetching anything from GitHub (or other outside sources) needs the owner's approval first.
 - **Language:** English by default, no i18n; exceptions are allowed when a blueprint needs them.
 - **Who writes them:** the design bot owns `docs/blueprints/` (as all of `docs/`). Developer bots do not write blueprints unless asked.
-- The `placeholder` blueprint is only there to test the catalog and is removed when the first real blueprint is added.
 
