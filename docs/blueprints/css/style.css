@@ -260,6 +260,19 @@ code {
   padding: 1px 8px;
 }
 
+.warn {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #e0c36a;
+  background: #fff8d6;
+  color: #5c4a00;
+  font-size: 0.95rem;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+.warn[hidden] { display: none; }
+
 .notice {
   background: var(--panel);
   border: 1px solid var(--border);

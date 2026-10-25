@@ -17,7 +17,8 @@
         <span class="accent">Blueprints</span>
         <span>· GarageBox - Music Sandbox</span>
       </h1>
-      <p class="lead">Visual and audio experiments and reference pages, tried here before something is built into the app. Local only, not published. <span id="embedded-audio-note" hidden>The Blueprints-app needs an external browser for Web Audio — copy its link below.</span></p>
+      <p class="lead">Visual and audio experiments and reference pages, tried here before something is built into the app. Local only, not published.</p>
+      <p class="warn" id="embedded-audio-note" hidden role="status">Blueprints needs an external browser for Web Audio — copy its link below.</p>
       <div class="toolbar" role="region" aria-label="Local links">
         <div class="toolbar-row">
           <button type="button" class="btn" id="copy-app" data-url="http://127.0.0.1:5500/">Copy App link</button>
@@ -282,7 +283,7 @@
         return '';
       }
 
-      // Web Audio tip in the lead: only relevant inside VS Code's embedded preview.
+      // Web Audio tip: only relevant inside VS Code's embedded preview.
       const embeddedAudioNote = document.getElementById('embedded-audio-note');
       if (embeddedAudioNote && embeddedPreviewHost()) embeddedAudioNote.hidden = false;
 
