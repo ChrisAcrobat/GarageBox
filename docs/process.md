@@ -52,3 +52,12 @@ Blueprints are visual and audio experiment and reference pages: a look, a sound 
 - **Language:** English by default, no i18n; exceptions are allowed when a blueprint needs them.
 - **Who writes them:** the design bot owns `docs/blueprints/` (as all of `docs/`). Developer bots do not write blueprints unless asked.
 
+
+## 6. Pull from origin before committing
+
+Before a bot makes commits on a branch, it first pulls from origin so the work starts from the latest remote state (owner decision 2026-10-25).
+
+- **Fetch first:** run `git fetch origin` and check how far the branch is ahead of and behind its upstream.
+- **Integrate before committing:** on `main`, rebase onto `origin/main` when possible (`git pull --rebase` or `git rebase origin/main`); on another branch, update it from its upstream the same way. Local commits that are not yet on origin are kept on top of the remote ones.
+- **Conflicts:** a conflict is resolved before any new commit is made. If it touches another bot's area (e.g. `src/` for the design bot), that bot or the owner resolves it.
+- **Never push** unless the owner asks for it; pulling first does not change that.
