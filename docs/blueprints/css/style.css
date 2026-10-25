@@ -65,6 +65,22 @@ code {
   padding: 0 4px;
 }
 
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  width: 100%;
+}
+.btn-secondary {
+  background: var(--panel-strong);
+  color: var(--accent);
+}
+.btn-secondary:hover, .btn-secondary:focus-visible {
+  background: #e4f1fa;
+  border-color: var(--accent);
+  color: #185a9c;
+}
 .toolbar {
   display: flex;
   flex-wrap: wrap;
