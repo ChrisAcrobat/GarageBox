@@ -266,3 +266,9 @@ code {
   cursor: not-allowed;
   filter: grayscale(1);
 }
+
+.link-check { font-size: 0.8rem; margin-left: 0.35rem; }
+.link-check[data-state="checking"] { color: var(--muted); }
+.link-check[data-state="ok"] { color: var(--ready); }
+.link-check[data-state="fail"] { color: #8a2424; }
+.btn:disabled { opacity: 0.6; cursor: wait; }

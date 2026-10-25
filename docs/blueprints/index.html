@@ -24,8 +24,8 @@
           <span class="app-url">App: <code id="app-url">http://127.0.0.1:5500/</code></span>
         </div>
         <div class="toolbar-row">
-          <button type="button" class="btn btn-secondary" id="copy-bp" data-url="http://127.0.0.1:5501/">Copy Blueprints link</button>
-          <span class="app-url">Blueprints: <code id="bp-url">http://127.0.0.1:5501/</code></span>
+          <button type="button" class="btn btn-secondary" id="copy-bp" data-url="http://127.0.0.1:5502/" disabled>Copy Blueprints link</button>
+          <span class="app-url">Blueprints: <code id="bp-url">http://127.0.0.1:5502/</code> <span class="link-check" id="bp-check" data-state="checking">checking…</span></span>
         </div>
         <span class="btn-hint" id="copy-hint" aria-live="polite"></span>
       </div>
@@ -35,6 +35,11 @@
           <div class="filter-mode" id="filter-mode" role="radiogroup" aria-label="Tag match mode">
             <button type="button" class="filter-mode-btn" role="radio" data-mode="or" aria-checked="true">Match any</button>
             <button type="button" class="filter-mode-btn" role="radio" data-mode="and" aria-checked="false">Match all</button>
+          </div>
+          <div class="filter-mode" id="ready-mode" role="radiogroup" aria-label="Ready status">
+            <button type="button" class="filter-mode-btn" role="radio" data-ready="all" aria-checked="true">All</button>
+            <button type="button" class="filter-mode-btn" role="radio" data-ready="ready" aria-checked="false">Ready</button>
+            <button type="button" class="filter-mode-btn" role="radio" data-ready="draft" aria-checked="false">Draft</button>
           </div>
           <ul class="filter-list" id="filter-list"></ul>
           <button type="button" class="btn btn-secondary filter-clear" id="filter-clear" hidden>Clear filters</button>
@@ -53,9 +58,39 @@
       const filterAside = document.getElementById('filter');
       const clearBtn = document.getElementById('filter-clear');
       const modeGroup = document.getElementById('filter-mode');
+      const readyGroup = document.getElementById('ready-mode');
+      const bpBtn = document.getElementById('copy-bp');
+      const bpCheck = document.getElementById('bp-check');
       const selected = new Set();
       let matchMode = 'or';
+      let readyMode = 'all';
       let blueprints = [];
+      let bpVerified = false;
+
+      // The Blueprints link is only offered once that URL really serves this catalog:
+      // load its index.html and require "GarageBox" in the HTML.
+      async function servesGarageBox(url) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 3000);
+        try {
+          const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+          return res.ok && (await res.text()).includes('GarageBox');
+        } catch (_) {
+          return false;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      async function verifyBlueprints() {
+        bpCheck.dataset.state = 'checking';
+        bpCheck.textContent = 'checking…';
+        bpVerified = await servesGarageBox(bpBtn.dataset.url);
+        bpCheck.dataset.state = bpVerified ? 'ok' : 'fail';
+        bpCheck.textContent = bpVerified ? 'verified' : 'not up yet';
+        bpBtn.disabled = false;
+        return bpVerified;
+      }
 
       async function copyLink(btn, selectId, okHint) {
         const url = btn.dataset.url;
@@ -82,8 +117,14 @@
 
       document.getElementById('copy-app').addEventListener('click', () =>
         copyLink(document.getElementById('copy-app'), 'app-url', 'Paste in an external browser for sound.'));
-      document.getElementById('copy-bp').addEventListener('click', () =>
-        copyLink(document.getElementById('copy-bp'), 'bp-url', 'Blueprints link copied.'));
+      bpBtn.addEventListener('click', async () => {
+        if (!(await verifyBlueprints())) {
+          hint.textContent = `Blueprints preview is not up yet at ${bpBtn.dataset.url} (no GarageBox page). Start Live Preview and try again.`;
+          return;
+        }
+        copyLink(bpBtn, 'bp-url', 'Blueprints link copied.');
+      });
+      verifyBlueprints();
 
       function el(tag, className, text) {
         const node = document.createElement(tag);
@@ -115,11 +156,30 @@
         return Array.isArray(bp.tags) ? bp.tags.map(String) : [];
       }
 
-      // OR: any selected tag matches; AND: every selected tag is required; none selected = all.
+      // Tags — OR: any selected tag matches; AND: every selected tag is required; none selected = all.
+      // Ready — all / ready (ready === true) / draft (anything else). Both must pass.
       function matches(bp) {
+        const isReady = bp.ready === true;
+        if (readyMode === 'ready' && !isReady) return false;
+        if (readyMode === 'draft' && isReady) return false;
+        if (!selected.size) return true;
         const tags = new Set(tagsOf(bp));
         const sel = [...selected];
         return matchMode === 'and' ? sel.every((t) => tags.has(t)) : sel.some((t) => tags.has(t));
+      }
+
+      readyGroup.addEventListener('click', (e) => {
+        const btn = e.target.closest('.filter-mode-btn');
+        if (!btn || btn.dataset.ready === readyMode) return;
+        setReadyMode(btn.dataset.ready);
+        render();
+      });
+
+      function setReadyMode(mode) {
+        readyMode = mode;
+        for (const b of readyGroup.querySelectorAll('.filter-mode-btn')) {
+          b.setAttribute('aria-checked', String(b.dataset.ready === readyMode));
+        }
       }
 
       modeGroup.addEventListener('click', (e) => {
@@ -133,9 +193,10 @@
       });
 
       function render() {
-        const shown = selected.size ? blueprints.filter(matches) : blueprints;
+        const shown = blueprints.filter(matches);
         list.replaceChildren(...shown.map(card));
-        // Match all: tags that would empty the result are inactive and sorted last.
+        // Match all: tags that would empty the result are inactive (grey) and sorted last.
+        // Within each group: most used first (count across meta.blueprints), then alphabetical.
         const andActive = matchMode === 'and' && selected.size > 0;
         const items = [...filterList.children];
         for (const li of items) {
@@ -149,9 +210,10 @@
           li.dataset.inactive = inactive ? '1' : '';
         }
         items.sort((a, b) => (a.dataset.inactive ? 1 : 0) - (b.dataset.inactive ? 1 : 0)
-          || a.querySelector('.filter-tag').dataset.tag.localeCompare(b.querySelector('.filter-tag').dataset.tag, 'en', { sensitivity: 'base' }));
+          || Number(b.dataset.count) - Number(a.dataset.count)
+          || a.dataset.tag.localeCompare(b.dataset.tag, 'en', { sensitivity: 'base' }));
         filterList.append(...items);
-        clearBtn.hidden = selected.size === 0;
+        clearBtn.hidden = selected.size === 0 && readyMode === 'all';
         if (!blueprints.length) {
           status.textContent = 'No blueprints yet.';
           status.hidden = false;
@@ -168,10 +230,13 @@
         for (const bp of blueprints) {
           for (const t of new Set(tagsOf(bp))) counts.set(t, (counts.get(t) || 0) + 1);
         }
-        const tags = [...counts.keys()].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
-        filterAside.hidden = tags.length === 0;
+        const tags = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a)
+          || a.localeCompare(b, 'en', { sensitivity: 'base' }));
+        filterAside.hidden = blueprints.length === 0;
         filterList.replaceChildren(...tags.map((t) => {
           const li = el('li');
+          li.dataset.tag = t;
+          li.dataset.count = String(counts.get(t));
           const btn = el('button', 'filter-tag');
           btn.type = 'button';
           btn.dataset.tag = t;
@@ -189,6 +254,7 @@
 
       clearBtn.addEventListener('click', () => {
         selected.clear();
+        setReadyMode('all');
         render();
       });
 

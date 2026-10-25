@@ -16,4 +16,4 @@ Visual and audio experiment and reference pages for GarageBox - Music Sandbox. L
 
 ## Catalog
 
-`index.html` reads `meta.json` (`blueprints` array: `name`, `title`, `comment`, `tags`, `ready`). Each blueprint lives in `{name}/`. The tag `needs-audio` means the page needs an external browser for sound. Paths are relative so the catalog works on its own port and under a repo-root server.
+`index.html` reads `meta.json` (`blueprints` array: `name`, `title`, `comment`, `tags`, `ready`). Each blueprint lives in `{name}/`. The tag `needs-audio` means the page needs an external browser for sound. The sidebar filters by tag (Match any / Match all, tags sorted most used first, grey tags last) and by status (All / Ready / Draft). **Copy Blueprints link** first loads `http://127.0.0.1:5502/` and only copies it when the page contains `GarageBox`. Paths are relative so the catalog works on its own port and under a repo-root server.
