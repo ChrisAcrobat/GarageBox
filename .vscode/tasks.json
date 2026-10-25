@@ -84,7 +84,7 @@
     {
       "label": "Open Blueprints in editor",
       "type": "shell",
-      "command": "echo \"${input:openBlueprints}\" >/dev/null",
+      "command": "echo \"${input:focusFirstGroup}${input:openBlueprints}\" >/dev/null",
       "options": {
         "cwd": "${workspaceFolder:Repo}"
       },
@@ -118,6 +118,11 @@
       "type": "command",
       "command": "livePreview.start.preview.atFileString",
       "args": "meta.json"
+    },
+    {
+      "id": "focusFirstGroup",
+      "type": "command",
+      "command": "workbench.action.focusFirstEditorGroup"
     },
     {
       "id": "openBlueprints",

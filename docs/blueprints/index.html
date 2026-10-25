@@ -66,6 +66,7 @@
       let readyMode = 'all';
       let blueprints = [];
       let bpVerified = false;
+      let bpCheckTimer = null;
 
       // The Blueprints link is only offered once that URL really serves this catalog:
       // load its index.html and require "GarageBox" in the HTML.
@@ -83,12 +84,20 @@
       }
 
       async function verifyBlueprints() {
+        clearTimeout(bpCheckTimer);
         bpCheck.dataset.state = 'checking';
         bpCheck.textContent = 'checking…';
         bpVerified = await servesGarageBox(bpBtn.dataset.url);
         bpCheck.dataset.state = bpVerified ? 'ok' : 'fail';
         bpCheck.textContent = bpVerified ? 'verified' : 'not up yet';
         bpBtn.disabled = false;
+        // Fade the success label after a few seconds; the button stays enabled.
+        if (bpVerified) {
+          bpCheckTimer = setTimeout(() => {
+            bpCheck.dataset.state = '';
+            bpCheck.textContent = '';
+          }, 3500);
+        }
         return bpVerified;
       }
 
