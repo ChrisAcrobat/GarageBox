@@ -224,6 +224,113 @@
         return node;
       }
 
+      // Web Audio probe for the needs-audio tag. The embedded preview / integrated browser often
+      // gives no sound; mark needs-audio red (with a tooltip) only when that is actually caught:
+      //  1. at load, silently: no AudioContext, the constructor throws, or resume() rejects;
+      //  2. on the first real user gesture (click / key) in the catalog: a fresh context is created
+      //     and resumed inside the gesture, and it must reach 'running' within AUDIO_GESTURE_MS.
+      // A context left 'suspended' at load is normal (autoplay policy in Chrome/Firefox) and is not
+      // treated as a failure. Every test context is closed again. Output that runs but is muted by
+      // the host (no JS-visible error) cannot be detected.
+      const AUDIO_TAG = 'needs-audio';
+      const AUDIO_WARNING = 'Not supported in this browser — open in an external browser for sound.';
+      const AUDIO_GESTURE_MS = 1500;
+      let audioUnsupported = false;
+
+      function markAudioTag(node, tag) {
+        if (tag !== AUDIO_TAG) return;
+        node.classList.toggle('audio-unsupported', audioUnsupported);
+        if (audioUnsupported) {
+          node.title = AUDIO_WARNING;
+          node.setAttribute('aria-description', AUDIO_WARNING);
+        } else {
+          node.removeAttribute('title');
+          node.removeAttribute('aria-description');
+        }
+      }
+
+      function applyAudioWarning() {
+        for (const node of document.querySelectorAll(`.filter-list li[data-tag="${AUDIO_TAG}"], .filter-tag[data-tag="${AUDIO_TAG}"], .tag[data-tag="${AUDIO_TAG}"]`)) {
+          markAudioTag(node, AUDIO_TAG);
+        }
+      }
+
+      function setAudioUnsupported(reason) {
+        if (audioUnsupported) return;
+        audioUnsupported = true;
+        document.documentElement.dataset.webAudio = 'unsupported';
+        console.info(`Blueprints: Web Audio not usable here (${reason}); needs-audio marked.`);
+        applyAudioWarning();
+      }
+
+      function closeQuietly(ctx) {
+        try {
+          const p = ctx && ctx.state !== 'closed' ? ctx.close() : null;
+          if (p) p.catch(() => {});
+        } catch (_) {
+          // Nothing to clean up.
+        }
+      }
+
+      // Resolve with the context state once resume() settles or the timeout passes; a rejected
+      // resume() counts as 'rejected'.
+      function resumeState(ctx, ms) {
+        return new Promise((resolve) => {
+          let done = false;
+          const finish = (state) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            ctx.removeEventListener('statechange', onChange);
+            resolve(state);
+          };
+          const onChange = () => { if (ctx.state === 'running') finish('running'); };
+          const timer = setTimeout(() => finish(ctx.state), ms);
+          ctx.addEventListener('statechange', onChange);
+          let p;
+          try {
+            p = ctx.resume();
+          } catch (_) {
+            finish('rejected');
+            return;
+          }
+          Promise.resolve(p).then(() => finish(ctx.state), () => finish('rejected'));
+        });
+      }
+
+      async function probeWebAudio() {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (typeof Ctor !== 'function') return setAudioUnsupported('no AudioContext');
+        let ctx;
+        try {
+          ctx = new Ctor();
+        } catch (err) {
+          return setAudioUnsupported(`AudioContext threw: ${err && err.name}`);
+        }
+        // Without a gesture, resume() normally stays pending (suspended) — only a rejection is a fault.
+        const state = await resumeState(ctx, 300);
+        closeQuietly(ctx);
+        if (state === 'rejected') return setAudioUnsupported('resume() rejected');
+        if (state === 'running') return; // Audio already allowed: supported.
+        const events = ['click', 'keydown'];
+        const onGesture = async () => {
+          // Only judge inside a real activation; otherwise wait for the next gesture.
+          if (navigator.userActivation && !navigator.userActivation.isActive) return;
+          for (const type of events) removeEventListener(type, onGesture, true);
+          let gctx;
+          try {
+            gctx = new Ctor();
+          } catch (err) {
+            return setAudioUnsupported(`AudioContext threw on gesture: ${err && err.name}`);
+          }
+          const after = await resumeState(gctx, AUDIO_GESTURE_MS);
+          closeQuietly(gctx);
+          if (after !== 'running') setAudioUnsupported(`still ${after} after a user gesture`);
+        };
+        for (const type of events) addEventListener(type, onGesture, true);
+      }
+      probeWebAudio();
+
       function card(bp) {
         const ready = bp.ready === true;
         const item = el('li');
@@ -236,7 +343,12 @@
         const tags = Array.isArray(bp.tags) ? bp.tags : [];
         if (tags.length) {
           const ul = el('ul', 'tags');
-          for (const t of tags) ul.append(el('li', `tag${selected.has(String(t)) ? ' active' : ''}`, String(t)));
+          for (const t of tags) {
+            const li = el('li', `tag${selected.has(String(t)) ? ' active' : ''}`, String(t));
+            li.dataset.tag = String(t);
+            markAudioTag(li, String(t));
+            ul.append(li);
+          }
           link.append(ul);
         }
         item.append(link);
@@ -333,6 +445,9 @@
           btn.dataset.tag = t;
           btn.setAttribute('aria-pressed', 'false');
           btn.append(el('span', 'filter-name', t), el('span', 'filter-count', String(counts.get(t))));
+          // Disabled buttons may not show a tooltip, so the list item carries it as well.
+          markAudioTag(btn, t);
+          markAudioTag(li, t);
           btn.addEventListener('click', () => {
             if (selected.has(t)) selected.delete(t);
             else selected.add(t);

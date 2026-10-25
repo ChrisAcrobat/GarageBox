@@ -267,6 +267,27 @@ code {
   filter: grayscale(1);
 }
 
+/* needs-audio when Web Audio is not usable in this browser (see the probe in index.html).
+   Placed after the grey rule so Match-all inactive tags still go grey via its grayscale filter. */
+.filter-tag.audio-unsupported,
+.tag.audio-unsupported {
+  color: #8a2424;
+  background: #fde8e8;
+  border-color: #d95555;
+}
+.filter-tag.audio-unsupported .filter-name::before,
+.tag.audio-unsupported::before { content: "⚠ "; }
+.filter-tag.audio-unsupported .filter-count { color: #8a2424; background: #f8d0d0; }
+.filter-tag.audio-unsupported:hover,
+.filter-tag.audio-unsupported:focus-visible { border-color: #b83232; }
+.filter-tag.audio-unsupported[aria-pressed="true"],
+.tag.active.audio-unsupported {
+  color: #fff;
+  background: #c62828;
+  border-color: #c62828;
+}
+.filter-tag.audio-unsupported[aria-pressed="true"] .filter-count { color: #c62828; background: #fff; }
+
 .link-check {
   display: inline-flex;
   align-items: center;
