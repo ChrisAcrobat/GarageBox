@@ -24,7 +24,9 @@
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": "no-cache"
     },
-    "livePreview.serverKeepAliveAfterEmbeddedPreviewClose": 0
+    "livePreview.serverKeepAliveAfterEmbeddedPreviewClose": 0,
+    "livePreview.openPreviewTarget": "Embedded Preview",
+    "livePreview.useIntegratedBrowser": true
   },
   "extensions": {
     "recommendations": [
