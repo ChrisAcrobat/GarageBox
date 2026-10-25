@@ -39,7 +39,7 @@ Blueprints are visual and audio experiment and reference pages: a look, a sound 
 - **Location:** `docs/blueprints/`. Only `src/` is published to GitHub Pages, so blueprints are never published; they are opened locally.
 - **Own web root:** `docs/blueprints/` can be served as its own site root (e.g. `python3 -m http.server 8000 --directory docs/blueprints`). Paths in blueprint pages are **root-relative to that folder** using relative URLs (`css/style.css`, `meta.json`, `./name/`), so the same files also work when the **repository root** is the server (Live Preview on **Repo**) at `/docs/blueprints/`.
 - **Local preview:** open `music-sandbox.code-workspace`. On start, a Repo folderOpen task frees ports `5500` and `5501`, serves **App** from `src/` on `:5500` and **Blueprints** from `docs/blueprints/` on `:5501` (`cwd` = Repo, relative `--directory`), waits until each URL returns the expected page title, then opens **Blueprints** in the integrated browser (Group 1, `reuseUrlFilter`). App is not auto-opened; **Copy App link** on the catalog copies `http://127.0.0.1:5500/` for an external browser. Blueprints use a light-blue blueprint theme (`css/style.css`, `favicon.svg`).
-- **Catalog:** `index.html` lists the entries of `meta.json`, each as a link to `/{name}/` with its title, comment, tags and whether it is ready or a draft. It also offers **Copy App link** (`http://127.0.0.1:5500/`) for opening the app in an external browser.
+- **Catalog:** `index.html` lists the entries of `meta.json`, each as a link to `/{name}/` with its title, comment, tags and whether it is ready or a draft. It also offers **Copy App link** (`http://127.0.0.1:5500/`) and **Copy Blueprints link** (`http://127.0.0.1:5501/`).
 - **`meta.json`:** `{ "blueprints": [ … ] }`, one object per blueprint with
   - `name`: the exact folder name;
   - `title`: shown in the catalog;
@@ -47,6 +47,7 @@ Blueprints are visual and audio experiment and reference pages: a look, a sound 
   - `tags`: an array of strings;
   - `ready`: `true` when ready, `false` while it is a draft (there is no separate status text).
 - **One folder each:** a blueprint lives in `docs/blueprints/{name}/`, normally with its own `index.html`. A new blueprint gets its folder and a `meta.json` entry in the same commit.
+- **Analytics:** the published app and Blueprints use the same Google Analytics tag (`G-KVKVFNN711` in `src/index.html` and `docs/blueprints/js/analytics.js`). New blueprint pages should load that script (see the catalog and `placeholder/`).
 - **Standalone:** a blueprint imports nothing from `src/`; code it needs is copied or written into its folder. The shared look comes from `/css/style.css` under the blueprints root. Fetching anything from GitHub (or other outside sources) needs the owner's approval first.
 - **Language:** English by default, no i18n; exceptions are allowed when a blueprint needs them.
 - **Who writes them:** the design bot owns `docs/blueprints/` (as all of `docs/`). Developer bots do not write blueprints unless asked.
