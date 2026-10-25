@@ -225,13 +225,15 @@
       }
 
       // Web Audio probe for the needs-audio tag. The embedded preview / integrated browser often
-      // gives no sound; mark needs-audio red (with a tooltip) only when that is actually caught:
+      // gives no sound; mark needs-audio red (with a tooltip) when:
+      //  0. at load, the catalog runs inside VS Code's preview shell (see embeddedPreviewHost()):
+      //     there Web Audio can report 'running' yet nothing is audible, which no API reveals;
       //  1. at load, silently: no AudioContext, the constructor throws, or resume() rejects;
       //  2. on the first real user gesture (click / key) in the catalog: a fresh context is created
       //     and resumed inside the gesture, and it must reach 'running' within AUDIO_GESTURE_MS.
       // A context left 'suspended' at load is normal (autoplay policy in Chrome/Firefox) and is not
-      // treated as a failure. Every test context is closed again. Output that runs but is muted by
-      // the host (no JS-visible error) cannot be detected.
+      // treated as a failure. Every test context is closed again. Outside VS Code, output that runs
+      // but is muted by the host (no JS-visible error) cannot be detected.
       const AUDIO_TAG = 'needs-audio';
       const AUDIO_WARNING = 'Not supported in this browser — open in an external browser for sound.';
       const AUDIO_GESTURE_MS = 1500;
@@ -261,6 +263,22 @@
         document.documentElement.dataset.webAudio = 'unsupported';
         console.info(`Blueprints: Web Audio not usable here (${reason}); needs-audio marked.`);
         applyAudioWarning();
+      }
+
+      // VS Code's Live Preview / Simple Browser load the page in an iframe inside a webview, and its
+      // Electron-based integrated browser / webviews carry an Electron or Code/x.y UA. A normal
+      // top-level Chrome/Firefox tab matches neither.
+      function embeddedPreviewHost() {
+        let framed;
+        try {
+          framed = window.self !== window.top;
+        } catch (_) {
+          framed = true; // Access to window.top blocked: certainly framed.
+        }
+        if (framed) return 'framed (VS Code embedded preview)';
+        const ua = navigator.userAgent || '';
+        if (/\bElectron\/|\bCode\/\d|\bVSCode\b/i.test(ua)) return 'Electron / VS Code user agent';
+        return '';
       }
 
       function closeQuietly(ctx) {
@@ -299,6 +317,8 @@
       }
 
       async function probeWebAudio() {
+        const host = embeddedPreviewHost();
+        if (host) return setAudioUnsupported(host);
         const Ctor = window.AudioContext || window.webkitAudioContext;
         if (typeof Ctor !== 'function') return setAudioUnsupported('no AudioContext');
         let ctx;
