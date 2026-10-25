@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GarageBox probe</title>
+</head>
+<body>
+<script>
+  // Blueprints catalog loads this page in a hidden frame to verify the App server is up.
+  if (window.parent !== window) {
+    window.parent.postMessage({ command: 'garagebox-probe', title: document.title }, '*');
+  }
+</script>
+</body>
+</html>

@@ -85,9 +85,11 @@
       }
 
       // The App runs on its own Live Preview server (another origin), which answers cross-origin
-      // fetches with 401. So load its index.html in a hidden sandboxed frame instead: Live Preview's
-      // injected script posts the page title to the parent, and that title must contain "GarageBox".
-      // Without allow-same-origin the App's module scripts are not loaded, so the app itself does not start.
+      // fetches with 401. So load a tiny probe page from the App root (garagebox-probe.html) in a
+      // hidden sandboxed frame: its inline script posts { command: 'garagebox-probe', title } to the
+      // parent, which works in an external browser too. Live Preview's injected 'update-path' message
+      // (title as JSON) is still accepted as a fallback, e.g. when probing the App's index.html.
+      // Without allow-same-origin no module scripts run, so the app itself never starts in the frame.
       function frameServesGarageBox(url) {
         return new Promise((resolve) => {
           const frame = document.createElement('iframe');
@@ -105,18 +107,33 @@
             resolve(ok);
           };
           const onMessage = (e) => {
-            if (e.source !== frame.contentWindow || !e.data || e.data.command !== 'update-path') return;
+            if (e.source !== frame.contentWindow || !e.data) return;
+            if (e.data.command === 'garagebox-probe') {
+              if (String(e.data.title || '').includes('GarageBox')) finish(true);
+              return;
+            }
+            if (e.data.command !== 'update-path') return;
             try {
-              finish(String(JSON.parse(e.data.text).title || '').includes('GarageBox'));
+              if (String(JSON.parse(e.data.text).title || '').includes('GarageBox')) finish(true);
             } catch (_) {
-              finish(false);
+              // Ignore malformed messages; the timeout decides.
             }
           };
           const timer = setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
           addEventListener('message', onMessage);
-          frame.src = url;
+          // Cache-bust so a cached probe page never reports a stopped App as up.
+          const src = new URL(url);
+          src.searchParams.set('t', Date.now());
+          frame.src = src.href;
           document.body.append(frame);
         });
+      }
+
+      // App check: probe garagebox-probe.html under the App base URL. Try a plain fetch first
+      // (works when the App server allows it), then fall back to the frame probe.
+      async function appServesGarageBox(baseUrl) {
+        const probeUrl = new URL('garagebox-probe.html', baseUrl).href;
+        return (await servesGarageBox(probeUrl)) || frameServesGarageBox(probeUrl);
       }
 
       // Shared link check: spinner while checking, "verified" fades after a few seconds,
@@ -156,7 +173,7 @@
       const verifyApp = verifyLink({
         checkEl: document.getElementById('app-check'),
         url: appBtn.dataset.url,
-        probe: frameServesGarageBox,
+        probe: appServesGarageBox,
       });
       const verifyBlueprints = verifyLink({
         checkEl: document.getElementById('bp-check'),
