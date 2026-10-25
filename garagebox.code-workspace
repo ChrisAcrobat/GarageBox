@@ -24,5 +24,10 @@
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": "no-cache"
     }
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-vscode.live-server"
+    ]
   }
 }

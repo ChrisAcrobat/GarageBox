@@ -4,7 +4,7 @@ Visual and audio experiment and reference pages for GarageBox - Music Sandbox. L
 
 ## Open
 
-**Preferred:** open [`music-sandbox.code-workspace`](../../music-sandbox.code-workspace) with the VS Code **Live Preview** extension (`ms-vscode.live-server`). On start:
+**Preferred:** open [`garagebox.code-workspace`](../../garagebox.code-workspace) with the VS Code **Live Preview** extension (`ms-vscode.live-server`). On start:
 
 - Live Preview servers, one per workspace folder, App first: App `http://127.0.0.1:5500/` (`src/`, WS `:5501`), Blueprints `http://127.0.0.1:5502/` (`docs/blueprints/`, WS `:5503`). Each server uses HTTP N and WebSocket N+1, hence 5500/5502.
 - The start task waits until both URLs return a page containing `GarageBox` before it opens Blueprints
