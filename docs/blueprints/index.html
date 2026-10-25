@@ -32,6 +32,10 @@
       <div class="layout">
         <aside class="filter" id="filter" aria-labelledby="filter-heading">
           <h2 id="filter-heading">Filter by tag</h2>
+          <div class="filter-mode" id="filter-mode" role="radiogroup" aria-label="Tag match mode">
+            <button type="button" class="filter-mode-btn" role="radio" data-mode="or" aria-checked="true">Match any (OR)</button>
+            <button type="button" class="filter-mode-btn" role="radio" data-mode="and" aria-checked="false">Match all (AND)</button>
+          </div>
           <ul class="filter-list" id="filter-list"></ul>
           <button type="button" class="btn btn-secondary filter-clear" id="filter-clear" hidden>Clear filters</button>
         </aside>
@@ -48,7 +52,9 @@
       const filterList = document.getElementById('filter-list');
       const filterAside = document.getElementById('filter');
       const clearBtn = document.getElementById('filter-clear');
+      const modeGroup = document.getElementById('filter-mode');
       const selected = new Set();
+      let matchMode = 'or';
       let blueprints = [];
 
       async function copyLink(btn, selectId, okHint) {
@@ -109,11 +115,25 @@
         return Array.isArray(bp.tags) ? bp.tags.map(String) : [];
       }
 
-      // OR filter: a blueprint matches when it has any selected tag; none selected = all.
+      // OR: any selected tag matches; AND: every selected tag is required; none selected = all.
+      function matches(bp) {
+        const tags = new Set(tagsOf(bp));
+        const sel = [...selected];
+        return matchMode === 'and' ? sel.every((t) => tags.has(t)) : sel.some((t) => tags.has(t));
+      }
+
+      modeGroup.addEventListener('click', (e) => {
+        const btn = e.target.closest('.filter-mode-btn');
+        if (!btn || btn.dataset.mode === matchMode) return;
+        matchMode = btn.dataset.mode;
+        for (const b of modeGroup.querySelectorAll('.filter-mode-btn')) {
+          b.setAttribute('aria-checked', String(b.dataset.mode === matchMode));
+        }
+        render();
+      });
+
       function render() {
-        const shown = selected.size
-          ? blueprints.filter((bp) => tagsOf(bp).some((t) => selected.has(t)))
-          : blueprints;
+        const shown = selected.size ? blueprints.filter(matches) : blueprints;
         list.replaceChildren(...shown.map(card));
         for (const btn of filterList.querySelectorAll('.filter-tag')) {
           btn.setAttribute('aria-pressed', String(selected.has(btn.dataset.tag)));
